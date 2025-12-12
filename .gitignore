@@ -1,0 +1,32 @@
+<<<<<<< HEAD
+# Ignore all SQL files in the SUPABAE.SQL directory
+SUPABAE.SQL/*.sql
+
+# Ignore any directories that have "sql" in the name
+components/vendors.sql/
+=======
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+>>>>>>> b549b2e1f06b11d53524919a292566d72607e137

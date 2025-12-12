@@ -1,0 +1,98 @@
+.loyalty-tier-badge-container {
+    display: inline-block;
+}
+
+.loyalty-tier-badge {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Shimmer effect for Platinum tier */
+.loyalty-tier-badge:has(.tier-name:contains("Platinum"))::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg,
+            transparent 30%,
+            rgba(255, 255, 255, 0.3) 50%,
+            transparent 70%);
+    animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%) translateY(-100%) rotate(45deg);
+    }
+
+    100% {
+        transform: translateX(100%) translateY(100%) rotate(45deg);
+    }
+}
+
+/* Pulse animation for all tiers */
+.loyalty-tier-badge {
+    animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+@keyframes subtle-pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    50% {
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+}
+
+/* Tier icon animation */
+.tier-icon {
+    display: inline-block;
+    animation: icon-bounce 2s ease-in-out infinite;
+}
+
+@keyframes icon-bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-2px);
+    }
+}
+
+/* Points badge */
+.points-badge {
+    font-weight: 600;
+    letter-spacing: 0.025em;
+}
+
+/* Tooltip styling */
+.loyalty-tooltip {
+    z-index: 9999;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+    .loyalty-tier-badge {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .points-badge {
+        display: none;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .loyalty-tier-badge {
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+}

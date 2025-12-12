@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Worker</title>
+    <meta http-equiv="Cache-Control" content="max-age=86400, public" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="dns-prefetch" href="https://huggingface.co" />
+</head>
+
+<body>
+    <script type="module">
+        // Import from CDN as in reference
+        import { env, AutoTokenizer, AutoProcessor, CLIPVisionModelWithProjection, RawImage } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js';
+
+        // Configure environment
+        env.allowLocalModels = false;
+        env.useBrowserCache = true;
+
+        // Configure backends (from reference)
+        env.backends = env.backends || {};
+        env.backends.onnx = env.backends.onnx || {};
+        env.backends.onnx.wasm = env.backends.onnx.wasm || {};
+        env.backends.onnx.wasm.proxy = true;
+        env.backends.onnx.wasm.numThreads = Math.max(2, Math.min(8, navigator.hardwareConcurrency || 4));
+        env.backends.onnx.wasm.enabled = true;
+
+        // Prefer WebGPU if available, otherwise WASM
+        const useWebGPU = !!navigator.gpu;
+        env.backends.onnx.webgpu = useWebGPU;
+
+        console.log(`[AI Worker] Configured backends. WebGPU enabled: ${useWebGPU}`);
+
+        const EMBEDDING_MODEL = 'Xenova/clip-vit-base-patch16';
+        let processor = null;
+        let visionModel = null;
+        let isInitializing = false;
+
+        // Initialize model immediately on load
+        async function initialize() {
+            if (visionModel || isInitializing) return;
+            isInitializing = true;
+
+            try {
+                console.log(`[AI Worker] Initializing model: ${EMBEDDING_MODEL}...`);
+
+                // Load components
+                // We use CLIPVisionModelWithProjection directly as in reference for explicit control
+                processor = await AutoProcessor.from_pretrained(EMBEDDING_MODEL);
+
+                visionModel = await CLIPVisionModelWithProjection.from_pretrained(EMBEDDING_MODEL, {
+                    quantized: false, // Keep high quality
+                    progress_callback: (p) => {
+                        if (p?.progress) {
+                            console.log(`[AI Worker] Download progress: ${(p.progress * 100).toFixed(0)}%`);
+                        }
+                    }
+                });
+
+                console.log('[AI Worker] Model initialized successfully');
+
+                // Signal readiness
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'transformers-iframe-ready',
+                        ready: true,
+                        modelReady: true,
+                        model: EMBEDDING_MODEL
+                    }, '*');
+                }
+            } catch (error) {
+                console.error('[AI Worker] Initialization failed:', error);
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'transformers-iframe-error',
+                        error: error.message
+                    }, '*');
+                }
+            } finally {
+                isInitializing = false;
+            }
+        }
+
+        function normalizeL2(vec) {
+            let n = 0;
+            for (let i = 0; i < vec.length; i++) n += vec[i] * vec[i];
+            n = Math.sqrt(n) || 1;
+            const out = new Float32Array(vec.length);
+            for (let i = 0; i < vec.length; i++) out[i] = vec[i] / n;
+            return out;
+        }
+
+        // Handle messages from main window
+        window.addEventListener('message', async (event) => {
+            const { type, id, dataUrl, blobUrl } = event.data;
+
+            // Health check
+            if (type === 'PING') {
+                event.source.postMessage({ type: 'PONG', ready: !!visionModel }, '*');
+                return;
+            }
+
+            // Embedding Request
+            if (type === 'transformers-embed-request') {
+                if (!visionModel) {
+                    await initialize();
+                }
+
+                try {
+                    if (!processor || !visionModel) {
+                        throw new Error('Model components not ready');
+                    }
+
+                    let rawImg = null;
+                    const startTime = performance.now();
+
+                    // Read image
+                    if (dataUrl) {
+                        rawImg = await RawImage.read(dataUrl);
+                    } else if (blobUrl) {
+                        // Fetch the blob URL inside the iframe
+                        const response = await fetch(blobUrl);
+                        const blob = await response.blob();
+                        rawImg = await RawImage.fromBlob(blob);
+                    } else {
+                        throw new Error('No image data provided');
+                    }
+
+                    // Process
+                    const inputs = await processor(rawImg);
+                    const outputs = await visionModel(inputs);
+
+                    // Extract embedding
+                    const embTensor = outputs.image_embeds ?? outputs.pooler_output ?? outputs.data ?? outputs;
+                    const vec = embTensor?.data ? embTensor.data : (embTensor instanceof Float32Array ? embTensor : new Float32Array(embTensor));
+
+                    if (!vec || vec.length !== 512) throw new Error(`Invalid embedding dimensionality: ${vec?.length}`);
+
+                    // Normalize
+                    const normed = normalizeL2(vec);
+
+                    // Send back array
+                    const embeddingArray = Array.from(normed);
+
+                    console.log(`[AI Worker] Embedding generated in ${(performance.now() - startTime).toFixed(0)}ms`);
+
+                    if (window.parent) {
+                        window.parent.postMessage({
+                            type: 'transformers-embed-response',
+                            id,
+                            embedding: embeddingArray
+                        }, '*');
+                    }
+                } catch (error) {
+                    console.error('[AI Worker] Generation failed:', error);
+                    if (window.parent) {
+                        window.parent.postMessage({
+                            type: 'transformers-embed-response',
+                            id,
+                            error: error.message
+                        }, '*');
+                    }
+                }
+            }
+        });
+
+        // Start initialization
+        initialize();
+    </script>
+</body>
+
+</html>

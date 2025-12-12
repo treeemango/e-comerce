@@ -1,0 +1,907 @@
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant } from '../types';
+import ProductCard from './ProductCard';
+import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants } from '../lib/api';
+import { trackProductViewAuto } from '../lib/tracking';
+import { ReviewSection } from './ReviewSection';
+import { playFollowSound, playUnfollowSound } from '../lib/sounds';
+import { useSEO } from '../lib/useSEO';
+import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
+import ImageMagnifier from './ImageMagnifier';
+
+interface ProductDetailViewProps {
+   product: Product;
+   onProductClick?: (product: Product) => void;
+   onAddToCart?: (product: Product) => void;
+   user?: User | null;
+   onVisitStore?: (vendorId: string) => void;
+   breadcrumbs?: Breadcrumb[];
+   onHomeClick?: () => void;
+   onCategoryClick?: (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: Breadcrumb[]) => void;
+   onRelatedProductClick?: (product: Product) => void;
+   onMessageSeller?: (product: Product, initialMessage?: string) => void;
+}
+
+interface MediaItem {
+   id: string;
+   image_url?: string;
+   thumbnail_url?: string;
+   is_main?: boolean;
+   type: 'image' | 'video' | 'youtube';
+   video_url?: string;
+   alt_text?: string;
+}
+
+const ProductDetailView: React.FC<ProductDetailViewProps> = ({
+   product,
+   onProductClick,
+   onAddToCart,
+   user,
+   onVisitStore,
+   breadcrumbs: propBreadcrumbs,
+   onHomeClick,
+   onCategoryClick,
+   onRelatedProductClick,
+   onMessageSeller
+}) => {
+   const [sameItems, setSameItems] = useState<RelatedProduct[]>([]);
+   const [similarItems, setSimilarItems] = useState<RelatedProduct[]>([]);
+   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+   const [userHasSelected, setUserHasSelected] = useState(false);
+   const [isFollowing, setIsFollowing] = useState(false);
+   const [isFollowLoading, setIsFollowLoading] = useState(false);
+   const [followerCount, setFollowerCount] = useState(0);
+
+   // Message Modal State
+   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
+   const [initialMessage, setInitialMessage] = useState('');
+
+   // Variants State
+   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+   const [currentVariant, setCurrentVariant] = useState<ProductVariant | null>(null);
+
+   // Variants State
+   const [productOptions, setProductOptions] = useState<ProductOption[]>(product.options || []);
+   const [productVariants, setProductVariants] = useState<ProductVariant[]>(product.variants || []);
+   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+
+   useEffect(() => {
+      const loadVariants = async () => {
+         if (product.id) {
+            // Check if we need to fetch
+            const needsFetch = !product.variants || product.variants.length === 0;
+
+            if (needsFetch) {
+               setIsLoadingVariants(true);
+               const { variants, options } = await fetchProductVariants(product.id.toString());
+               setProductVariants(variants);
+               setProductOptions(options);
+
+               // Initialize defaults from fetched options
+               if (options.length > 0 && Object.keys(selectedOptions).length === 0) {
+                  const defaults: Record<string, string> = {};
+                  options.forEach(opt => {
+                     defaults[opt.name] = opt.values[0];
+                  });
+                  setSelectedOptions(defaults);
+               }
+               setIsLoadingVariants(false);
+            } else {
+               // Use props
+               if (productOptions.length > 0 && Object.keys(selectedOptions).length === 0) {
+                  const defaults: Record<string, string> = {};
+                  productOptions.forEach(opt => {
+                     defaults[opt.name] = opt.values[0];
+                  });
+                  setSelectedOptions(defaults);
+               }
+            }
+         }
+      };
+      loadVariants();
+   }, [product.id, product.variants]);
+
+   // Update current variant based on selection
+   useEffect(() => {
+      if (productVariants.length > 0) {
+         const matched = productVariants.find(v => {
+            // Check if every selected option matches the variant's options
+            // Note: v.options is Record<string, string>
+            return Object.entries(selectedOptions).every(([k, val]) => v.options && v.options[k] === val);
+         });
+         setCurrentVariant(matched || null);
+
+         // If main image changes due to variant, could update here
+         // (Optional: if variant has specific image, set active media)
+         if (matched?.image && matched.image !== product.image) {
+            // Logic to switch view to variant image could go here
+            // But for now we just rely on the render updating if we used it.
+         }
+      }
+   }, [selectedOptions, productVariants]);
+
+   // Update prices/images based on selection (if variants exist)
+   // In a real app, we would match selectedOptions to a variant in product.variants
+   // For now we just simulate price changes for demo
+   const displayPrice = useMemo(() => {
+      if (currentVariant) return currentVariant.price;
+      return product.price;
+   }, [product.price, currentVariant]);
+
+   const displayRRP = useMemo(() => {
+      return displayPrice * 2.5; // Keeping consistent rrp ratio
+   }, [displayPrice]);
+
+   // Generate styles for known color names
+   const getColorStyle = (colorName: string) => {
+      const name = colorName.toLowerCase();
+      if (name === 'midnight') return '#191f2e';
+      if (name === 'starlight') return '#f0fcf8';
+      return name; // fallback to css name
+   };
+
+   const colorOptionName = useMemo(() => productOptions.find(opt => /color|colour/i.test(opt.name))?.name, [productOptions]);
+
+   const colorCards = useMemo(() => {
+      if (!colorOptionName) return [] as { label: string; variant: ProductVariant }[];
+      const seen = new Set<string>();
+      const cards: { label: string; variant: ProductVariant }[] = [];
+      productVariants.forEach(variant => {
+         const label = variant.options?.[colorOptionName];
+         if (label && !seen.has(label)) {
+            seen.add(label);
+            cards.push({ label, variant });
+         }
+      });
+      return cards;
+   }, [colorOptionName, productVariants]);
+
+   const findVariantFor = (overrides: Record<string, string>) => {
+      const preview = { ...selectedOptions, ...overrides };
+      return productVariants.find(v => Object.entries(preview).every(([k, val]) => v.options?.[k] === val))
+         || productVariants.find(v => Object.entries(overrides).every(([k, val]) => v.options?.[k] === val));
+   };
+
+   const displayedOptions = useMemo(() => productOptions.filter(opt => opt.name !== colorOptionName), [productOptions, colorOptionName]);
+   // Reset user selection when product changes
+   useEffect(() => {
+      setUserHasSelected(false);
+   }, [product.id]);
+
+   useEffect(() => {
+      const loadRelated = async () => {
+         if (product?.id) {
+            setIsLoadingRelated(true);
+            const { same, similar } = await fetchRelatedProducts(product.id.toString());
+            setSameItems(same);
+            setSimilarItems(similar);
+            setIsLoadingRelated(false);
+         }
+      };
+      loadRelated();
+   }, [product.id]);
+
+   useEffect(() => {
+      if (product?.id) {
+         trackProductViewAuto(product.id);
+      }
+   }, [product.id]);
+
+   // Check if user is following this store
+   useEffect(() => {
+      const checkFollowStatus = async () => {
+         if (product?.vendor?.vendor_id && user?.id) {
+            const status = await getFollowStatus(user.id, product.vendor.vendor_id);
+            if (status) {
+               setIsFollowing(status.is_following);
+               setFollowerCount(status.follower_count);
+            }
+         } else {
+            setIsFollowing(false);
+            setFollowerCount(0);
+         }
+      };
+      checkFollowStatus();
+   }, [product?.vendor?.vendor_id, user?.id]);
+
+   const handleMessageClick = () => {
+      if (!user) {
+         // If not logged in, trigger default action which usually prompts login
+         if (onMessageSeller) onMessageSeller(product);
+         return;
+      }
+      setIsMessageModalOpen(true);
+      setInitialMessage(`Hi, I'm interested in your ${product.title}...`);
+   };
+
+   const handleConfirmSendMessage = () => {
+      if (onMessageSeller) {
+         onMessageSeller(product, initialMessage);
+      }
+      setIsMessageModalOpen(false);
+   };
+
+   const handleFollowToggle = async () => {
+      if (!product?.vendor?.vendor_id) return;
+
+      if (!user) {
+         alert('Please sign in to follow stores');
+         return;
+      }
+
+      setIsFollowLoading(true);
+
+      try {
+         const result = await toggleFollowStore(user.id, product.vendor.vendor_id);
+         if (result?.success) {
+            setIsFollowing(result.is_following);
+            setFollowerCount(result.follower_count);
+
+            // Play sound based on action
+            if (result.is_following) {
+               playFollowSound();
+            } else {
+               playUnfollowSound();
+            }
+         }
+      } catch (error) {
+         console.error('Error toggling follow:', error);
+      } finally {
+         setIsFollowLoading(false);
+      }
+   };
+
+   // Get gallery media from product
+   const galleryMedia: MediaItem[] = Array.isArray(product.gallery_media)
+      ? product.gallery_media.filter(item => item && !item.is_main && ((item.type === 'image' && item.image_url) || ((item.type === 'video' || item.type === 'youtube') && item.video_url)))
+      : [];
+
+   // Create all media items (featured image + gallery)
+   const allMediaItems: MediaItem[] = [
+      {
+         id: 'featured',
+         image_url: product.image,
+         thumbnail_url: product.image,
+         is_main: true,
+         type: 'image' as const,
+         alt_text: product.title
+      },
+      ...galleryMedia
+   ].filter(item => item && ((item.type === 'image' && item.image_url) || ((item.type === 'video' || item.type === 'youtube') && item.video_url))).map(item => {
+      if (item.type === 'youtube' && !item.thumbnail_url) {
+         const videoId = item.video_url.split('/embed/')[1];
+         if (videoId) {
+            item.thumbnail_url = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+         }
+      }
+      return item;
+   });
+
+   // Auto-select first video on page load (only if user hasn't manually selected)
+   useEffect(() => {
+      if (allMediaItems.length > 0 && !userHasSelected) {
+         const videoIndex = allMediaItems.findIndex(item => item.type === 'video' || item.type === 'youtube');
+         if (videoIndex >= 0) {
+            setActiveMediaIndex(videoIndex);
+         }
+      }
+   }, [allMediaItems, userHasSelected]);
+
+   const activeMedia = allMediaItems[activeMediaIndex] || allMediaItems[0];
+
+   // Generate dynamic breadcrumbs from product category data
+   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
+
+   useEffect(() => {
+      // If breadcrumbs are passed from props (e.g. from navigation), use them and append product
+      if (propBreadcrumbs && propBreadcrumbs.length > 0) {
+         // Check if product is already in breadcrumbs
+         const lastCrumb = propBreadcrumbs[propBreadcrumbs.length - 1];
+         if (lastCrumb.label !== product.title) {
+            const productCrumb: Breadcrumb = { label: product.title, type: 'subcategory', id: product.id };
+            setBreadcrumbs([...propBreadcrumbs, productCrumb]);
+         } else {
+            setBreadcrumbs(propBreadcrumbs);
+         }
+         return;
+      }
+
+      // Fallback: Generate local breadcrumbs if not provided
+      const loadBreadcrumbs = async () => {
+         const crumbs: Breadcrumb[] = [{ label: 'Home', type: 'home' }];
+
+         // Category Logic
+         let categoryName = 'Products';
+         let categoryId = '';
+
+         if (product.categoryName) {
+            categoryName = product.categoryName;
+            categoryId = product.categoryId || '';
+         } else if (product.categoryId) {
+            const fetchedName = await fetchCategoryName(product.categoryId);
+            if (fetchedName && fetchedName !== 'Products') {
+               categoryName = fetchedName;
+            } else {
+               categoryName = `Category ${product.categoryId}`;
+            }
+            categoryId = product.categoryId;
+         } else if (product.category && typeof product.category === 'string') {
+            categoryName = product.category.replace(/[{}\[\]""]/g, '').trim() || 'Products';
+         }
+
+         // Add Category Crumb
+         crumbs.push({
+            label: categoryName,
+            type: 'category',
+            id: categoryId,
+            data: {
+               title: categoryName,
+               categoryIds: categoryId ? [categoryId] : []
+            }
+         });
+
+         // Add Product Title
+         if (product.title) {
+            const title = product.title.length > 50
+               ? product.title.substring(0, 47) + '...'
+               : product.title;
+            crumbs.push({ label: title, type: 'subcategory', id: product.id });
+         }
+
+         setBreadcrumbs(crumbs);
+      };
+
+      loadBreadcrumbs();
+   }, [product.categoryId, product.categoryName, product.category, product.title, propBreadcrumbs]);
+
+
+   // SEO: Compute page metadata and structured data for product
+   const productSeoConfig = useMemo(() => {
+      const seoConfig = getProductPageSEO(product, product.vendor);
+      const schemas = [];
+      schemas.push(generateProductSchema(product, product.vendor));
+
+      if (breadcrumbs.length > 0) {
+         const breadcrumbUrls = breadcrumbs.map((crumb) => ({
+            name: crumb.label,
+            url: crumb.type === 'category' && crumb.id ? `${SITE_CONFIG.url}/category/${crumb.id}` :
+               crumb.type === 'subcategory' && crumb.id ? `${SITE_CONFIG.url}/product/${crumb.id}` : SITE_CONFIG.url
+         }));
+         schemas.push(generateBreadcrumbSchema(breadcrumbUrls));
+      }
+
+      return {
+         ...seoConfig,
+         structuredData: schemas,
+         structuredDataId: 'product-detail-seo'
+      };
+   }, [product.id, product.title, product.price, product.image, product.vendor, breadcrumbs]);
+
+   // Apply SEO configuration (hook called at top level)
+   useSEO(productSeoConfig);
+
+   return (
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 animate-in fade-in zoom-in duration-300">
+         <nav className="text-xs text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+            {breadcrumbs.map((crumb, i) => (
+               <React.Fragment key={i}>
+                  <span
+                     className={`hover:underline cursor-pointer hover:text-primary ${i === breadcrumbs.length - 1 ? 'font-semibold text-slate-700 dark:text-slate-300' : ''}`}
+                     onClick={() => {
+                        if (i === breadcrumbs.length - 1) return;
+
+                        if (crumb.type === 'home' && onHomeClick) {
+                           onHomeClick();
+                        } else if (crumb.type === 'category' && onCategoryClick) {
+                           // Use stored data or fallback
+                           const catIds = crumb.data?.categoryIds || (crumb.id ? [crumb.id] : []);
+                           const title = crumb.data?.title || crumb.label;
+                           // We slice breadcrumbs to go back
+                           const newCrumbs = breadcrumbs.slice(0, i + 1);
+                           onCategoryClick(catIds, title, crumb.data?.visualCategories || [], newCrumbs);
+                        }
+                     }}
+                  >
+                     {crumb.label}
+                  </span>
+                  {i < breadcrumbs.length - 1 && <span className="material-icons text-[10px]">chevron_right</span>}
+               </React.Fragment>
+            ))}
+         </nav>
+
+         <div className="flex flex-col lg:flex-row gap-8">
+            <div className="w-full lg:w-[45%] flex gap-4">
+               <div className="flex flex-col gap-3 w-16 flex-shrink-0 max-h-[400px] overflow-y-auto scrollbar-hide relative z-50">
+                  {allMediaItems.map((media, i) => (
+                     <div
+                        key={media.id || i}
+                        className={`aspect-square rounded border cursor-pointer overflow-hidden relative pointer-events-auto ${i === activeMediaIndex ? 'border-primary border-2' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}
+                        onMouseEnter={() => {
+                           setActiveMediaIndex(i);
+                           setUserHasSelected(true);
+                        }}
+                     >
+                        <img
+                           src={media.thumbnail_url || media.image_url}
+                           alt={media.alt_text || `Product thumbnail ${i + 1}`}
+                           className="w-full h-full object-cover"
+                        />
+                        {(media.type === 'youtube' || media.type === 'video') && (
+                           <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                              <span className="material-icons text-white text-2xl">play_circle</span>
+                           </div>
+                        )}
+                     </div>
+                  ))}
+               </div>
+
+               <div className="flex-1 relative aspect-[3/4] rounded-lg overflow-hidden border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+                  {activeMedia.type === 'youtube' ? (
+                     <iframe
+                        src={`${activeMedia.video_url}?mute=1&autoplay=1`}
+                        title="Product video"
+                        className="w-full h-full"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                     />
+                  ) : activeMedia.type === 'video' ? (
+                     <video
+                        src={activeMedia.video_url}
+                        controls
+                        autoPlay
+                        muted
+                        className="w-full h-full object-contain"
+                        poster={activeMedia.thumbnail_url || activeMedia.image_url}
+                     >
+                        Your browser does not support the video tag.
+                     </video>
+                  ) : (
+                     <div className="w-full h-full flex items-center justify-center p-2 bg-white">
+                        <ImageMagnifier
+                           src={activeMedia.image_url!}
+                           alt={activeMedia.alt_text || product.title}
+                           className="w-full h-full flex items-center justify-center"
+                        />
+                     </div>
+                  )}
+
+                  <div className="absolute bottom-4 right-4 flex gap-2">
+                     <button className="bg-white/90 dark:bg-black/50 p-2 rounded-full shadow hover:bg-white dark:hover:bg-black transition-colors">
+                        <span className="material-icons text-slate-700 dark:text-white">share</span>
+                     </button>
+                     <button className="bg-white/90 dark:bg-black/50 p-2 rounded-full shadow hover:bg-white dark:hover:bg-black transition-colors">
+                        <span className="material-icons text-slate-700 dark:text-white">favorite_border</span>
+                     </button>
+                  </div>
+               </div>
+            </div>
+
+            <div className="flex-1">
+               <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                     <span className="bg-black text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm">BLACK FRIDAY</span>
+                     <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
+                        <span className="material-icons text-[12px]">local_shipping</span> Free shipping
+                     </span>
+                     <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
+                        <span className="material-icons text-[12px]">account_balance_wallet</span> �4.00 Credit for delay
+                     </span>
+                  </div>
+
+                  <h1 className="text-xl md:text-2xl font-medium text-slate-900 dark:text-white mb-2 leading-snug">
+                     {product.title}
+                  </h1>
+
+                  <div className="flex items-center gap-1 text-xs mb-4">
+                     <span className="flex items-center text-slate-900 dark:text-white font-bold">4.6 <span className="material-icons text-sm">star</span></span>
+                     <span className="w-px h-3 bg-slate-300 mx-1"></span>
+                     <a href="#reviews" className="text-slate-500 hover:underline">{product.reviews} reviews</a>
+                     <span className="w-px h-3 bg-slate-300 mx-1"></span>
+                     <span className="text-slate-500">10k+ sold</span>
+                  </div>
+
+                  <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 mb-6">
+                     <div className="flex items-baseline gap-2 mb-1">
+                        <span className="text-3xl font-bold text-orange-600 dark:text-orange-500">�{displayPrice.toFixed(2)}</span>
+                        <span className="text-sm text-slate-400 line-through">RRP �{displayRRP.toFixed(2)}</span>
+                        <span className="text-xs font-bold text-orange-600 border border-orange-600 px-1 rounded">-60%</span>
+                     </div>
+                     <div className="text-xs text-orange-700 dark:text-orange-400 font-medium">
+                        Extra 15% off orders $49+ with code: bf15
+                     </div>
+                  </div>
+
+                  {/* Variants Selection */}
+                  <div className="space-y-5 mb-6">
+                     {colorOptionName && colorCards.length > 0 && (
+                        <div>
+                           <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                 {colorOptionName}: <span className="font-normal text-slate-600 dark:text-slate-400">{selectedOptions[colorOptionName]}</span>
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                 Choose a color with its gallery
+                              </span>
+                           </div>
+
+                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {colorCards.map(({ label, variant }) => {
+                                 const isSelected = selectedOptions[colorOptionName] === label;
+                                 const previewVariant = findVariantFor({ [colorOptionName]: label }) || variant;
+                                 const variantPrice = previewVariant?.price ?? product.price;
+                                 const variantStock = previewVariant?.stock;
+
+                                 return (
+                                    <button
+                                       key={label}
+                                       onClick={() => setSelectedOptions(prev => ({ ...prev, [colorOptionName]: label }))}
+                                       className={`relative flex items-center gap-3 p-3 rounded-xl border text-left transition-all shadow-sm ${isSelected
+                                          ? 'border-orange-500 ring-1 ring-orange-500 bg-orange-50/70 dark:bg-orange-900/10'
+                                          : 'border-slate-200 dark:border-slate-700 hover:border-orange-200 dark:hover:border-slate-600 bg-white dark:bg-slate-800'
+                                          }`}
+                                    >
+                                       <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 border border-slate-100 dark:border-slate-600">
+                                          {previewVariant?.image || variant.image ? (
+                                             <img src={previewVariant?.image || variant.image!} alt={label} className="w-full h-full object-cover" />
+                                          ) : (
+                                             <div
+                                                className="w-full h-full"
+                                                style={{
+                                                   backgroundColor: ['midnight', 'starlight', 'blue', 'red', 'purple', 'black', 'gold', 'white'].includes(label.toLowerCase()) ? getColorStyle(label) : undefined,
+                                                   backgroundImage: !['midnight', 'starlight', 'blue', 'red', 'purple', 'black', 'gold', 'white'].includes(label.toLowerCase()) ? `url(${product.image})` : undefined,
+                                                   backgroundSize: 'cover',
+                                                   backgroundPosition: 'center'
+                                                }}
+                                             />
+                                          )}
+                                       </div>
+
+                                       <div className="flex-1 min-w-0">
+                                          <div className="flex items-start justify-between gap-2">
+                                             <div>
+                                                <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">{label}</p>
+                                                {typeof variantStock === 'number' && <p className="text-[11px] text-slate-500">{variantStock} in stock</p>}
+                                             </div>
+                                             <div className="text-right">
+                                                <p className="font-bold text-slate-900 dark:text-white text-sm">�{variantPrice.toFixed(2)}</p>
+                                                {isSelected && <span className="text-[10px] text-orange-600 font-bold flex items-center gap-0.5 justify-end"><span className="material-icons text-[10px]">check</span> Selected</span>}
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </button>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     )}
+
+                     {displayedOptions.map((option) => (
+                        <div key={option.id}>
+                           <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                 {option.name}: <span className="font-normal text-slate-600 dark:text-slate-400">{selectedOptions[option.name]}</span>
+                              </span>
+                              {['size', 'storage'].some(k => option.name.toLowerCase().includes(k)) && (
+                                 <button className="text-xs text-orange-500 hover:underline font-medium flex items-center gap-0.5">
+                                    <span className="material-icons text-[14px]">straighten</span> Size Guide
+                                 </button>
+                              )}
+                           </div>
+
+                           <div className="flex flex-wrap gap-2">
+                              {option.values.map((val) => {
+                                 const variantForValue = findVariantFor({ [option.name]: val });
+                                 const variantPrice = variantForValue?.price ?? product.price;
+                                 const variantStock = variantForValue?.stock;
+                                 const isSelected = selectedOptions[option.name] === val;
+                                 const isDisabled = typeof variantStock === 'number' && variantStock <= 0;
+
+                                 return (
+                                    <button
+                                       key={val}
+                                       onClick={() => !isDisabled && setSelectedOptions(prev => ({ ...prev, [option.name]: val }))}
+                                       disabled={isDisabled}
+                                       className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all duration-200 min-w-[90px] ${isSelected
+                                          ? 'border-orange-500 bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 shadow-sm'
+                                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-orange-200 dark:hover:border-slate-600 bg-white dark:bg-slate-800'
+                                          } ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                    >
+                                       <div className="flex flex-col leading-tight">
+                                          <span>{val}</span>
+                                          <span className="text-[11px] font-medium text-slate-500">�{variantPrice.toFixed(2)}</span>
+                                          {typeof variantStock === 'number' && <span className="text-[10px] text-slate-400">{variantStock} left</span>}
+                                       </div>
+                                    </button>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     ))}
+
+                     {isLoadingVariants && (
+                        <div className="text-xs text-slate-500">Loading variants...</div>
+                     )}
+                  </div>
+
+                  <button
+                     className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-orange-500/20 transition-all active:scale-[0.99] mb-6"
+                     onClick={() => {
+                        if (onAddToCart) {
+                           // Pass the specific variant if selected
+                           const productToAdd = currentVariant
+                              ? { ...product, id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
+                              : product;
+                           onAddToCart(productToAdd);
+                        }
+                     }}
+                  >
+                     Add to Cart
+                  </button>
+               </div>
+            </div>
+         </div>
+
+         <div className="mt-12 flex flex-col lg:flex-row gap-12">
+            <div id="reviews" className="flex-1">
+               <ReviewSection
+                  productId={product.id.toString()}
+                  userId={user?.id}
+                  hasPurchased={false} // TODO: Check if user has purchased this product
+               />
+            </div>
+
+            <div className="w-full lg:w-96 flex-shrink-0 space-y-8">
+               {product.vendor ? (
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                     <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-xl uppercase">
+                           {product.vendor.business_name.charAt(0)}
+                        </div>
+                        <div className="flex-1">
+                           <div className="flex items-center gap-1">
+                              <h3 className="font-bold text-slate-900 dark:text-white">{product.vendor.business_name}</h3>
+                              {product.vendor.is_verified && (
+                                 <span className="material-icons text-blue-500 dark:text-blue-400 text-sm" title="Verified Seller">verified</span>
+                              )}
+                           </div>
+                           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                              <span>{product.vendor.total_products} Items</span>
+                              <span className="w-px h-3 bg-slate-300 dark:bg-slate-600"></span>
+                              <span className="flex items-center">{product.vendor.vendor_rating} <span className="material-icons text-[10px] ml-0.5">star</span></span>
+                              <span className="w-px h-3 bg-slate-300 dark:bg-slate-600"></span>
+                              <span>{product.vendor.review_count} Reviews</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="flex gap-2 mb-4">
+                        <button
+                           className="flex-1 px-4 py-2 rounded-full text-xs font-bold border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white hover:border-orange-500 hover:text-orange-500 transition-all flex items-center justify-center gap-1"
+                           onClick={handleMessageClick}
+                        >
+                           <span className="material-icons text-sm">chat</span>
+                           Message
+                        </button>
+                        <button
+                           className={`flex-1 px-4 py-2 rounded-full text-xs font-bold transition-all ${isFollowing
+                              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                              : 'border-2 border-purple-500 text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                              } ${isFollowLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                           onClick={handleFollowToggle}
+                           disabled={isFollowLoading}
+                        >
+                           <div className="flex items-center justify-center gap-1">
+                              <span className="material-icons text-sm">
+                                 {isFollowing ? 'check' : 'add'}
+                              </span>
+                              {isFollowing ? 'Following' : 'Follow'}
+                           </div>
+                        </button>
+                        <button
+                           className="group relative px-4 py-2 rounded-full text-xs font-bold text-slate-700 dark:text-white overflow-hidden bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-200 dark:border-slate-700 hover:border-orange-500/50"
+                           onClick={() => onVisitStore && product.vendor?.vendor_id && onVisitStore(product.vendor.vendor_id)}
+                        >
+                           <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                           <span className="relative flex items-center gap-1">
+                              <span className="material-icons text-sm text-slate-400 group-hover:text-orange-500 transition-colors">storefront</span>
+                           </span>
+                        </button>
+                     </div>
+
+                     {/* Follower Count */}
+                     {
+                        followerCount > 0 && (
+                           <div className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                              <span className="font-medium">{followerCount.toLocaleString()}</span> {followerCount === 1 ? 'follower' : 'followers'}
+                           </div>
+                        )
+                     }
+
+                     {/* Badges */}
+                     {
+                        product.vendor.badges && product.vendor.badges.length > 0 && (
+                           <div className="flex flex-wrap gap-2 mb-4">
+                              {product.vendor.badges.map((badge, idx) => {
+                                 const getBadgeStyle = (category: string) => {
+                                    switch (category) {
+                                       case 'trust': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800';
+                                       case 'community': return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800';
+                                       case 'growth': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800';
+                                       default: return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+                                    }
+                                 };
+                                 const getBadgeIcon = (name: string) => {
+                                    switch (name) {
+                                       case 'verified_seller': return 'verified';
+                                       case 'platform_pioneer': return 'rocket_launch';
+                                       case 'rising_star': return 'trending_up';
+                                       default: return 'military_tech';
+                                    }
+                                 };
+                                 return (
+                                    <span key={idx} className={`text-[10px] px-2 py-1 rounded-full border flex items-center gap-1 ${getBadgeStyle(badge.badge_category)}`} title={badge.description}>
+                                       <span className="material-icons !text-[12px]">{getBadgeIcon(badge.badge_name)}</span>
+                                       {badge.badge_name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                    </span>
+                                 );
+                              })}
+                           </div>
+                        )
+                     }
+
+                     {/* Stats Grid */}
+                     <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 dark:text-slate-400 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2">
+                           <span className="material-icons text-green-600 dark:text-green-400 text-[16px]">local_shipping</span>
+                           <span className="font-medium">{product.vendor.delivery_speed}</span>
+                        </div>
+                        {product.vendor.response_time && (
+                           <div className="flex items-center gap-2">
+                              <span className="material-icons text-slate-400 text-[16px]">chat</span>
+                              <span>{product.vendor.response_time}</span>
+                           </div>
+                        )}
+                        {product.vendor.seller_since && (
+                           <div className="flex items-center gap-2">
+                              <span className="material-icons text-slate-400 text-[16px]">calendar_today</span>
+                              <span>{product.vendor.seller_since}</span>
+                           </div>
+                        )}
+                     </div>
+                  </div >
+               ) : (
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg flex items-center gap-3">
+                     <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse"></div>
+                     <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24 animate-pulse"></div>
+                        <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-32 animate-pulse"></div>
+                     </div>
+                  </div>
+               )}
+            </div >
+         </div >
+
+         {/* AI Search Results: Same Items */}
+         {
+            sameItems.length > 0 && (
+               <div className="mt-16">
+                  <div className="flex items-center mb-6">
+                     <span className="material-icons text-shop-red text-2xl mr-2">image_search</span>
+                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Same items</h2>
+                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Visual Match</span>
+                  </div>
+                  <div className="relative">
+                     <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
+                        {sameItems.map(p => (
+                           <div key={p.id} className="w-[160px] sm:w-[200px] flex-shrink-0 snap-start">
+                              <ProductCard
+                                 product={p}
+                                 showLocalBadge={p.vendor?.business_country === 'Kenya'}
+                                 onProductClick={onRelatedProductClick || onProductClick}
+                                 onAddToCart={onAddToCart}
+                              />
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+            )
+         }
+
+         {/* AI Search Results: Similar Items */}
+         {
+            similarItems.length > 0 && (
+               <div className="mt-12">
+                  <div className="flex items-center mb-6">
+                     <span className="material-icons text-blue-500 text-2xl mr-2">recommend</span>
+                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Similar items</h2>
+                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">You might also like</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                     {similarItems.map(p => (
+                        <ProductCard
+                           key={p.id}
+                           product={p}
+                           showLocalBadge={p.vendor?.business_country === 'Kenya'}
+                           onProductClick={onRelatedProductClick || onProductClick}
+                           onAddToCart={onAddToCart}
+                        />
+                     ))}
+                  </div>
+               </div>
+            )
+         }
+
+         {/* Loading State */}
+         {
+            isLoadingRelated && (
+               <div className="mt-16 py-12 text-center">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-primary mb-4"></div>
+                  <p className="text-slate-500 text-sm">Finding similar items...</p>
+               </div>
+            )
+         }
+
+         {/* Message Modal */}
+         {
+            isMessageModalOpen && (
+               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                     <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                        <h3 className="font-bold text-lg text-slate-900 dark:text-white">Message Seller</h3>
+                        <button
+                           onClick={() => setIsMessageModalOpen(false)}
+                           className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                        >
+                           <span className="material-icons">close</span>
+                        </button>
+                     </div>
+
+                     <div className="p-4 space-y-4">
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                           <img src={product.image} alt="" className="w-12 h-12 rounded object-cover border border-gray-200" />
+                           <div>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-1">{product.title}</p>
+                              <p className="text-xs text-gray-500">{product.vendor?.shop_name || 'Seller'}</p>
+                           </div>
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Your Message</label>
+                           <textarea
+                              value={initialMessage}
+                              onChange={(e) => setInitialMessage(e.target.value)}
+                              className="w-full h-32 p-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:border-orange-500 resize-none"
+                              placeholder="Write your message here..."
+                              autoFocus
+                           />
+                        </div>
+                     </div>
+
+                     <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+                        <button
+                           onClick={() => setIsMessageModalOpen(false)}
+                           className="px-4 py-2 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                        >
+                           Cancel
+                        </button>
+                        <button
+                           onClick={handleConfirmSendMessage}
+                           disabled={!initialMessage.trim()}
+                           className="px-6 py-2 rounded-lg bg-orange-500 text-white text-sm font-bold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                        >
+                           <span>Send Message</span>
+                           <span className="material-icons text-sm">send</span>
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            )
+         }
+      </div >
+   );
+};
+
+export default ProductDetailView;
