@@ -77,6 +77,14 @@ const App: React.FC = () => {
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [previousView, setPreviousView] = useState<string>('');
   const [adminAccessMessage, setAdminAccessMessage] = useState<string | null>(null);
+  const isBuyerSurface = (view: typeof currentView) => ![
+    'seller-login',
+    'seller-onboarding',
+    'seller-dashboard',
+    'admin-dashboard',
+    'admin-login'
+  ].includes(view);
+  const [showBuyerAuthModal, setShowBuyerAuthModal] = useState(false);
 
   // SEO: Compute page metadata based on current view
   const seoConfig = useMemo(() => {
@@ -208,6 +216,9 @@ const App: React.FC = () => {
         // Kept loyalty
       }
       setAuthLoading(false);
+      if (!currentUser && isBuyerSurface(currentView)) {
+        setShowBuyerAuthModal(true);
+      }
     };
 
     checkAuth();
@@ -242,6 +253,10 @@ const App: React.FC = () => {
           avatar_url: session.user.user_metadata?.avatar_url,
           role: role,
         });
+
+        if (isBuyerSurface(currentView)) {
+          setShowBuyerAuthModal(false);
+        }
 
         // Check for stored auth context (for seller auth flows)
         const storedContextStr = sessionStorage.getItem('auth_context');
@@ -294,6 +309,7 @@ const App: React.FC = () => {
         setAdminTab('overview');
         setAdminAccessMessage(null);
         setCurrentView('home'); // Ensure we go home on sign out
+        setShowBuyerAuthModal(true);
       }
     });
 
@@ -302,6 +318,18 @@ const App: React.FC = () => {
       authListener?.data.subscription.unsubscribe();
     };
   }, []);
+
+  // Keep buyer auth modal aligned with auth state and surface
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user && isBuyerSurface(currentView)) {
+      setShowBuyerAuthModal(true);
+    } else if (user) {
+      setShowBuyerAuthModal(false);
+    }
+  }, [authLoading, user, currentView]);
+
+  // One Tap disabled for now: keep sign-in user-initiated
 
   const addToCart = (product: Product, event?: React.MouseEvent | React.TouchEvent) => {
     const currentQty = cartItems.filter(item => item.id.toString() === product.id.toString()).length;
@@ -490,6 +518,14 @@ const App: React.FC = () => {
 
   const handleSignInClick = () => {
     setPreviousView(currentView);
+
+    // On buyer surfaces show the popover; on seller/admin surfaces route to full auth page
+    if (isBuyerSurface(currentView)) {
+      setShowBuyerAuthModal(true);
+      return;
+    }
+
+    setShowBuyerAuthModal(false);
     setCurrentView('buyer-auth');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -501,7 +537,11 @@ const App: React.FC = () => {
   };
 
   const handleAuthSuccess = () => {
-    handleHomeClick();
+    if (showBuyerAuthModal) {
+      setShowBuyerAuthModal(false);
+    } else {
+      handleHomeClick();
+    }
   };
 
   const handleCategoryClick = (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: Breadcrumb[]) => {
@@ -645,6 +685,7 @@ const App: React.FC = () => {
           onSearch={handleSearch}
           onCategoryClick={handleCategoryClick}
           onAccountPageClick={handleAccountPageClick}
+          onProductClick={handleProductClick}
           onCheckoutClick={handleCartClick}
           onSignInClick={handleSignInClick}
           onSignOutClick={handleSignOutClick}
@@ -733,7 +774,7 @@ const App: React.FC = () => {
         )}
         {currentView === 'buyer-auth' && (
           <BuyerAuthView
-            onSuccess={handleAuthSuccess}
+            onAuthSuccess={handleAuthSuccess}
             authContext={previousView === 'seller-login' ? { view: 'seller-onboarding' } : undefined}
           />
         )}
@@ -789,7 +830,13 @@ const App: React.FC = () => {
             {dashboardTab === 'upload-order-files' && <UploadOrderFilesView />}
             {dashboardTab === 'promotions-coupons' && <PromotionsCouponsView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} />}
             {dashboardTab === 'promotions-campaigns' && <PromotionalCampaignsView sellerId={user?.id || ''} />}
-            {dashboardTab === 'create-coupon' && <CreateCouponView />}  {/* Can be linked from internal button */}
+            {dashboardTab === 'create-coupon' && (
+              <CreateCouponView
+                sellerId={user?.id || ''}
+                onSuccess={() => setDashboardTab('promotions-coupons')}
+                onCancel={() => setDashboardTab('promotions-coupons')}
+              />
+            )}  {/* Can be linked from internal button */}
             {dashboardTab === 'promotions' && <PromotionalCampaignsView sellerId={user?.id || ''} />} {/* Default promo view */}
             {dashboardTab === 'finance-payments' && <PaymentsView sellerId={user?.id || ''} />}
             {dashboardTab === 'finance-charge-method' && <ChargeMethodView sellerId={user?.id || ''} />}
@@ -844,6 +891,18 @@ const App: React.FC = () => {
           </AdminDashboardLayout>
         )}
       </main>
+      {showBuyerAuthModal && isBuyerSurface(currentView) && (
+        <div className="fixed top-16 right-4 z-[90]">
+          <BuyerAuthView
+            isModal
+            variant="compactPopover"
+            onAuthSuccess={() => setShowBuyerAuthModal(false)}
+            onClose={() => setShowBuyerAuthModal(false)}
+            authContext={previousView === 'seller-login' ? { view: 'seller-onboarding' } : undefined}
+          />
+        </div>
+      )}
+
       {currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' && (
         <Footer onAdminClick={async () => {
           sessionStorage.setItem('auth_context', JSON.stringify({ view: 'admin-login' }));

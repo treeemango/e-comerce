@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant } from '../types';
+import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants } from '../lib/api';
+import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon } from '../lib/api';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
 import { playFollowSound, playUnfollowSound } from '../lib/sounds';
 import { useSEO } from '../lib/useSEO';
 import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
+import { formatPrice, getCurrencySymbol } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
 
 interface ProductDetailViewProps {
@@ -67,6 +68,36 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [productVariants, setProductVariants] = useState<ProductVariant[]>(product.variants || []);
    const [isLoadingVariants, setIsLoadingVariants] = useState(false);
 
+   // Coupon State
+   const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
+   const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
+
+   useEffect(() => {
+      const loadCoupons = async () => {
+         if (product.id) {
+            const coupons = await getProductCoupons(product.id.toString());
+            // Filter for valid ongoing coupons
+            const validCoupons = coupons.filter((c: PromoCoupon) => c.status === 'Ongoing');
+            setProductCoupons(validCoupons);
+         }
+      };
+      loadCoupons();
+   }, [product.id]);
+
+   const handleClaimCoupon = async (couponId: string) => {
+      if (!user) {
+         alert("Please login to claim coupons");
+         return;
+      }
+      const success = await claimCoupon(couponId, user.id);
+      if (success) {
+         alert("Coupon claimed successfully!");
+         setClaimedCoupons(prev => new Set(prev).add(couponId));
+      } else {
+         alert("Failed to claim coupon or already claimed.");
+      }
+   };
+
    useEffect(() => {
       const loadVariants = async () => {
          if (product.id) {
@@ -122,17 +153,44 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       }
    }, [selectedOptions, productVariants]);
 
-   // Update prices/images based on selection (if variants exist)
-   // In a real app, we would match selectedOptions to a variant in product.variants
-   // For now we just simulate price changes for demo
+   const currencyCode = product.currency || 'USD';
+   const currencySymbol = getCurrencySymbol(currencyCode);
+
+   // Price/discount logic from backend with safe fallbacks
    const displayPrice = useMemo(() => {
       if (currentVariant) return currentVariant.price;
       return product.price;
    }, [product.price, currentVariant]);
 
    const displayRRP = useMemo(() => {
-      return displayPrice * 2.5; // Keeping consistent rrp ratio
-   }, [displayPrice]);
+      const backendRrp = product.originalPrice ?? product.rrp;
+      if (typeof backendRrp === 'number' && backendRrp > 0) return backendRrp;
+      return null; // avoid fake RRPs to prevent misleading discounts
+   }, [product.originalPrice, product.rrp]);
+
+   const discountPercent = useMemo(() => {
+      if (typeof product.discountPercent === 'number') return Math.round(product.discountPercent);
+      if (displayRRP && displayRRP > displayPrice) {
+         return Math.round(((displayRRP - displayPrice) / displayRRP) * 100);
+      }
+      return null;
+   }, [displayPrice, displayRRP, product.discountPercent]);
+
+   const promoLine = useMemo(() => {
+      if (product.promoText) return product.promoText;
+      if (product.promoCode) return `Extra 15% off orders $49+ with code: ${product.promoCode}`;
+      return null;
+   }, [product.promoCode, product.promoText]);
+
+   const showPromo = Boolean(promoLine);
+
+   const ratingValue = typeof product.rating === 'number' ? product.rating : null;
+   const formattedRating = ratingValue !== null ? ratingValue.toFixed(1) : '—';
+   const soldLabel = useMemo(() => {
+      if (typeof product.stock === 'number') return `${product.stock.toLocaleString()} in stock`;
+      if (product.vendor?.completed_orders) return `${product.vendor.completed_orders.toLocaleString()} orders`;
+      return 'Popular item';
+   }, [product.stock, product.vendor?.completed_orders]);
 
    // Generate styles for known color names
    const getColorStyle = (colorName: string) => {
@@ -258,8 +316,17 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       ? product.gallery_media.filter(item => item && !item.is_main && ((item.type === 'image' && item.image_url) || ((item.type === 'video' || item.type === 'youtube') && item.video_url)))
       : [];
 
-   // Create all media items (featured image + gallery)
-   const allMediaItems: MediaItem[] = [
+   const normalizeYoutubeThumb = (item: MediaItem) => {
+      if (item.type === 'youtube' && !item.thumbnail_url && item.video_url?.includes('/embed/')) {
+         const videoId = item.video_url.split('/embed/')[1];
+         if (videoId) {
+            item.thumbnail_url = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+         }
+      }
+      return item;
+   };
+
+   const baseMediaItems: MediaItem[] = [
       {
          id: 'featured',
          image_url: product.image,
@@ -269,27 +336,63 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          alt_text: product.title
       },
       ...galleryMedia
-   ].filter(item => item && ((item.type === 'image' && item.image_url) || ((item.type === 'video' || item.type === 'youtube') && item.video_url))).map(item => {
-      if (item.type === 'youtube' && !item.thumbnail_url) {
-         const videoId = item.video_url.split('/embed/')[1];
-         if (videoId) {
-            item.thumbnail_url = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-         }
+   ].filter(item => item && ((item.type === 'image' && item.image_url) || ((item.type === 'video' || item.type === 'youtube') && item.video_url)))
+      .map(normalizeYoutubeThumb);
+
+   const selectedColorLabel = colorOptionName ? selectedOptions[colorOptionName] : undefined;
+
+   const colorMatch = (media: MediaItem, color?: string) => {
+      if (!color) return false;
+      const haystack = `${media.alt_text || ''} ${media.image_url || ''} ${media.thumbnail_url || ''}`.toLowerCase();
+      return haystack.includes(color.toLowerCase());
+   };
+
+   const uniqueMedia = (items: MediaItem[]) => {
+      const seen = new Set<string>();
+      return items.filter(item => {
+         const key = `${item.type}-${item.image_url || item.video_url || item.thumbnail_url}`;
+         if (seen.has(key)) return false;
+         seen.add(key);
+         return true;
+      });
+   };
+
+   const variantShowcaseMedia: MediaItem[] = useMemo(() => {
+      const prioritized: MediaItem[] = [];
+
+      if (currentVariant?.image) {
+         prioritized.push({
+            id: `variant-${currentVariant.id}`,
+            image_url: currentVariant.image,
+            thumbnail_url: currentVariant.image,
+            type: 'image',
+            alt_text: `${product.title} ${selectedColorLabel || ''}`.trim()
+         });
       }
-      return item;
-   });
+
+      const filteredByColor = baseMediaItems.filter(m => colorMatch(m, selectedColorLabel));
+      const remaining = baseMediaItems.filter(m => !colorMatch(m, selectedColorLabel));
+
+      const merged = uniqueMedia([...prioritized, ...filteredByColor, ...remaining]);
+      return merged.length > 0 ? merged : baseMediaItems;
+   }, [baseMediaItems, currentVariant?.id, currentVariant?.image, product.title, selectedColorLabel]);
+
+   useEffect(() => {
+      // When user changes color/variant, reset to first media so the new variant hero is shown
+      setActiveMediaIndex(0);
+   }, [selectedColorLabel, currentVariant?.id]);
 
    // Auto-select first video on page load (only if user hasn't manually selected)
    useEffect(() => {
-      if (allMediaItems.length > 0 && !userHasSelected) {
-         const videoIndex = allMediaItems.findIndex(item => item.type === 'video' || item.type === 'youtube');
+      if (variantShowcaseMedia.length > 0 && !userHasSelected) {
+         const videoIndex = variantShowcaseMedia.findIndex(item => item.type === 'video' || item.type === 'youtube');
          if (videoIndex >= 0) {
             setActiveMediaIndex(videoIndex);
          }
       }
-   }, [allMediaItems, userHasSelected]);
+   }, [variantShowcaseMedia, userHasSelected]);
 
-   const activeMedia = allMediaItems[activeMediaIndex] || allMediaItems[0];
+   const activeMedia = variantShowcaseMedia[activeMediaIndex] || variantShowcaseMedia[0];
 
    // Generate dynamic breadcrumbs from product category data
    const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
@@ -413,11 +516,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
          <div className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-[45%] flex gap-4">
-               <div className="flex flex-col gap-3 w-16 flex-shrink-0 max-h-[400px] overflow-y-auto scrollbar-hide relative z-50">
-                  {allMediaItems.map((media, i) => (
+               <div className="flex flex-col gap-3 w-16 flex-shrink-0 max-h-[440px] overflow-y-auto scrollbar-hide relative z-50">
+                  {variantShowcaseMedia.map((media, i) => (
                      <div
                         key={media.id || i}
-                        className={`aspect-square rounded border cursor-pointer overflow-hidden relative pointer-events-auto ${i === activeMediaIndex ? 'border-primary border-2' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}
+                        className={`aspect-square rounded-xl border cursor-pointer overflow-hidden relative pointer-events-auto transition-all duration-200 ${i === activeMediaIndex ? 'border-orange-500 ring-2 ring-orange-200 dark:ring-orange-900/40' : 'border-slate-200 dark:border-slate-700 hover:border-orange-200'}`}
                         onMouseEnter={() => {
                            setActiveMediaIndex(i);
                            setUserHasSelected(true);
@@ -427,38 +530,47 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            src={media.thumbnail_url || media.image_url}
                            alt={media.alt_text || `Product thumbnail ${i + 1}`}
                            className="w-full h-full object-cover"
+                           loading="lazy"
                         />
                         {(media.type === 'youtube' || media.type === 'video') && (
-                           <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                           <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                               <span className="material-icons text-white text-2xl">play_circle</span>
+                           </div>
+                        )}
+                        {selectedColorLabel && i === 0 && (
+                           <div className="absolute top-1 right-1 bg-white/90 dark:bg-black/70 text-[10px] font-semibold px-2 py-0.5 rounded-full text-slate-700 dark:text-slate-200 shadow-sm">
+                              {selectedColorLabel}
                            </div>
                         )}
                      </div>
                   ))}
                </div>
 
-               <div className="flex-1 relative aspect-[3/4] rounded-lg overflow-hidden border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+               <div className="flex-1 relative aspect-[3/4] rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 shadow-sm">
                   {activeMedia.type === 'youtube' ? (
-                     <iframe
-                        src={`${activeMedia.video_url}?mute=1&autoplay=1`}
-                        title="Product video"
-                        className="w-full h-full"
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                     />
+                     <div className="w-full h-full bg-black flex items-center justify-center">
+                        <iframe
+                           src={`${activeMedia.video_url}?mute=1&autoplay=1&modestbranding=1&rel=0`}
+                           title="Product video"
+                           className="w-full h-full"
+                           frameBorder="0"
+                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        />
+                     </div>
                   ) : activeMedia.type === 'video' ? (
                      <video
                         src={activeMedia.video_url}
                         controls
                         autoPlay
                         muted
-                        className="w-full h-full object-contain"
+                        playsInline
+                        className="w-full h-full object-contain bg-black"
                         poster={activeMedia.thumbnail_url || activeMedia.image_url}
                      >
                         Your browser does not support the video tag.
                      </video>
                   ) : (
-                     <div className="w-full h-full flex items-center justify-center p-2 bg-white">
+                     <div className="w-full h-full flex items-center justify-center p-3 bg-white dark:bg-slate-900">
                         <ImageMagnifier
                            src={activeMedia.image_url!}
                            alt={activeMedia.alt_text || product.title}
@@ -481,12 +593,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             <div className="flex-1">
                <div className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
-                     <span className="bg-black text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm">BLACK FRIDAY</span>
                      <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
                         <span className="material-icons text-[12px]">local_shipping</span> Free shipping
                      </span>
                      <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
-                        <span className="material-icons text-[12px]">account_balance_wallet</span> �4.00 Credit for delay
+                        <span className="material-icons text-[12px]">account_balance_wallet</span> {formatPrice(4, currencyCode)} Credit for delay
                      </span>
                   </div>
 
@@ -495,23 +606,104 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   </h1>
 
                   <div className="flex items-center gap-1 text-xs mb-4">
-                     <span className="flex items-center text-slate-900 dark:text-white font-bold">4.6 <span className="material-icons text-sm">star</span></span>
+                     <span className="flex items-center text-slate-900 dark:text-white font-bold">{formattedRating} <span className="material-icons text-sm">star</span></span>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
-                     <a href="#reviews" className="text-slate-500 hover:underline">{product.reviews} reviews</a>
+                     <a href="#reviews" className="text-slate-500 hover:underline">{product.reviews?.toLocaleString?.() ?? product.reviews} reviews</a>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
-                     <span className="text-slate-500">10k+ sold</span>
+                     <span className="text-slate-500">{soldLabel}</span>
                   </div>
 
                   <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 mb-6">
                      <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-3xl font-bold text-orange-600 dark:text-orange-500">�{displayPrice.toFixed(2)}</span>
-                        <span className="text-sm text-slate-400 line-through">RRP �{displayRRP.toFixed(2)}</span>
-                        <span className="text-xs font-bold text-orange-600 border border-orange-600 px-1 rounded">-60%</span>
+                        <span className="text-3xl font-bold text-orange-600 dark:text-orange-500">{formatPrice(displayPrice, currencyCode)}</span>
+                        {displayRRP > displayPrice && (
+                           <span className="text-sm text-slate-400 line-through">RRP {formatPrice(displayRRP, currencyCode)}</span>
+                        )}
+                        {discountPercent !== null && discountPercent > 0 && (
+                           <span className="text-xs font-bold text-orange-600 border border-orange-600 px-1 rounded">-{discountPercent}%</span>
+                        )}
                      </div>
-                     <div className="text-xs text-orange-700 dark:text-orange-400 font-medium">
-                        Extra 15% off orders $49+ with code: bf15
-                     </div>
+                     {showPromo && (
+                        <div className="text-xs text-orange-700 dark:text-orange-400 font-medium">
+                           {promoLine}
+                        </div>
+                     )}
                   </div>
+
+                  {/* Coupons Section */}
+                  {(product.activeCoupon || productCoupons.length > 0) && (
+                     <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
+                        <div className="flex items-center gap-2 mb-3">
+                           <span className="material-icons text-orange-500 text-sm">local_offer</span>
+                           <span className="text-sm font-bold text-slate-900 dark:text-white">Available Coupons</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                           {/* Active Coupon from View */}
+                           {product.activeCoupon && (
+                              <div className="relative overflow-hidden bg-orange-50 dark:bg-orange-900/20 border-l-4 border-l-orange-500 border-y border-r border-orange-200 dark:border-orange-800 rounded-r-lg p-3 flex items-center justify-between gap-4 transition-all hover:shadow-md group">
+                                 <div className="pl-2">
+                                    <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
+                                       {product.activeCoupon.amount ? `$${product.activeCoupon.amount} OFF` : `${product.activeCoupon.percent}% OFF`}
+                                    </div>
+                                    <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                                       Code: {product.activeCoupon.code}
+                                    </div>
+                                    {product.activeCoupon.endsAt && (
+                                       <div className="text-[10px] text-slate-400 mt-0.5">
+                                          Expires: {new Date(product.activeCoupon.endsAt).toLocaleDateString()}
+                                       </div>
+                                    )}
+                                 </div>
+                                 <button
+                                    onClick={() => {
+                                       if (product.activeCoupon) {
+                                          navigator.clipboard.writeText(product.activeCoupon.code);
+                                          alert('Coupon code copied!');
+                                       }
+                                    }}
+                                    className="px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded text-xs font-bold transition-colors"
+                                 >
+                                    Copy Code
+                                 </button>
+                              </div>
+                           )}
+
+                           {productCoupons
+                              .filter(c => c.code !== product.activeCoupon?.code)
+                              .map(coupon => {
+                                 const isClaimed = claimedCoupons.has(coupon.id);
+                                 return (
+                                    <div key={coupon.id} className="relative overflow-hidden bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3 flex items-center justify-between gap-4 transition-all hover:shadow-md group">
+                                       <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white dark:bg-slate-900 rounded-full border border-orange-200 dark:border-orange-800"></div>
+                                       <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white dark:bg-slate-900 rounded-full border border-orange-200 dark:border-orange-800"></div>
+
+                                       <div className="pl-2">
+                                          <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
+                                             {coupon.discount_amount ? `$${coupon.discount_amount} OFF` : `${coupon.discount_percentage}% OFF`}
+                                          </div>
+                                          <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                                             {coupon.name}
+                                          </div>
+                                          <div className="text-[10px] text-slate-400 mt-0.5">
+                                             Expires: {new Date(coupon.end_time).toLocaleDateString()}
+                                          </div>
+                                       </div>
+                                       <button
+                                          onClick={() => !isClaimed && handleClaimCoupon(coupon.id)}
+                                          disabled={isClaimed}
+                                          className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${isClaimed
+                                             ? 'bg-green-100 text-green-700 cursor-default'
+                                             : 'bg-orange-500 text-white hover:bg-orange-600 hover:shadow-orange-500/30'
+                                             }`}
+                                       >
+                                          {isClaimed ? 'Claimed' : 'Claim'}
+                                       </button>
+                                    </div>
+                                 );
+                              })}
+                        </div>
+                     </div>
+                  )}
 
                   {/* Variants Selection */}
                   <div className="space-y-5 mb-6">
@@ -565,7 +757,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                                 {typeof variantStock === 'number' && <p className="text-[11px] text-slate-500">{variantStock} in stock</p>}
                                              </div>
                                              <div className="text-right">
-                                                <p className="font-bold text-slate-900 dark:text-white text-sm">�{variantPrice.toFixed(2)}</p>
+                                                <p className="font-bold text-slate-900 dark:text-white text-sm">{formatPrice(variantPrice, currencyCode)}</p>
                                                 {isSelected && <span className="text-[10px] text-orange-600 font-bold flex items-center gap-0.5 justify-end"><span className="material-icons text-[10px]">check</span> Selected</span>}
                                              </div>
                                           </div>
@@ -610,7 +802,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     >
                                        <div className="flex flex-col leading-tight">
                                           <span>{val}</span>
-                                          <span className="text-[11px] font-medium text-slate-500">�{variantPrice.toFixed(2)}</span>
+                                          <span className="text-[11px] font-medium text-slate-500">{formatPrice(variantPrice, currencyCode)}</span>
                                           {typeof variantStock === 'number' && <span className="text-[10px] text-slate-400">{variantStock} left</span>}
                                        </div>
                                     </button>

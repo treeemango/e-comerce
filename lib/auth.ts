@@ -15,6 +15,90 @@ export interface AuthUser {
     role?: string;
 }
 
+// --- Google One Tap helpers ---
+let googleScriptPromise: Promise<void> | null = null;
+
+const loadGoogleScript = () => {
+    if (googleScriptPromise) return googleScriptPromise;
+    googleScriptPromise = new Promise((resolve, reject) => {
+        if (typeof window === 'undefined') {
+            reject(new Error('Window not available'));
+            return;
+        }
+        const existing = document.querySelector('script[data-google-one-tap]');
+        if (existing) {
+            resolve();
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.dataset.googleOneTap = 'true';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Google One Tap script'));
+        document.head.appendChild(script);
+    });
+    return googleScriptPromise;
+};
+
+export const initGoogleOneTap = async (
+    clientId: string,
+    options?: {
+        context?: { view: string };
+        onSuccess?: (user: User | null) => void;
+        onError?: (err: Error) => void;
+    }
+) => {
+    if (!clientId || typeof window === 'undefined') return () => {};
+
+    try {
+        await loadGoogleScript();
+        // Persist auth intent if provided
+        if (options?.context) {
+            sessionStorage.setItem('auth_context', JSON.stringify(options.context));
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const googleObj = (window as any).google;
+        if (!googleObj?.accounts?.id) throw new Error('Google One Tap not available');
+
+        googleObj.accounts.id.initialize({
+            client_id: clientId,
+            callback: async (credentialResponse: { credential?: string }) => {
+                if (!credentialResponse?.credential) return;
+                try {
+                    const { data, error } = await supabase.auth.signInWithIdToken({
+                        provider: 'google',
+                        token: credentialResponse.credential,
+                    });
+                    if (error) throw error;
+                    options?.onSuccess?.(data.user);
+                } catch (err: any) {
+                    console.error('One Tap sign-in failed', err);
+                    options?.onError?.(err instanceof Error ? err : new Error('One Tap sign-in failed'));
+                }
+            },
+            cancel_on_tap_outside: true,
+            context: 'signin',
+        });
+
+        googleObj.accounts.id.prompt();
+
+        return () => {
+            try {
+                googleObj.accounts.id.cancel();
+            } catch (e) {
+                // ignore
+            }
+        };
+    } catch (err: any) {
+        console.error('Failed to init One Tap', err);
+        options?.onError?.(err instanceof Error ? err : new Error('Failed to init One Tap'));
+        return () => {};
+    }
+};
+
 // Sign in with email and password
 export const signInWithEmail = async (
     email: string,

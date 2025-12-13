@@ -138,6 +138,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, showLocalBa
                 <span className="material-icons text-[10px]">local_shipping</span> Local
               </span>
             )}
+            {product.activeCoupon && (
+              <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-md uppercase flex items-center gap-0.5">
+                <span className="material-icons text-[10px]">local_offer</span>
+                {product.activeCoupon.amount ? `$${product.activeCoupon.amount} OFF` : `${product.activeCoupon.percent}% OFF`}
+              </span>
+            )}
           </div>
         </div>
 

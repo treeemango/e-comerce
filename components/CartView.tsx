@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Product } from '../types';
 import { getCurrencySymbol } from '@/lib/currency';
+import { applyCoupon } from '@/lib/api';
 
 interface CartViewProps {
     cartItems: Product[];
@@ -11,6 +12,11 @@ interface CartViewProps {
 }
 
 const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpdateQuantity, onCheckoutClick, onHomeClick }) => {
+    const [couponCode, setCouponCode] = useState('');
+    const [discount, setDiscount] = useState(0);
+    const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+    const [isApplying, setIsApplying] = useState(false);
+
     // Group items to track quantities
     const groupedItems = cartItems.reduce((acc, item) => {
         if (!acc[item.id]) {
@@ -23,8 +29,37 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
     const items = Object.values(groupedItems) as (Product & { quantity: number })[];
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const shipping = subtotal > 120 ? 0 : 12;
-    const total = subtotal + shipping;
+    const total = Math.max(0, subtotal + shipping - discount);
     const uniqueCount = items.length;
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setIsApplying(true);
+        setCouponMessage(null);
+        setDiscount(0);
+
+        try {
+            const productIds = cartItems.map(p => p.id.toString());
+            const result = await applyCoupon(couponCode, productIds);
+
+            if (result.success && result.coupon) {
+                let disc = 0;
+                if (result.coupon.type === 'fixed') {
+                    disc = result.coupon.discount_amount || 0;
+                } else if (result.coupon.type === 'percentage') {
+                    disc = (subtotal * (result.coupon.discount_percentage || 0)) / 100;
+                }
+                setDiscount(disc);
+                setCouponMessage({ type: 'success', text: `Coupon applied: -${getCurrencySymbol(items[0]?.currency)}${disc.toFixed(2)}` });
+            } else {
+                setCouponMessage({ type: 'error', text: result.message });
+            }
+        } catch (error) {
+            setCouponMessage({ type: 'error', text: "Failed to apply coupon" });
+        } finally {
+            setIsApplying(false);
+        }
+    };
 
     if (items.length === 0) {
         return (
@@ -177,10 +212,41 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                     <span>Items</span>
                                     <span>{cartItems.length}</span>
                                 </div>
+                                {discount > 0 && (
+                                    <div className="flex justify-between text-green-600 font-medium">
+                                        <span>Discount</span>
+                                        <span>-{getCurrencySymbol(items[0]?.currency)}{discount.toFixed(2)}</span>
+                                    </div>
+                                )}
                                 <div className="border-t pt-3 flex justify-between text-base font-bold text-gray-900">
                                     <span>Total</span>
                                     <span>{getCurrencySymbol(items[0]?.currency)}{total.toFixed(2)}</span>
                                 </div>
+                            </div>
+
+                            <div className="mt-4">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Promo code"
+                                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black uppercase"
+                                        value={couponCode}
+                                        onChange={(e) => setCouponCode(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                                    />
+                                    <button
+                                        onClick={handleApplyCoupon}
+                                        disabled={isApplying || !couponCode}
+                                        className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-black disabled:opacity-50 transition-colors"
+                                    >
+                                        {isApplying ? '...' : 'Apply'}
+                                    </button>
+                                </div>
+                                {couponMessage && (
+                                    <p className={`text-xs mt-2 ${couponMessage.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+                                        {couponMessage.text}
+                                    </p>
+                                )}
                             </div>
 
                             <button

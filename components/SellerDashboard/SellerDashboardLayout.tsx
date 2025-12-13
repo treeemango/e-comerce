@@ -261,7 +261,7 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
                     </div>
                 </header>
 
-                <div className="p-6">
+                <div className="p-6 space-y-4">
                     {children}
                 </div>
             </main>

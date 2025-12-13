@@ -9,6 +9,7 @@ interface ProductApprovalCardProps {
     onReject: (productId: string, reason: string) => void;
     canApprove: boolean;
     canReject: boolean;
+    isProcessing: boolean;
 }
 
 const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
@@ -16,10 +17,18 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
     onApprove,
     onReject,
     canApprove,
-    canReject
+    canReject,
+    isProcessing
 }) => {
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
+    const [showDetails, setShowDetails] = useState(false);
+    const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+
+    const gallery = (product.media && product.media.length > 0)
+        ? product.media
+        : (product.image_url ? [{ id: 'primary', image_url: product.image_url, is_main: true, media_type: 'image' }] : []);
+    const primaryMedia = gallery.find(m => m.is_main) || gallery[0];
 
     const handleReject = () => {
         if (rejectionReason.trim()) {
@@ -31,53 +40,101 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
 
     return (
         <>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
-                {/* Product Image */}
-                <div className="aspect-square bg-gray-100 flex items-center justify-center">
-                    {product.image_url && product.image_url.trim() !== '' ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200">
+                {/* Media */}
+                <div className="relative aspect-[4/3] bg-gradient-to-br from-slate-50 via-white to-slate-100">
+                    {primaryMedia?.image_url ? (
                         <img
-                            src={product.image_url}
+                            src={primaryMedia.image_url}
                             alt={product.title}
                             className="w-full h-full object-cover"
                         />
                     ) : (
-                        <i className="fas fa-image text-gray-400 text-4xl"></i>
+                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                            <i className="fas fa-image text-4xl" />
+                        </div>
                     )}
+
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-white/90 text-slate-700 border border-white shadow-sm">
+                            {product.category_name}
+                        </span>
+                        {product.brand_name && (
+                            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-amber-50 text-amber-800 border border-amber-100 shadow-sm">
+                                {product.brand_name}
+                            </span>
+                        )}
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-white shadow-sm">
+                            ${product.price.toFixed(2)}
+                        </span>
+                    </div>
+
+                    <div className="absolute bottom-3 right-3 text-xs text-white bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full flex items-center gap-2 shadow-md">
+                        <i className="far fa-clock" />
+                        <span>{new Date(product.submitted_at).toLocaleDateString()}</span>
+                    </div>
                 </div>
 
-                {/* Product Info */}
-                <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{product.title}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{product.seller_name}</p>
-                    <p className="text-lg font-bold text-blue-600 mb-2">${product.price.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500 mb-4">
-                        Submitted: {new Date(product.submitted_at).toLocaleDateString()}
-                    </p>
+                {/* Body */}
+                <div className="p-5 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">{product.title}</h3>
+                            <div className="text-sm text-slate-600 flex items-center gap-2">
+                                <i className="fas fa-store text-slate-400" />
+                                <span className="font-medium text-slate-800">{product.seller_name}</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowDetails(true)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50 text-sm font-semibold"
+                        >
+                            <span>View details</span>
+                            <i className="fas fa-arrow-up-right-from-square text-xs" />
+                        </button>
+                    </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex gap-2">
-                        {canApprove && (
-                            <button
-                                onClick={() => onApprove(product.id)}
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-                            >
-                                <i className="fas fa-check"></i>
-                                <span>Approve</span>
-                            </button>
-                        )}
+                    {product.description && (
+                        <p className="text-sm text-slate-600 line-clamp-2">{product.description}</p>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                            <i className="fas fa-tag text-slate-500" />
+                            Pending approval
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            <i className="fas fa-shield-alt" />
+                            Risk checks queued
+                        </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-2">
                         {canReject && (
                             <button
                                 onClick={() => setShowRejectModal(true)}
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+                                disabled={isProcessing}
+                                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-700 font-semibold hover:bg-red-50 disabled:opacity-50"
                             >
-                                <i className="fas fa-times"></i>
-                                <span>Reject</span>
+                                <i className="fas fa-ban" />
+                                Reject
                             </button>
                         )}
-                        {!canApprove && !canReject && (
-                            <div className="w-full text-center text-gray-400 text-sm py-2 bg-gray-50 rounded-lg">
-                                Read Only
-                            </div>
+                        {canApprove && (
+                            <button
+                                onClick={() => onApprove(product.id)}
+                                disabled={isProcessing}
+                                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-md hover:shadow-lg disabled:opacity-60"
+                            >
+                                <i className="fas fa-check" />
+                                {isProcessing ? 'Processing...' : 'Approve'}
+                            </button>
+                        )}
+                        {!canApprove && !canReject && ( 
+                            <div className="w-full text-center text-gray-400 text-sm py-2 bg-gray-50 rounded-lg"> 
+                                Read Only 
+                            </div> 
                         )}
                     </div>
                 </div>
@@ -114,9 +171,172 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* Details Drawer */}
+            {showDetails && (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Product review</p>
+                                <h3 className="text-xl font-semibold text-slate-900">{product.title}</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowDetails(false)}
+                                className="h-10 w-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50"
+                            >
+                                <i className="fas fa-times" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+                            <div className="space-y-4">
+                                <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                                    {gallery[activeMediaIndex]?.image_url ? (
+                                        <img src={gallery[activeMediaIndex].image_url} alt={product.title} className="w-full h-[360px] object-cover" />
+                                    ) : (
+                                        <div className="h-[360px] flex items-center justify-center text-slate-300">
+                                            <i className="fas fa-image text-5xl" />
+                                        </div>
+                                    )}
+                                </div>
+                                {gallery.length > 1 && (
+                                    <div className="flex gap-3 overflow-x-auto pb-2">
+                                        {gallery.map((media, idx) => (
+                                            <button
+                                                key={media.id || idx}
+                                                onClick={() => setActiveMediaIndex(idx)}
+                                                className={`h-20 w-28 flex-shrink-0 rounded-lg overflow-hidden border ${idx === activeMediaIndex ? 'border-slate-900 ring-2 ring-slate-300' : 'border-slate-200 hover:border-slate-400'}`}
+                                            >
+                                                {media.image_url ? (
+                                                    <img src={media.image_url} alt={`${product.title}-${idx}`} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                        <i className="fas fa-image" />
+                                                    </div>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {product.description && (
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                        <p className="text-sm text-slate-600 leading-relaxed">{product.description}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <DetailTile label="Seller" value={product.seller_name} icon="fa-store" />
+                                    <DetailTile label="Category" value={product.category_name} icon="fa-layer-group" />
+                                    <DetailTile label="Price" value={`$${product.price.toFixed(2)}`} icon="fa-tag" />
+                                    <DetailTile label="Submitted" value={new Date(product.submitted_at).toLocaleString()} icon="fa-clock" />
+                                    {product.brand_name && <DetailTile label="Brand" value={product.brand_name} icon="fa-certificate" />}
+                                    {product.options && product.options.length > 0 && (
+                                        <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                            <div className="text-xs uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-2">
+                                                <i className="fas fa-swatchbook text-slate-400" />
+                                                Options
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {product.options.map(opt => (
+                                                    <span key={opt.name} className="px-3 py-1 rounded-full bg-white border border-slate-200 text-sm text-slate-700 shadow-sm">
+                                                        {opt.name}: {opt.values.join(', ')}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                                    <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                                        <i className="fas fa-clipboard-list text-slate-500" />
+                                        Quick actions
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {canReject && (
+                                            <button
+                                                onClick={() => {
+                                                    setShowDetails(false);
+                                                    setShowRejectModal(true);
+                                                }}
+                                                disabled={isProcessing}
+                                                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-red-200 text-red-700 font-semibold hover:bg-red-50 disabled:opacity-50"
+                                            >
+                                                <i className="fas fa-ban" />
+                                                Reject
+                                            </button>
+                                        )}
+                                        {canApprove && (
+                                            <button
+                                                onClick={() => onApprove(product.id)}
+                                                disabled={isProcessing}
+                                                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-900 text-white font-semibold shadow-md hover:shadow-lg disabled:opacity-60"
+                                            >
+                                                <i className="fas fa-check" />
+                                                {isProcessing ? 'Processing...' : 'Approve now'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {product.variants && product.variants.length > 0 && (
+                                    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                                        <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                                            <i className="fas fa-boxes-stacked text-slate-500" />
+                                            Variants
+                                        </div>
+                                        <div className="space-y-2 max-h-72 overflow-auto pr-1">
+                                            {product.variants.map(variant => {
+                                                const optionSummary = variant.options ? Object.entries(variant.options).map(([k, v]) => `${k}: ${v}`).join(' • ') : null;
+                                                return (
+                                                    <div key={variant.id} className="border border-slate-200 rounded-lg p-3 flex items-center gap-3 bg-slate-50">
+                                                        {variant.image_url ? (
+                                                            <img src={variant.image_url} alt={variant.title || 'Variant'} className="h-14 w-14 rounded-md object-cover border border-slate-200" />
+                                                        ) : (
+                                                            <div className="h-14 w-14 rounded-md border border-dashed border-slate-300 flex items-center justify-center text-slate-300 text-xs">IMG</div>
+                                                        )}
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-semibold text-slate-900">{variant.title || 'Variant'}</span>
+                                                                {variant.is_default && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Default</span>}
+                                                            </div>
+                                                            <div className="text-sm text-slate-600">${variant.price?.toFixed(2) ?? '—'}</div>
+                                                            {optionSummary && <div className="text-xs text-slate-500">{optionSummary}</div>}
+                                                            {variant.sku && <div className="text-[11px] text-slate-400">SKU: {variant.sku}</div>}
+                                                        </div>
+                                                        {typeof variant.stock === 'number' && (
+                                                            <div className="text-xs font-semibold px-3 py-1 rounded-full bg-white border border-slate-200 text-slate-700">
+                                                                Stock: {variant.stock}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
+
+const DetailTile = ({ label, value, icon }: { label: string; value: string; icon: string }) => (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-2">
+            <i className={`fas ${icon} text-slate-400`} />
+            {label}
+        </div>
+        <div className="mt-1 text-sm font-semibold text-slate-900 break-words">{value}</div>
+    </div>
+);
 
 interface ProductApprovalViewProps {
     permissions?: AdminPermissions;
@@ -390,6 +610,7 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                                 onReject={handleReject}
                                 canApprove={canApprove}
                                 canReject={canReject}
+                                isProcessing={processingId === product.id}
                             />
                         );
                     })}

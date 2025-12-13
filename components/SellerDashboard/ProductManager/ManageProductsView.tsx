@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { fetchFilteredProducts } from '../../../lib/api';
+import { fetchFilteredProducts, updateProductDetails } from '../../../lib/api';
 import { Product } from '../../../types';
+import QuickEditModal, { ProductUpdates } from './QuickEditModal';
 
 interface ManageProductsViewProps {
     onAddProduct: () => void;
@@ -14,6 +15,8 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
     const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
     const filters = [
         { id: 'all', label: 'All' },
@@ -24,26 +27,43 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
         { id: 'deleted', label: 'Deleted' },
     ];
 
+    const loadProducts = async () => {
+        setIsLoading(true);
+        if (sellerId) {
+            // Fetch products for this seller
+            // We pass empty appliedFilters to get all products for the vendor
+            const data = await fetchFilteredProducts(searchQuery, {
+                category_ids: [],
+                brand_ids: [],
+                price_min: null,
+                price_max: null,
+                attributes: {}
+            }, sellerId);
+            setProducts(data);
+        }
+        setIsLoading(false);
+    };
+
     useEffect(() => {
-        const loadProducts = async () => {
-            setIsLoading(true);
-            if (sellerId) {
-                // Fetch products for this seller
-                // We pass empty appliedFilters to get all products for the vendor
-                const data = await fetchFilteredProducts(searchQuery, {
-                    category_ids: [],
-                    brand_ids: [],
-                    price_min: null,
-                    price_max: null,
-                    attributes: {}
-                }, sellerId);
-                setProducts(data);
-            }
-            setIsLoading(false);
-        };
         // Debounce search could be added here, but for now simple dependency is fine for reasonable item counts
         loadProducts();
     }, [sellerId, searchQuery]);
+
+    const handleEditProduct = (product: Product) => {
+        setEditingProduct(product);
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveProductUpdate = async (productId: string, updates: ProductUpdates) => {
+        try {
+            await updateProductDetails(productId, updates);
+            // Refresh the product list to show changes
+            await loadProducts();
+        } catch (error) {
+            console.error('Error saving product update:', error);
+            throw error; // Let the modal handle the error display
+        }
+    };
 
     const toggleSelectAll = () => {
         if (selectedProducts.length === products.length) {
@@ -194,7 +214,10 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                                         <td className="px-4 py-3 text-sm text-gray-600">{product.rating} ({product.reviews})</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
-                                                <button className="text-orange-600 hover:text-orange-700 text-sm font-medium">
+                                                <button
+                                                    onClick={() => handleEditProduct(product)}
+                                                    className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                                >
                                                     Edit
                                                 </button>
                                                 <button className="text-gray-600 hover:text-gray-700 text-sm font-medium">
@@ -209,6 +232,14 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                     </table>
                 </div>
             </div>
+            {editingProduct && (
+                <QuickEditModal
+                    isOpen={isEditModalOpen}
+                    onClose={() => { setIsEditModalOpen(false); setEditingProduct(null); }}
+                    onSave={handleSaveProductUpdate}
+                    product={editingProduct}
+                />
+            )}
         </div>
     );
 };

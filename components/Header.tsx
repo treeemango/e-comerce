@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import LoyaltyTierBadge from './LoyaltyTierBadge';
 import { CATEGORIES, FEATURED_CATEGORIES, PRODUCTS } from '../constants';
 import { fetchSuggestions, trackSearch, SearchSuggestion, fetchTrendingCategoriesOverlay, TrendingCategoryOverlay, fetchRecentViews, RecentViewProduct, fetchPopularSearches, fetchRecentSearches, SearchKeywordEntry } from '../lib/api';
-import { User, LoyaltyProfile, VisualCategory } from '../types';
+import { Product, User, LoyaltyProfile, VisualCategory } from '../types';
 import { getCurrencySymbol } from '@/lib/currency';
 
 interface HeaderProps {
@@ -12,6 +12,7 @@ interface HeaderProps {
   onSearch?: (query: string) => void;
   onCategoryClick?: (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: string[]) => void;
   onAccountPageClick?: (pageTitle: string) => void;
+  onProductClick?: (product: Product) => void;
   onCheckoutClick?: () => void;
   onSignInClick?: () => void;
   onSignOutClick?: () => void;
@@ -27,6 +28,7 @@ const Header: React.FC<HeaderProps> = ({
   onSearch,
   onCategoryClick,
   onAccountPageClick,
+  onProductClick,
   onCheckoutClick,
   onSignInClick,
   onSignOutClick,
@@ -494,13 +496,45 @@ const Header: React.FC<HeaderProps> = ({
                   <div className="space-y-3">
                     {recentViews.length > 0 ? (
                       recentViews.map(product => (
-                        <div key={product.id} className="flex items-center gap-3 group/prod cursor-pointer">
+                        <div
+                          key={product.id}
+                          className="flex items-center gap-3 group/prod cursor-pointer"
+                          onClick={() => {
+                            const mapped: Product = {
+                              id: product.id,
+                              title: product.name,
+                              price: product.price,
+                              currency: product.currency || 'USD',
+                              rating: product.vendor?.rating || 0,
+                              reviews: product.vendor?.review_count || 0,
+                              image: product.image_url,
+                              vendor: product.vendor
+                                ? {
+                                  vendor_id: product.vendor.id || product.seller_id || '',
+                                  business_name: product.vendor.name || 'Store',
+                                  business_country: 'Kenya',
+                                  vendor_rating: product.vendor.rating || 0,
+                                  review_count: product.vendor.review_count || 0,
+                                  completed_orders: product.vendor.review_count || 0,
+                                  user_id: product.vendor.id,
+                                }
+                                : undefined,
+                            };
+                            onProductClick?.(mapped);
+                          }}
+                        >
                           <img src={product.image_url} alt={product.name} className="w-10 h-10 object-contain bg-white rounded p-0.5 border border-gray-200 dark:border-gray-700" />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-600 dark:text-gray-400 truncate group-hover/prod:text-primary transition-colors">{product.name}</p>
-                            <p className="text-xs font-bold text-gray-900 dark:text-white">{getCurrencySymbol(product.currency)}{product.price.toFixed(2)}</p>
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">{getCurrencySymbol(product.currency || 'USD')}{product.price.toFixed(2)}</p>
                           </div>
-                          <button className="text-gray-400 hover:text-primary">
+                          <button
+                            className="text-gray-400 hover:text-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Add-to-cart hook can be wired here in the future
+                            }}
+                          >
                             <span className="material-icons text-sm">shopping_cart</span>
                           </button>
                         </div>

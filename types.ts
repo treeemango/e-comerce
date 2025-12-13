@@ -3,6 +3,10 @@ export interface Product {
     title: string;
     price: number;
     originalPrice?: number;
+    rrp?: number;
+    discountPercent?: number;
+    promoText?: string;
+    promoCode?: string;
     currency?: string;
     rating: number;
     reviews: number;
@@ -22,6 +26,22 @@ export interface Product {
     lower_than_similar?: boolean;
     price_gap?: number;
     similar_avg_price?: number;
+    activeCoupon?: {
+        id: string;
+        label: string;
+        code: string;
+        amount?: number;
+        percent?: number;
+        endsAt: string;
+        finalPrice: number;
+        savings: number;
+    };
+}
+
+// Product interface that includes similarity score
+export interface RelatedProduct extends Product {
+    relation_type: 'same' | 'similar';
+    similarity_score: number;
 }
 
 export interface ProductOption {
@@ -565,6 +585,8 @@ export interface CreateProductPayload {
     category_id: string;
     brand_id?: string;
     currency: string;
+    promo_text?: string;
+    promo_code?: string;
     seo_title?: string;
     meta_description?: string;
     url_slug?: string;
@@ -593,17 +615,44 @@ export interface PromoCoupon {
     id: string;
     seller_id: string;
     name: string;
-    code?: string;
+    code: string;
     discount_amount?: number;
     discount_percentage?: number;
     start_time: string;
     end_time: string;
     status: 'Ongoing' | 'Upcoming' | 'Expired' | 'Deactivated';
-    total_quantity: number;
+    total_quantity?: number;
     claimed_quantity: number;
     used_quantity: number;
     created_at: string;
-    products?: any[];
+    products?: any[]; // Simplified for list view, full details fetched separately
+}
+
+export interface CouponValidationResult {
+    is_valid: boolean;
+    message: string;
+    coupon?: {
+        id: string;
+        name: string;
+        code: string;
+        discount_amount?: number;
+        discount_percentage?: number;
+        end_time: string;
+        remaining_quantity?: number;
+    };
+}
+
+export interface CouponApplicationResult {
+    success: boolean;
+    message: string;
+    coupon?: {
+        id: string;
+        code: string;
+        name: string;
+        discount_amount?: number;
+        discount_percentage?: number;
+        type: 'fixed' | 'percentage' | 'none';
+    };
 }
 
 export interface ReturnRequest {
@@ -826,6 +875,29 @@ export interface AdminDashboardStats {
 }
 
 // Product Approval
+export interface PendingProductMedia {
+    id: string;
+    image_url?: string;
+    media_type?: string;
+    is_main?: boolean;
+}
+
+export interface PendingProductVariant {
+    id: string;
+    title?: string;
+    price?: number;
+    stock?: number;
+    sku?: string;
+    image_url?: string;
+    options?: Record<string, string> | null;
+    is_default?: boolean;
+}
+
+export interface PendingProductOption {
+    name: string;
+    values: string[];
+}
+
 export interface PendingProduct {
     id: string;
     title: string;
@@ -837,6 +909,10 @@ export interface PendingProduct {
     submitted_at: string;
     image_url?: string;
     description?: string;
+    brand_name?: string;
+    media?: PendingProductMedia[];
+    variants?: PendingProductVariant[];
+    options?: PendingProductOption[];
     main_image?: {
         url?: string;
         image_url?: string;

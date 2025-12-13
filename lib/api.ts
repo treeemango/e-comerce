@@ -19,7 +19,10 @@ export const fetchProducts = async (): Promise<Product[]> => {
         id: item.id,
         title: item.title,
         price: item.price,
-        originalPrice: item.original_price,
+        originalPrice: item.originalPrice || item.original_price, // View provides both
+        promoText: item.promoText || item.promo_text,
+        promoCode: item.promoCode || item.promo_code,
+        discountPercent: item.discountPercent || item.discount_percent,
         currency: item.currency || 'USD',
         rating: item.rating || 0,
         reviews: item.review_count || 0,
@@ -42,6 +45,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
         lower_than_similar: item.lower_than_similar,
         price_gap: item.price_gap,
         similar_avg_price: item.similar_avg_price,
+        activeCoupon: item.activeCoupon // Mapped from view
     }));
 };
 
@@ -291,7 +295,10 @@ export const fetchFilteredProducts = async (
         id: item.id,
         title: item.title,
         price: item.price,
-        originalPrice: item.original_price,
+        originalPrice: item.originalPrice || item.original_price,
+        promoText: item.promoText || item.promo_text,
+        promoCode: item.promoCode || item.promo_code,
+        discountPercent: item.discountPercent || item.discount_percent,
         currency: item.currency || 'USD',
         rating: item.rating || 0,
         reviews: item.review_count || 0,
@@ -313,6 +320,7 @@ export const fetchFilteredProducts = async (
         lower_than_similar: item.lower_than_similar,
         price_gap: item.price_gap,
         similar_avg_price: item.similar_avg_price,
+        activeCoupon: item.activeCoupon
     }));
 
     // Fetch vendor information for filtered products
@@ -441,6 +449,34 @@ export const fetchProductsWithVendors = async (): Promise<Product[]> => {
     console.log(`Products with vendors: ${productsWithVendorCount}/${products.length}`);
 
     return productsWithVendors;
+};
+
+// Minimal seller-focused listing for coupon selection
+export const fetchSellerProductsForCoupons = async (sellerId: string): Promise<Product[]> => {
+    if (!sellerId) return [];
+
+    const { data, error } = await supabase
+        .from('products_with_media')
+        .select('id, title, price, currency, featured_image_url, stock, seller_id, status')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('[fetchSellerProductsForCoupons] Error:', error);
+        return [];
+    }
+
+    return (data || []).map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        price: item.price,
+        currency: item.currency,
+        image: item.featured_image_url,
+        stock: item.stock,
+        vendor: undefined,
+        rating: 0,
+        reviews: 0,
+    }));
 };
 
 export const fetchProductVariants = async (productId: string): Promise<{ variants: ProductVariant[], options: ProductOption[] }> => {
@@ -617,7 +653,13 @@ export interface RecentViewProduct {
     id: string;
     name: string;
     price: number;
+    originalPrice?: number;
+    promoText?: string;
+    promoCode?: string;
+    discountPercent?: number;
+    activeCoupon?: any;
     image_url: string;
+    currency?: string;
     seller_id?: string;
     vendor?: {
         id?: string;
@@ -676,7 +718,7 @@ export const fetchRecentViews = async (currentProductId?: string): Promise<Recen
     // 3. Fetch product cards with media/pricing
     const { data: productData, error: productError } = await supabase
         .from('products_with_media')
-        .select('id, title, price, featured_image_url, rating, review_count, seller_id')
+        .select('id, title, price, currency, featured_image_url, rating, review_count, seller_id')
         .in('id', productIds);
 
     if (productError) {
@@ -713,6 +755,7 @@ export const fetchRecentViews = async (currentProductId?: string): Promise<Recen
                 id: p.id,
                 name: p.title,
                 price: p.price,
+                currency: p.currency,
                 image_url: p.featured_image_url,
                 seller_id: p.seller_id,
                 vendor: vendor
@@ -873,7 +916,11 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
             id: item.product_id,
             title: item.title,
             price: item.price,
-            originalPrice: item.original_price,
+            originalPrice: item.originalPrice || item.original_price,
+            promoText: item.promoText || item.promo_text,
+            promoCode: item.promoCode || item.promo_code,
+            discountPercent: item.discountPercent || item.discount_percent,
+            activeCoupon: item.activeCoupon,
             rating: item.rating || 0,
             reviews: item.review_count || 0,
             image: item.image_url || '',
@@ -1058,15 +1105,33 @@ export interface CouponPerformance {
     end_time: string;
 }
 
+
+
 export const fetchCouponPerformance = async (sellerId: string): Promise<CouponPerformance[]> => {
     const { data, error } = await supabase
-        .from('vw_coupon_performance')
-        .select('*')
+        .from('vw_coupon_performance') // Ensure this view exists or call RPC
+        .select('*') // If RPC is better: .rpc('get_seller_coupon_stats', { p_seller_id: sellerId })
         .eq('seller_id', sellerId);
 
     if (error) {
-        console.error('Error fetching coupon performance:', error);
-        return [];
+        // Fallback to simpler fetch if view is missing or error
+        console.warn('Error fetching coupon performance view, falling back to raw coupons:', error);
+        const { data: rawCoupons } = await supabase
+            .from('coupons')
+            .select('*')
+            .eq('seller_id', sellerId);
+
+        return (rawCoupons || []).map((c: any) => ({
+            coupon_name: c.name,
+            code: c.code,
+            coupon_status: c.status,
+            total_quantity: c.total_quantity || 0,
+            claimed_quantity: c.claimed_quantity || 0,
+            used_quantity: c.used_quantity || 0,
+            usage_rate: c.claimed_quantity && c.total_quantity ? (c.claimed_quantity / c.total_quantity) * 100 : 0,
+            start_time: c.start_time,
+            end_time: c.end_time
+        }));
     }
 
     return data || [];
@@ -1162,7 +1227,7 @@ export const fetchReturnRequests = async (sellerId: string) => {
     return returnsData || [];
 };
 
-export const fetchCoupons = async (sellerId: string) => {
+export const fetchCoupons = async (sellerId: string): Promise<PromoCoupon[]> => {
     const { data, error } = await supabase
         .from('coupons')
         .select('*')
@@ -1174,6 +1239,135 @@ export const fetchCoupons = async (sellerId: string) => {
         return [];
     }
     return data || [];
+};
+
+export const createCoupon = async (
+    couponData: {
+        name: string;
+        code?: string;
+        discount_amount?: number;
+        discount_percentage?: number;
+        start_time: string;
+        end_time: string;
+        total_quantity?: number;
+        product_ids: string[];
+    }
+): Promise<{ success: boolean; error?: any }> => {
+    try {
+        // Enforce seller identity on the server side to avoid missing seller_id
+        const { data: userData, error: authError } = await supabase.auth.getUser();
+        const sellerId = userData?.user?.id;
+
+        if (authError || !sellerId) {
+            return { success: false, error: authError || new Error('Missing authenticated seller ID') };
+        }
+
+        const productIds = (couponData.product_ids || []).filter(Boolean);
+        if (productIds.length === 0) {
+            return { success: false, error: new Error('At least one product_id is required for a coupon') };
+        }
+
+        const now = new Date();
+        const startTime = new Date(couponData.start_time);
+        const status = startTime <= now ? 'Ongoing' : 'Upcoming';
+
+        // 1. Create Coupon
+        const { data: coupon, error: couponError } = await supabase
+            .from('coupons')
+            .insert({
+                seller_id: sellerId,
+                name: couponData.name,
+                code: couponData.code || `COUPON-${Date.now().toString().slice(-6)}`, // Auto-generate if empty
+                discount_amount: couponData.discount_amount,
+                discount_percentage: couponData.discount_percentage,
+                start_time: couponData.start_time,
+                end_time: couponData.end_time,
+                total_quantity: couponData.total_quantity,
+                status: status
+            })
+            .select()
+            .single();
+
+        if (couponError) throw couponError;
+
+        // 2. Link Products (ensure junction entries exist)
+        const links = productIds.map(pid => ({
+            coupon_id: coupon.id,
+            product_id: pid
+        }));
+
+        const { error: linkError } = await supabase
+            .from('coupon_products')
+            .insert(links);
+
+        if (linkError) throw linkError;
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error in createCoupon:', error);
+        return { success: false, error };
+    }
+};
+
+export const applyCoupon = async (
+    couponCode: string,
+    productIds: string[],
+    userId?: string
+): Promise<import('@/types').CouponApplicationResult> => {
+    const { data, error } = await supabase
+        .rpc('apply_coupon', {
+            p_coupon_code: couponCode,
+            p_product_ids: productIds,
+            p_user_id: userId || null
+        });
+
+    if (error) {
+        console.error('Error applying coupon:', error);
+        return { success: false, message: 'System error applying coupon' };
+    }
+
+    return data;
+};
+
+export const validateCoupon = async (couponId: string): Promise<import('@/types').CouponValidationResult> => {
+    const { data, error } = await supabase
+        .rpc('validate_coupon', {
+            p_coupon_id: couponId
+        });
+
+    if (error) {
+        console.error('Error validating coupon:', error);
+        return { is_valid: false, message: 'Error checking validation' };
+    }
+    return data;
+};
+
+export const getProductCoupons = async (productId: string, includeExpired = false): Promise<any[]> => {
+    const { data, error } = await supabase
+        .rpc('get_product_coupons', {
+            p_product_id: productId,
+            p_include_expired: includeExpired
+        });
+
+    if (error) {
+        console.error('Error fetching product coupons:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const claimCoupon = async (couponId: string, userId?: string): Promise<boolean> => {
+    const { data, error } = await supabase
+        .rpc('claim_coupon', {
+            p_coupon_id: couponId,
+            p_user_id: userId || null
+        });
+
+    if (error) {
+        console.error('Error claiming coupon:', error);
+        return false;
+    }
+    return data;
 };
 
 export const fetchSellerTransactions = async (sellerId: string) => {
@@ -1841,6 +2035,11 @@ export interface BestSellingProduct {
     product_id: string;
     product_name: string;
     product_price: number;
+    originalPrice?: number;
+    promoText?: string;
+    promoCode?: string;
+    discountPercent?: number;
+    activeCoupon?: any;
     category_name: string;
     image_url: string;
     total_quantity_sold: number;
@@ -1858,7 +2057,15 @@ export const fetchBestSellingItems = async (interval: string): Promise<BestSelli
         console.error(`Error fetching best-selling items for ${interval}:`, error);
         return [];
     }
-    return data || [];
+
+    return (data || []).map((item: any) => ({
+        ...item,
+        originalPrice: item.originalPrice || item.original_price,
+        promoText: item.promoText || item.promo_text,
+        promoCode: item.promoCode || item.promo_code,
+        discountPercent: item.discountPercent || item.discount_percent,
+        activeCoupon: item.activeCoupon
+    }));
 };
 
 export interface RecommendedProduct {
@@ -2372,8 +2579,9 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                 id, title, seller_id, category_id, created_at,
                 sellers:seller_id (business_name),
                 categories:category_id (name),
+                brands:brand_id (name),
                 media:media!media_product_fk (id, image_url, is_main, media_type, images(image_embedding)),
-                product_variants (price, is_default),
+                product_variants (id, price, stock, sku, image_url, options, is_default),
                 description, status
             `)
             .eq('status', 'pending')
@@ -2393,8 +2601,34 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
             // Assuming one-to-many based on schema (foreign key on images), so it returns an array
             const embeddingData = mainMedia?.images?.[0]?.image_embedding || mainMedia?.images?.image_embedding;
 
+            const variants = (p.product_variants || []).map((v: any, idx: number) => ({
+                id: v.id,
+                title: v.title || `Variant ${idx + 1}`,
+                price: v.price,
+                stock: v.stock,
+                sku: v.sku,
+                image_url: v.image_url,
+                options: v.options,
+                is_default: v.is_default
+            }));
+
+            // Derive option sets from variants
+            const optionsMap: Record<string, Set<string>> = {};
+            variants.forEach(v => {
+                if (v.options) {
+                    Object.entries(v.options).forEach(([key, value]) => {
+                        if (!optionsMap[key]) optionsMap[key] = new Set();
+                        optionsMap[key].add(String(value));
+                    });
+                }
+            });
+            const options = Object.entries(optionsMap).map(([name, values]) => ({
+                name,
+                values: Array.from(values)
+            }));
+
             // Get price from variants (prefer default, fallback to first)
-            const price = p.product_variants?.find((v: any) => v.is_default)?.price || p.product_variants?.[0]?.price || 0;
+            const price = variants.find(v => v.is_default)?.price || variants[0]?.price || 0;
 
             return {
                 id: p.id,
@@ -2407,6 +2641,10 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                 submitted_at: p.submitted_at || p.created_at,
                 description: p.description,
                 image_url: mainMedia?.image_url,
+                brand_name: p.brands?.name,
+                media: p.media || [],
+                variants,
+                options,
                 // Helper for embedding check
                 main_image: {
                     url: mainMedia?.image_url,
@@ -3232,4 +3470,95 @@ export const getMessageAttachmentUrl = (path: string) => {
         .from('message-attachments')
         .getPublicUrl(path);
     return data.publicUrl;
+};
+
+export const updateProductDetails = async (productId: string | number, updates: {
+    price: number;
+    originalPrice: number;
+    promoText?: string;
+    promoCode?: string;
+    youtubeUrl?: string;
+}) => {
+    console.log('Updating product details:', productId, updates);
+    const {
+        price,
+        originalPrice,
+        promoText,
+        promoCode,
+        youtubeUrl
+    } = updates;
+
+    // STEP 1: Update Product Metadata (Promos)
+    const { error: productError } = await supabase
+        .from('products')
+        .update({
+            promo_text: promoText,
+            promo_code: promoCode
+        })
+        .eq('id', productId);
+
+    if (productError) {
+        console.error('Error updating product promo:', productError);
+        throw new Error("Failed to update product promo text");
+    }
+
+    // STEP 2: Update Pricing (Default Variant)
+    // We update the variant where is_default = true
+    const discountPercent = (originalPrice && price && originalPrice > price)
+        ? Math.round(((originalPrice - price) / originalPrice) * 100)
+        : 0;
+
+    const { error: variantError } = await supabase
+        .from('product_variants')
+        .update({
+            price: price,
+            compare_at_price: originalPrice,
+            discount_percent: discountPercent
+        })
+        .eq('product_id', productId)
+        .eq('is_default', true);
+
+    if (variantError) {
+        console.error('Error updating product variant price:', variantError);
+        throw new Error("Failed to update product pricing");
+    }
+
+    // STEP 3: Update or Insert YouTube Link
+    // If a YouTube URL is provided, we update the media record
+    // We assume videos are secondary media (is_main = false) or we specificially look for type video/youtube
+    if (youtubeUrl) {
+        // First check if a video already exists for this product
+        const { data: existingMedia } = await supabase
+            .from('media')
+            .select('id')
+            .eq('product_id', productId)
+            .or('media_type.eq.video,media_type.eq.youtube')
+            .limit(1);
+
+        if (existingMedia && existingMedia.length > 0) {
+            // Update existing video
+            const { error: mediaError } = await supabase
+                .from('media')
+                .update({
+                    video_url: youtubeUrl,
+                    media_type: 'youtube', // Enforce youtube type
+                    provider: 'youtube'
+                })
+                .eq('id', existingMedia[0].id);
+        } else {
+            // Insert new video media
+            const { error: mediaError } = await supabase
+                .from('media')
+                .insert({
+                    product_id: productId,
+                    media_type: 'youtube',
+                    video_url: youtubeUrl,
+                    is_main: false,
+                    position: 10, // Put it at the end roughly
+                    provider: 'youtube'
+                });
+        }
+    }
+
+    return { success: true };
 };

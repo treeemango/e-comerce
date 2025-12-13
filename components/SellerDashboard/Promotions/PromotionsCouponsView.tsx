@@ -1,28 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchCoupons } from '../../../lib/api';
+import { PromoCoupon } from '../../../types';
 
 interface PromotionsCouponsViewProps {
     sellerId: string;
     onNavigate?: (tab: string) => void;
-}
-
-interface PromoCoupon {
-    id: string;
-    name: string;
-    discountAmount: number;
-    status: 'Ongoing' | 'Expired' | 'Upcoming';
-    startTime: string;
-    endTime: string;
-    product: {
-        name: string;
-        goodsId: string;
-        thumbnail: string;
-    };
-    quantity: number;
-    claimed: number;
-    used: number;
-    estDiscount: number;
 }
 
 const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId, onNavigate }) => {
@@ -33,25 +16,7 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
         const loadData = async () => {
             if (sellerId) {
                 const data = await fetchCoupons(sellerId);
-
-                const mappedCoupons: PromoCoupon[] = data.map((item: any) => ({
-                    id: item.id,
-                    name: item.code, // Using code as name/title
-                    discountAmount: item.discount_value, // Assuming value is amount
-                    status: item.status === 'active' ? 'Ongoing' : item.status === 'expired' ? 'Expired' : 'Upcoming',
-                    startTime: new Date(item.start_date).toLocaleString(),
-                    endTime: new Date(item.end_date).toLocaleString(),
-                    product: {
-                        name: item.products?.title || 'All Products',
-                        goodsId: item.product_id ? item.product_id.substring(0, 10).toUpperCase() : 'N/A',
-                        thumbnail: item.products?.featured_image_url || ''
-                    },
-                    quantity: item.usage_limit || 9999,
-                    claimed: item.times_used || 0,
-                    used: item.times_used || 0, // Simplified for now
-                    estDiscount: (item.discount_value * (item.times_used || 0))
-                }));
-                setCoupons(mappedCoupons);
+                setCoupons(data);
             }
             setIsLoading(false);
         };
@@ -144,7 +109,10 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
                                     <tr key={coupon.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 align-top">
                                             <div className="text-sm font-bold text-gray-900">{coupon.name}</div>
-                                            <div className="text-gray-500 text-xs">${coupon.discountAmount.toFixed(2)} off</div>
+                                            <div className="text-gray-500 text-xs">
+                                                {coupon.code && <span className="font-mono bg-gray-100 px-1 rounded mr-1">{coupon.code}</span>}
+                                                {coupon.discount_amount ? `$${coupon.discount_amount} off` : `${coupon.discount_percentage}% off`}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 align-top">
                                             <div className={`inline-block px-2 py-0.5 border rounded text-[10px] uppercase font-bold mb-1 ${coupon.status === 'Ongoing' ? 'text-green-600 border-green-200 bg-green-50' :
@@ -153,35 +121,20 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
                                                 }`}>
                                                 {coupon.status}
                                             </div>
-                                            <div className="text-xs text-gray-500">{coupon.startTime} -</div>
-                                            <div className="text-xs text-gray-500">{coupon.endTime}</div>
+                                            <div className="text-xs text-gray-500">{new Date(coupon.start_time).toLocaleDateString()} -</div>
+                                            <div className="text-xs text-gray-500">{new Date(coupon.end_time).toLocaleDateString()}</div>
                                         </td>
                                         <td className="px-6 py-4 align-top">
-                                            <div className="flex gap-3">
-                                                <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
-                                                    {coupon.product.thumbnail ? (
-                                                        <img src={coupon.product.thumbnail} alt="" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-400">
-                                                            <span className="material-icons text-xs">image</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-900 line-clamp-2 mb-1">{coupon.product.name}</p>
-                                                    <div className="text-[10px] text-gray-400">Goods ID: {coupon.product.goodsId}</div>
-                                                </div>
-                                            </div>
+                                            <div className="text-xs text-gray-500 italic">Product linkage not fully loaded</div>
                                         </td>
                                         <td className="px-6 py-4 align-top text-sm text-gray-900">
-                                            {coupon.quantity.toLocaleString()}
+                                            {coupon.total_quantity?.toLocaleString() || 'Unlimited'}
                                         </td>
                                         <td className="px-6 py-4 align-top">
-                                            <div className="text-sm text-gray-900">{coupon.claimed}/{coupon.used}</div>
-                                            <div className="text-[10px] text-gray-400">{coupon.claimed === 0 ? '-/-' : `${coupon.claimed}/${coupon.used}`} <span className="material-icons text-[10px]">help_outline</span></div>
+                                            <div className="text-sm text-gray-900">{coupon.claimed_quantity}/{coupon.used_quantity}</div>
                                         </td>
                                         <td className="px-6 py-4 align-top text-sm text-gray-900">
-                                            {coupon.estDiscount > 0 ? `$${coupon.estDiscount.toFixed(2)}` : '-'}
+                                            -
                                         </td>
                                         <td className="px-6 py-4 align-top text-right">
                                             {coupon.status === 'Ongoing' && (

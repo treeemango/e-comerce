@@ -22,7 +22,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                   <span>United Arab Emirates</span>
                </div>
                <span className="cursor-pointer hover:text-gray-300">EN</span>
-               <button onClick={onSignInClick} className="hover:text-gray-300">Sign in</button>
+               <button type="button" onClick={onSignInClick} className="hover:text-gray-300">Sign in</button>
                <button onClick={onSignUpClick} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded-full transition-colors">Sign up</button>
             </div>
          </header>
@@ -117,7 +117,17 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                         By continuing, you acknowledge that you have read our <a href="#" className="text-blue-600">Seller Privacy Policy</a>
                      </p>
                      <p className="text-xs text-center mt-4">
-                        Already have a JuaExpress seller account? <a href="#" className="text-orange-500 font-bold">Sign in</a>
+                        Already have a JuaExpress seller account?{' '}
+                        <a
+                           href="#"
+                           className="text-orange-500 font-bold"
+                           onClick={(e) => {
+                              e.preventDefault();
+                              if (onSignInClick) onSignInClick();
+                           }}
+                        >
+                           Sign in
+                        </a>
                      </p>
                   </div>
                </div>

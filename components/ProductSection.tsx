@@ -46,8 +46,21 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showVerticalFilters, setShowVerticalFilters] = useState(false);
+  const getColumnsFromWidth = () => {
+    if (typeof window === 'undefined') return 4;
+    const width = window.innerWidth;
+    if (width >= 1536) return 6;
+    if (width >= 1024) return 5;
+    if (width >= 768) return 4;
+    if (width >= 640) return 3;
+    return 2;
+  };
+  const initialColumns = typeof window === 'undefined' ? 4 : getColumnsFromWidth();
+  const [gridColumns, setGridColumns] = useState(initialColumns);
+  const [visibleCount, setVisibleCount] = useState(initialColumns * 8);
 
   const totalAppliedFilters =
     appliedFilters.category_ids.length +
@@ -76,6 +89,20 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     }
   }, [categoryIdsHash]);
 
+  // Reset all filters whenever a new search term is issued so results start clean
+  useEffect(() => {
+    setAppliedFilters({
+      category_ids: initialCategoryIds,
+      brand_ids: [],
+      price_min: null,
+      price_max: null,
+      attributes: {}
+    });
+    setActiveFilter(null);
+    setShowVerticalFilters(false);
+    setSelectedCategoryId(null);
+  }, [searchQuery, categoryIdsHash]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -87,6 +114,18 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const updateColumns = () => {
+      const cols = getColumnsFromWidth();
+      setGridColumns(cols);
+      setVisibleCount(prev => Math.max(prev, cols * 8));
+    };
+
+    updateColumns();
+    window.addEventListener('resize', updateColumns);
+    return () => window.removeEventListener('resize', updateColumns);
   }, []);
 
   // Fetch filters when search query or category changes
@@ -204,8 +243,10 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 
   useEffect(() => {
     const loadNavbarCategories = async () => {
+      setIsLoadingCategories(true);
       const categories = await fetchNavbarCategories();
       setNavbarCategoriesData(categories || []);
+      setIsLoadingCategories(false);
     };
     loadNavbarCategories();
   }, []);
@@ -274,6 +315,14 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   // Landing "Recommended" state: show skeleton while we wait for the initial feed
   const showRecommendedSkeleton =
     !searchQuery && !hasActiveFilters() && !isFiveStarView && products.length === 0 && !isLoadingProducts;
+
+  useEffect(() => {
+    const baseline = gridColumns * 8;
+    setVisibleCount(baseline);
+  }, [displayedProducts.length, gridColumns, searchQuery, categoryIdsHash]);
+
+  const visibleProducts = displayedProducts.slice(0, visibleCount);
+  const hasMoreProducts = visibleCount < displayedProducts.length;
 
 
 
@@ -380,37 +429,50 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       {/* Category Pills (Legacy Navbar) - Shown ONLY on Landing Page (No Search, No Category Selected) */}
       {!searchQuery && !isFiveStarView && initialCategoryIds.length === 0 && (
         <div className="mb-8 relative group">
-          <div className="flex items-center space-x-2 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
-            {/* Recommended Button */}
-            <button
-              onClick={() => handleCategoryClick(null, 'Recommended')}
-              className={`px-4 py-2 rounded-full border text-sm whitespace-nowrap transition-all duration-200
-                ${selectedCategoryId === null
-                  ? "border-shop-red bg-red-50 text-shop-red dark:bg-red-900/20 dark:border-red-500 font-semibold shadow-sm"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red"
-                }`}
-            >
-              Recommended
-            </button>
-
-            {/* Department Buttons */}
-            {uniqueDepartments.map((dept) => (
+          {isLoadingCategories ? (
+            <div className="flex items-center space-x-2 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
+              {Array.from({ length: 9 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="h-9 w-24 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm"
+                  style={{ backgroundSize: '200% 100%' }}
+                />
+              ))}
+              <div className="h-9 w-9 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm" style={{ backgroundSize: '200% 100%' }} />
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
+              {/* Recommended Button */}
               <button
-                key={dept.id}
-                onClick={() => handleCategoryClick(dept.id, dept.name)}
+                onClick={() => handleCategoryClick(null, 'Recommended')}
                 className={`px-4 py-2 rounded-full border text-sm whitespace-nowrap transition-all duration-200
-                  ${selectedCategoryId === dept.id
+                  ${selectedCategoryId === null
                     ? "border-shop-red bg-red-50 text-shop-red dark:bg-red-900/20 dark:border-red-500 font-semibold shadow-sm"
                     : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red"
                   }`}
               >
-                {dept.name}
+                Recommended
               </button>
-            ))}
-            <button className="p-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red text-sm shadow-sm sticky right-0">
-              <span className="material-icons">chevron_right</span>
-            </button>
-          </div>
+
+              {/* Department Buttons */}
+              {uniqueDepartments.map((dept) => (
+                <button
+                  key={dept.id}
+                  onClick={() => handleCategoryClick(dept.id, dept.name)}
+                  className={`px-4 py-2 rounded-full border text-sm whitespace-nowrap transition-all duration-200
+                    ${selectedCategoryId === dept.id
+                      ? "border-shop-red bg-red-50 text-shop-red dark:bg-red-900/20 dark:border-red-500 font-semibold shadow-sm"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red"
+                    }`}
+                >
+                  {dept.name}
+                </button>
+              ))}
+              <button className="p-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red text-sm shadow-sm sticky right-0">
+                <span className="material-icons">chevron_right</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -891,19 +953,38 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 
       {!isLoadingProducts && !showRecommendedSkeleton && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
-          {displayedProducts.map(product => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              showLocalBadge={!!searchQuery}
-              onProductClick={onProductClick}
-              onAddToCart={onAddToCart}
-            />
-          ))}
-          {displayedProducts.length === 0 && (
+          {visibleProducts.length === 0 ? (
             <div className="col-span-full py-12 text-center text-gray-500">
               No items found{searchQuery && ` for "${searchQuery}"`}.
             </div>
+          ) : (
+            <>
+              {visibleProducts.map(product => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  showLocalBadge={!!searchQuery}
+                  onProductClick={onProductClick}
+                  onAddToCart={onAddToCart}
+                />
+              ))}
+
+              {hasMoreProducts && (
+                <div className="col-span-full flex justify-center">
+                  <div className="px-5 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex flex-col items-center gap-2 w-full sm:w-auto">
+                    <span className="text-sm text-slate-600 dark:text-slate-300">More picks are waiting</span>
+                    <button
+                      onClick={() => setVisibleCount(prev => Math.min(displayedProducts.length, prev + gridColumns * 4))}
+                      className="group relative inline-flex items-center gap-2 px-6 sm:px-8 py-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-300"
+                    >
+                      <span className="relative z-10">See more</span>
+                      <span className="material-icons relative z-10 text-base">expand_more</span>
+                      <span className="absolute inset-0 rounded-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

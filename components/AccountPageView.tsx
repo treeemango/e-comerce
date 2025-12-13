@@ -206,7 +206,7 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                               id: product.id,
                               title: product.name,
                               price: product.price,
-                              currency: 'USD',
+                                 currency: product.currency || 'USD',
                               rating: product.vendor?.rating || 0,
                               reviews: product.vendor?.review_count || 0,
                               image: product.image_url,

@@ -181,6 +181,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [categoryId, setCategoryId] = useState('');
     const [brandId, setBrandId] = useState('');
 
+    // Promotions
+    const [promoText, setPromoText] = useState('');
+    const [promoCode, setPromoCode] = useState('');
+
     // SEO & Delivery
     const [currency, setCurrency] = useState('USD');
     const [seoTitle, setSeoTitle] = useState('');
@@ -605,6 +609,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 category_id: categoryId,
                 brand_id: brandId || undefined,
                 currency: currency,
+                promo_text: promoText || undefined,
+                promo_code: promoCode || undefined,
                 seo_title: seoTitle,
                 meta_description: metaDescription,
                 url_slug: slug,
@@ -738,6 +744,44 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     disabled={!categoryId}
                                     placeholder={categoryId ? "Search Brand..." : "Select Category First"}
                                 />
+                            </div>
+
+                            {/* Promotional Settings - New for modern posting */}
+                            <div className="pt-6 border-t border-gray-100 animate-fade-in">
+                                <h3 className="text-sm font-semibold text-gray-900 mb-4">Promotional Settings (Optional)</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Promo Text</label>
+                                        <input
+                                            type="text"
+                                            value={promoText}
+                                            onChange={(e) => setPromoText(e.target.value)}
+                                            maxLength={40}
+                                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                            placeholder="e.g. SUMMER SALE - 20% OFF"
+                                        />
+                                        <div className="flex justify-between mt-1">
+                                            <p className="text-xs text-gray-500">Appears as a banner on the product card.</p>
+                                            <p className={`text-xs ${promoText.length > 35 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                                {promoText.length}/40
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Promo Code</label>
+                                        <div className="relative">
+                                            <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">local_offer</span>
+                                            <input
+                                                type="text"
+                                                value={promoCode}
+                                                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                                                className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none uppercase font-mono tracking-wider"
+                                                placeholder="SUMMER20"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Discount code to be displayed with the promo text.</p>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* SEO & Delivery Sections */}
