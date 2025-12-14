@@ -83,7 +83,7 @@ const SimilarItemsModal: React.FC<SimilarItemsModalProps> = ({ product, onClose,
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
             >
-              Same items
+              Exact matches
               {activeTab === 'same' && (
                 <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gray-900 dark:bg-white rounded-full"></span>
               )}
@@ -98,7 +98,7 @@ const SimilarItemsModal: React.FC<SimilarItemsModalProps> = ({ product, onClose,
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
             >
-              Similar items
+              More like this
               {activeTab === 'similar' && (
                 <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gray-900 dark:bg-white rounded-full"></span>
               )}

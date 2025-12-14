@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { PILL_FILTERS } from '../constants';
 import ProductCard from './ProductCard';
 import { Product, SearchFilters, AppliedFilters, VisualCategory, AttributeValue, CategoryFilter, BrandFilter, Breadcrumb } from '../types';
@@ -18,6 +18,7 @@ interface ProductSectionProps {
   onCategoryClick?: (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: Breadcrumb[]) => void;
   breadcrumbs?: Breadcrumb[];
   onHomeClick?: () => void;
+  showCategoryPills?: boolean;
 }
 
 const ProductSection: React.FC<ProductSectionProps> = ({
@@ -32,7 +33,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   visualCategories = [],
   onCategoryClick,
   breadcrumbs = [],
-  onHomeClick
+  onHomeClick,
+  showCategoryPills = true
 }) => {
   const [products, setProducts] = useState<Product[]>(propProducts || []);
   const [searchFilters, setSearchFilters] = useState<SearchFilters | null>(null);
@@ -241,6 +243,28 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   const [navbarCategoriesData, setNavbarCategoriesData] = useState<NavbarCategory[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
+  const sortedNavbarCategories = useMemo(() => {
+    const deduped = navbarCategoriesData.reduce<Map<string, NavbarCategory>>((map, cat) => {
+      const existing = map.get(cat.category_id);
+      if (!existing) {
+        map.set(cat.category_id, cat);
+      } else {
+        // Keep the one with higher trend_score to prioritize stronger signals
+        const keep = (cat.trend_score || 0) > (existing.trend_score || 0) ? cat : existing;
+        map.set(cat.category_id, keep);
+      }
+      return map;
+    }, new Map());
+
+    return Array.from(deduped.values())
+      .sort((a, b) => {
+        const orderDiff = (a.department_sort_order || 0) - (b.department_sort_order || 0);
+        if (orderDiff !== 0) return orderDiff;
+        return (b.trend_score || 0) - (a.trend_score || 0);
+      })
+      .slice(0, 16);
+  }, [navbarCategoriesData]);
+
   useEffect(() => {
     const loadNavbarCategories = async () => {
       setIsLoadingCategories(true);
@@ -251,47 +275,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     loadNavbarCategories();
   }, []);
 
-  // Get unique departments for display
-  interface Department {
-    id: string;
-    name: string;
-    handle: string;
-  }
+  const handleCategoryClick = (categoryId: string | null) => {
+    setSelectedCategoryId(categoryId);
 
-  const departmentMap = new Map<string, Department>();
-  navbarCategoriesData.forEach(c => {
-    if (!departmentMap.has(c.department_id)) {
-      departmentMap.set(c.department_id, {
-        id: c.department_id,
-        name: c.department_name,
-        handle: c.department_handle
-      });
-    }
-  });
-
-  const uniqueDepartments = Array.from(departmentMap.values());
-
-  const handleCategoryClick = (departmentId: string | null, categoryName: string) => {
-    setSelectedCategoryId(departmentId);
-
-    if (departmentId === null) {
-      // "Recommended" clicked - clear all filters
+    if (categoryId === null) {
       clearAllFilters();
     } else {
-      // Get all category IDs that belong to this department
-      const departmentCategoryIds = navbarCategoriesData
-        .filter(c => c.department_id === departmentId)
-        .map(c => c.category_id);
-
-      // Apply these category IDs as filters
-      setAppliedFilters(prev => ({
-        ...prev,
-        category_ids: departmentCategoryIds,
+      setAppliedFilters({
+        category_ids: [categoryId],
         brand_ids: [],
         price_min: null,
         price_max: null,
         attributes: {}
-      }));
+      });
     }
   };
 
@@ -427,50 +423,58 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       )}
 
       {/* Category Pills (Legacy Navbar) - Shown ONLY on Landing Page (No Search, No Category Selected) */}
-      {!searchQuery && !isFiveStarView && initialCategoryIds.length === 0 && (
+      {!searchQuery && !isFiveStarView && initialCategoryIds.length === 0 && showCategoryPills && (
         <div className="mb-8 relative group">
           {isLoadingCategories ? (
             <div className="flex items-center space-x-2 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
               {Array.from({ length: 9 }).map((_, idx) => (
                 <div
                   key={idx}
-                  className="h-9 w-24 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm"
+                  className="h-16 w-16 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm"
                   style={{ backgroundSize: '200% 100%' }}
                 />
               ))}
-              <div className="h-9 w-9 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm" style={{ backgroundSize: '200% 100%' }} />
+              <div className="h-16 w-16 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm" style={{ backgroundSize: '200% 100%' }} />
             </div>
           ) : (
-            <div className="flex items-center space-x-2 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
-              {/* Recommended Button */}
+            <div className="flex items-start gap-6 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
               <button
-                onClick={() => handleCategoryClick(null, 'Recommended')}
-                className={`px-4 py-2 rounded-full border text-sm whitespace-nowrap transition-all duration-200
-                  ${selectedCategoryId === null
-                    ? "border-shop-red bg-red-50 text-shop-red dark:bg-red-900/20 dark:border-red-500 font-semibold shadow-sm"
-                    : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red"
-                  }`}
+                onClick={() => handleCategoryClick(null)}
+                className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === null ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
               >
-                Recommended
+                <span className={`relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-400 text-white shadow-lg ${selectedCategoryId === null ? 'ring-2 ring-shop-red/40' : ''}`}>
+                  <span className="text-lg font-bold">All</span>
+                </span>
+                <span className="text-sm font-semibold text-center">Recommended</span>
               </button>
 
-              {/* Department Buttons */}
-              {uniqueDepartments.map((dept) => (
+              {sortedNavbarCategories.map((cat) => (
                 <button
-                  key={dept.id}
-                  onClick={() => handleCategoryClick(dept.id, dept.name)}
-                  className={`px-4 py-2 rounded-full border text-sm whitespace-nowrap transition-all duration-200
-                    ${selectedCategoryId === dept.id
-                      ? "border-shop-red bg-red-50 text-shop-red dark:bg-red-900/20 dark:border-red-500 font-semibold shadow-sm"
-                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red"
-                    }`}
+                  key={cat.category_id}
+                  onClick={() => handleCategoryClick(cat.category_id)}
+                  className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === cat.category_id ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
+                  title={cat.category_name}
                 >
-                  {dept.name}
+                  <span
+                    className={`relative h-24 w-24 overflow-hidden rounded-full border shadow-md bg-white dark:bg-gray-800 flex items-center justify-center ${selectedCategoryId === cat.category_id ? 'border-shop-red ring-2 ring-shop-red/40' : 'border-gray-300 dark:border-gray-600'}`}
+                    style={{ backgroundImage: 'linear-gradient(180deg, rgba(245,246,250,0.9) 0%, rgba(230,233,240,0.9) 100%)' }}
+                  >
+                    {cat.trending_product_image_url ? (
+                      <img
+                        src={cat.trending_product_image_url}
+                        alt={cat.category_name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="material-icons text-gray-400 text-3xl">image</span>
+                    )}
+                  </span>
+                  <span className="text-sm font-semibold text-center leading-tight line-clamp-2 max-w-[120px]">
+                    {cat.category_name}
+                  </span>
                 </button>
               ))}
-              <button className="p-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-shop-red hover:text-shop-red dark:hover:border-shop-red text-sm shadow-sm sticky right-0">
-                <span className="material-icons">chevron_right</span>
-              </button>
             </div>
           )}
         </div>

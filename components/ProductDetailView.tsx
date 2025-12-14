@@ -981,8 +981,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                <div className="mt-16">
                   <div className="flex items-center mb-6">
                      <span className="material-icons text-shop-red text-2xl mr-2">image_search</span>
-                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Same items</h2>
-                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Visual Match</span>
+                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Exact matches for you</h2>
+                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Looks just like yours</span>
                   </div>
                   <div className="relative">
                      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
@@ -1008,8 +1008,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                <div className="mt-12">
                   <div className="flex items-center mb-6">
                      <span className="material-icons text-blue-500 text-2xl mr-2">recommend</span>
-                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Similar items</h2>
-                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">You might also like</span>
+                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">More to discover</h2>
+                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Picked for your style</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                      {similarItems.map(p => (

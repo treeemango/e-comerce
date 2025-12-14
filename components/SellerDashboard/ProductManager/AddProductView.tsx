@@ -207,6 +207,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [hasVariants, setHasVariants] = useState(false);
     const [variantOptions, setVariantOptions] = useState<{ id: string; name: string; values: string[] }[]>([]);
     const [basePrice, setBasePrice] = useState<number>(0);
+    const [baseCompareAtPrice, setBaseCompareAtPrice] = useState<number | undefined>(undefined);
     const [baseStock, setBaseStock] = useState<number>(100);
     const [optionValueInputs, setOptionValueInputs] = useState<Record<string, string>>({});
     const currencySymbol = useMemo(() => getCurrencySymbol(currency) || '$', [currency]);
@@ -243,9 +244,15 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         const newVariants: ProductVariantData[] = combinations.map(combo => {
             // Try to find existing variant with same options to preserve price/stock
             const existing = variants.find(v => JSON.stringify(v.options) === JSON.stringify(combo));
+            const anchorPrice = typeof existing?.compare_at_price === 'number'
+                ? existing.compare_at_price
+                : (typeof baseCompareAtPrice === 'number' ? baseCompareAtPrice : basePrice);
+
             return {
                 sku: existing?.sku || `${title.substring(0, 3).toUpperCase()}-${Object.values(combo).join('-').toUpperCase()}-${Date.now().toString().slice(-4)}`,
                 price: existing?.price || basePrice,
+                compare_at_price: anchorPrice,
+                original_price: anchorPrice,
                 stock: typeof existing?.stock === 'number' ? existing.stock : (existing as any)?.quantity ?? baseStock,
                 options: combo,
                 is_default: false,
@@ -254,7 +261,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         });
 
         setVariants(newVariants);
-    }, [variantOptions, hasVariants]); // Intentionally omitting variants to avoid loops, only re-gen on structure change
+    }, [variantOptions, hasVariants, basePrice, baseCompareAtPrice, baseStock, title]); // Intentionally omitting variants to avoid loops, only re-gen on structure change
 
     // YouTube URLs
     const [youtubeUrls, setYoutubeUrls] = useState<string[]>([]);
@@ -588,6 +595,11 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             return;
         }
 
+        if (typeof baseCompareAtPrice === 'number' && baseCompareAtPrice < basePrice) {
+            alert('Original/compare-at price should be greater than or equal to the selling price to show a valid discount.');
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
@@ -620,6 +632,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 variants: variants.length > 0 ? variants : [{
                     sku: `${title.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`,
                     price: basePrice,
+                    compare_at_price: baseCompareAtPrice ?? basePrice,
+                    original_price: baseCompareAtPrice ?? basePrice,
                     stock: baseStock,
                     options: {},
                     is_default: true
@@ -1145,30 +1159,45 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             {!hasVariants ? (
                                 <div className="bg-orange-50 border border-orange-100 rounded-lg p-6 animate-fade-in">
                                     <h3 className="font-semibold text-gray-900 mb-4">Standard Pricing</h3>
-                                    <div className="grid grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Price ({currencySymbol}{currency}) *</label>
                                             <div className="relative">
                                                 <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
                                                 <input
                                                     type="number"
-                                                    value={basePrice}
-                                                    onChange={(e) => setBasePrice(parseFloat(e.target.value))}
+                                                    value={basePrice || ''}
+                                                    onChange={(e) => setBasePrice(parseFloat(e.target.value) || 0)}
                                                     className="w-full border border-gray-300 rounded-lg pl-8 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                                     placeholder="0.00"
                                                 />
                                             </div>
                                         </div>
                                         <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Original / Compare-at Price</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
+                                                <input
+                                                    type="number"
+                                                    value={typeof baseCompareAtPrice === 'number' ? baseCompareAtPrice : ''}
+                                                    onChange={(e) => setBaseCompareAtPrice(e.target.value ? parseFloat(e.target.value) : undefined)}
+                                                    className="w-full border border-gray-300 rounded-lg pl-8 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                    placeholder="Anchor price (e.g. 120.00)"
+                                                />
+                                            </div>
+                                            <p className="text-xs text-gray-600 mt-1">Shows the strike-through reference price to anchor value and highlight savings.</p>
+                                        </div>
+                                        <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity *</label>
                                             <input
                                                 type="number"
                                                 value={baseStock}
-                                                onChange={(e) => setBaseStock(parseInt(e.target.value))}
+                                                onChange={(e) => setBaseStock(parseInt(e.target.value) || 0)}
                                                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                             />
                                         </div>
                                     </div>
+                                    <p className="text-xs text-orange-700 mt-2">Tip: A higher original price anchors perceived value and increases urgency to buy.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-6 animate-fade-in">
@@ -1326,6 +1355,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                             <th className="px-6 py-3">Variant</th>
                                                             <th className="px-6 py-3">Image</th>
                                                             <th className="px-6 py-3">Price ({currencySymbol}{currency})</th>
+                                                            <th className="px-6 py-3">Original Price</th>
                                                             <th className="px-6 py-3">Stock</th>
                                                             <th className="px-6 py-3">SKU</th>
                                                         </tr>
@@ -1364,10 +1394,28 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                                             value={variant.price}
                                                                             onChange={(e) => {
                                                                                 const newVariants = [...variants];
-                                                                                newVariants[idx].price = parseFloat(e.target.value);
+                                                                                newVariants[idx].price = parseFloat(e.target.value) || 0;
                                                                                 setVariants(newVariants);
                                                                             }}
                                                                             className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
+                                                                        />
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-3">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <span className="text-gray-500 text-sm">{currencySymbol}</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={variant.compare_at_price ?? ''}
+                                                                            onChange={(e) => {
+                                                                                const newVariants = [...variants];
+                                                                                const newValue = e.target.value ? parseFloat(e.target.value) : undefined;
+                                                                                newVariants[idx].compare_at_price = newValue;
+                                                                                newVariants[idx].original_price = newValue;
+                                                                                setVariants(newVariants);
+                                                                            }}
+                                                                            className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
+                                                                            placeholder="Anchor"
                                                                         />
                                                                     </div>
                                                                 </td>
@@ -1377,7 +1425,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                                         value={variant.stock ?? 0}
                                                                         onChange={(e) => {
                                                                             const newVariants = [...variants];
-                                                                            newVariants[idx].stock = parseInt(e.target.value);
+                                                                            newVariants[idx].stock = parseInt(e.target.value) || 0;
                                                                             setVariants(newVariants);
                                                                         }}
                                                                         className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
@@ -1416,6 +1464,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                 <div className="sm:col-span-1">
                                     <dt className="text-sm font-medium text-gray-500">Price</dt>
                                     <dd className="mt-1 text-sm text-gray-900">{currencySymbol}{basePrice} {currency}</dd>
+                                </div>
+                                <div className="sm:col-span-1">
+                                    <dt className="text-sm font-medium text-gray-500">Original / Compare Price</dt>
+                                    <dd className="mt-1 text-sm text-gray-900">{typeof baseCompareAtPrice === 'number' ? `${currencySymbol}${baseCompareAtPrice} ${currency}` : 'Not set'}</dd>
                                 </div>
                                 <div className="sm:col-span-1">
                                     <dt className="text-sm font-medium text-gray-500">Category</dt>

@@ -198,6 +198,8 @@ export interface Review {
     updated_at: string;
     user_name?: string;
     user_avatar?: string;
+    product_title?: string;
+    product_image?: string;
     photos?: ReviewPhoto[];
     responses?: ReviewResponse[];
     user_vote?: 'helpful' | 'unhelpful';
@@ -566,6 +568,7 @@ export interface ProductVariantData {
     stock: number;
     options: Record<string, string>;
     compare_at_price?: number;
+    original_price?: number;
     is_default: boolean;
     image_url?: string;
 }
@@ -611,6 +614,27 @@ export interface SellerOrder {
     }[];
 }
 
+export interface BuyerOrderItem {
+    id: string;
+    product_id?: string;
+    product_title: string;
+    variant_sku?: string;
+    quantity: number;
+    unit_price: number;
+    image_url?: string;
+}
+
+export interface BuyerOrder {
+    id: string;
+    created_at: string;
+    status: string;
+    total_amount: number;
+    currency?: string;
+    tracking_code?: string;
+    shipping_method?: string;
+    items: BuyerOrderItem[];
+}
+
 export interface PromoCoupon {
     id: string;
     seller_id: string;
@@ -626,6 +650,14 @@ export interface PromoCoupon {
     used_quantity: number;
     created_at: string;
     products?: any[]; // Simplified for list view, full details fetched separately
+}
+
+export interface UserCoupon {
+    coupon: PromoCoupon;
+    claimed_at?: string;
+    used_at?: string;
+    status: 'active' | 'upcoming' | 'expired' | 'used' | 'out_of_stock';
+    remaining_quantity?: number;
 }
 
 export interface CouponValidationResult {

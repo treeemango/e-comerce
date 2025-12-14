@@ -5,6 +5,11 @@ import ProductCard from './ProductCard';
 import { getFollowedStores, fetchRecentViews, fetchRelatedProducts, RecentViewProduct, RelatedProduct } from '../lib/api';
 import { getCurrencySymbol } from '@/lib/currency';
 import MessagesView from './MessagesView';
+import BuyerCouponsView from './BuyerCouponsView';
+import BuyerOrdersView from './BuyerOrdersView';
+import BuyerReviewsView from './BuyerReviewsView';
+import BuyerProfileView from './BuyerProfileView';
+import BuyerNotificationsView from './BuyerNotificationsView';
 
 interface AccountPageViewProps {
    pageTitle: string;
@@ -110,6 +115,26 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                activeConversationId={activeConversationId}
             />
          );
+      }
+
+      if (pageTitle === 'Your profile') {
+         return <BuyerProfileView user={user} />;
+      }
+
+      if (pageTitle === 'Your reviews') {
+         return <BuyerReviewsView user={user} />;
+      }
+
+      if (pageTitle === 'Your orders') {
+         return <BuyerOrdersView user={user} />;
+      }
+
+      if (pageTitle === 'Coupon codes') {
+         return <BuyerCouponsView user={user} />;
+      }
+
+      if (pageTitle === 'Notifications') {
+         return <BuyerNotificationsView user={user} />;
       }
 
       // 1. Followed Stores Logic

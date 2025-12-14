@@ -1,8 +1,10 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import FeaturesBar from './components/FeaturesBar';
+import LightningDealsRow from './components/LightningDealsRow';
+import DealsNavBar from './components/DealsNavBar';
 import ProductSection from './components/ProductSection';
 import BestSellersView from './components/BestSellersView';
 import ProductDetailView from './components/ProductDetailView';
@@ -40,7 +42,7 @@ import AppsServiceView from './components/SellerDashboard/Apps/AppsServiceView';
 import OrdersView from './components/SellerDashboard/OrdersView';
 import SellerMessagesView from './components/SellerDashboard/SellerMessagesView';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions } from './types';
-import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile } from './lib/api';
+import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, DealCategoryNavItem, NavbarCategory } from './lib/api';
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema } from './lib/seo-utils';
@@ -57,7 +59,7 @@ import ActivityLogView from './components/AdminDashboard/ActivityLog/ActivityLog
 import AdminLoginView from './components/AdminDashboard/AdminLoginView';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages'>('manage-products');
   const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'users' | 'orders' | 'content' | 'activity'>('overview');
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissions | null>(null);
@@ -67,6 +69,9 @@ const App: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [accountPageTitle, setAccountPageTitle] = useState('Followed stores');
   const [products, setProducts] = useState<Product[]>([]);
+  const [dealProducts, setDealProducts] = useState<Product[]>([]);
+  const [dealCategories, setDealCategories] = useState<DealCategoryNavItem[]>([]);
+  const [dealsLoading, setDealsLoading] = useState<boolean>(false);
   const [cartItems, setCartItems] = useState<Product[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -76,6 +81,7 @@ const App: React.FC = () => {
   const [visualSubcategories, setVisualSubcategories] = useState<VisualCategory[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [previousView, setPreviousView] = useState<string>('');
+  const [activeDealsCategoryId, setActiveDealsCategoryId] = useState<string | null>(null);
   const [adminAccessMessage, setAdminAccessMessage] = useState<string | null>(null);
   const isBuyerSurface = (view: typeof currentView) => ![
     'seller-login',
@@ -461,6 +467,14 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleDealsClick = (categoryId?: string | null) => {
+    setCurrentView('deals');
+    setSearchQuery('');
+    setSelectedVendorId(undefined);
+    setActiveDealsCategoryId(categoryId ?? null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSellerLoginClick = () => {
     setCurrentView('seller-login');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -511,6 +525,43 @@ const App: React.FC = () => {
     setCurrentView('cart');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const loadDealsData = useCallback(async (categoryId?: string | null) => {
+    setDealsLoading(true);
+    try {
+      const { products: deals, categories } = await fetchDealsProducts(40, categoryId || undefined, user?.id || undefined);
+      setDealProducts(deals);
+
+      if (categories && categories.length > 0) {
+        setDealCategories(categories);
+      } else {
+        // Fallback to navbar categories if deals RPC returns no categories
+        const fallbackNav: NavbarCategory[] = await fetchNavbarCategories();
+        const mappedFallback: DealCategoryNavItem[] = (fallbackNav || []).map((c) => ({
+          categoryId: c.category_id,
+          categoryName: c.category_name,
+          categoryHandle: c.category_handle,
+          departmentName: c.department_name,
+          featuredImageUrl: c.trending_product_image_url || undefined,
+          activeDeals: c.product_count,
+          finalScore: c.trend_score,
+          dealPriority: c.is_hot ? 'hot_deal' : undefined
+        }));
+        setDealCategories(mappedFallback);
+      }
+    } catch (error) {
+      console.error('Error loading deals data', error);
+      setDealProducts([]);
+    } finally {
+      setDealsLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (currentView === 'deals') {
+      loadDealsData(activeDealsCategoryId);
+    }
+  }, [currentView, activeDealsCategoryId, loadDealsData]);
 
   const cartSubtotal = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.price, 0);
@@ -699,6 +750,7 @@ const App: React.FC = () => {
           <>
             <HeroSection />
             <FeaturesBar />
+            <LightningDealsRow userId={user?.id} onViewAllDeals={() => handleDealsClick(null)} />
             <ProductSection isFiveStarView={false} onProductClick={handleProductClick} products={products} onAddToCart={addToCart} />
           </>
         )}
@@ -712,6 +764,23 @@ const App: React.FC = () => {
             cartItems={cartItems}
             onCartClick={handleCartClick}
           />
+        )}
+        {currentView === 'deals' && (
+          <>
+            <DealsNavBar
+              categories={dealCategories}
+              loading={dealsLoading}
+              onSelectCategory={(categoryId) => setActiveDealsCategoryId(categoryId)}
+            />
+            <ProductSection
+              title="Top Deals"
+              isFiveStarView={false}
+              onProductClick={handleProductClick}
+              products={dealProducts}
+              onAddToCart={addToCart}
+              showCategoryPills={false}
+            />
+          </>
         )}
         {currentView === 'search-results' && (
           <ProductSection

@@ -57,11 +57,11 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick }) => {
                     <div className="lg:w-80">
                         <div className="bg-gray-800 rounded-lg overflow-hidden relative group cursor-pointer border border-gray-600">
                             <img
-                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYIVDZy9wPxv65uL8Ar5bua0GpPwC5qKIq96E53cK_jWFjoN0j2d25vQrjenWUXSTo-NRVWRIDxVNJFXwVy5SYXcNfotNRuBnORLw1BQFz8Kb1n6gN6MFupVswRDpYJ6iuEy0_daKuhBx6AFS29bB8ighZ4IoaqUOB3WBsxVZXj0QDLBmSGBwaYnVS2MYIxHSapKxohIr1x2E2rTTfpEOwBfoZOtDK-COnBGAtjgX2NGRCBFKa11KmjIQcFdzlvi48i1xiu7T8Fn4"
-                                alt="Sell on JuaExpress"
-                                className="w-full h-32 object-cover opacity-60 group-hover:opacity-80 transition-opacity"
+                                src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80"
+                                alt="Team collaboration"
+                                className="w-full h-32 object-cover object-center opacity-75 group-hover:opacity-90 transition-opacity"
                             />
-                            <div className="absolute inset-0 p-5 flex flex-col justify-center bg-gradient-to-r from-black/80 to-transparent">
+                            <div className="absolute inset-0 p-5 flex flex-col justify-center bg-gradient-to-r from-black/85 via-black/60 to-transparent">
                                 <h3 className="font-bold text-sm mb-3 leading-tight">Start Selling to Millions of Buyers on JuaExpress</h3>
                                 <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-2 px-4 rounded w-fit transition-colors shadow-lg shadow-orange-500/30">
                                     Start a Selling Account

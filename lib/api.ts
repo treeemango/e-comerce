@@ -1,5 +1,167 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, PromoCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message } from '@/types';
+
+export interface LightningDealItem {
+    id: string;
+    title: string;
+    price: number;
+    originalPrice: number;
+    discountPercent: number;
+    rrp?: number;
+    image: string;
+    tag?: string;
+    accent?: string;
+}
+
+export interface DealCategoryNavItem {
+    categoryId: string;
+    categoryName: string;
+    categoryHandle?: string;
+    departmentName?: string;
+    featuredImageUrl?: string;
+    activeDeals?: number;
+    finalScore?: number;
+    dealPriority?: string;
+}
+
+export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<LightningDealItem[]> => {
+    const { data, error } = await supabase.rpc('get_personalized_suggestions_v2', {
+        p_user_param: userId ?? null,
+        p_limit: limit,
+        min_rating: 3,
+        min_stock: 1,
+        include_categories: false,
+        categories_limit: 0,
+        min_deals_per_category: 1
+    });
+
+    if (error) {
+        console.error('Error fetching lightning deals', error);
+        return [];
+    }
+
+    const payload = Array.isArray(data) ? data[0] : data;
+    const products = payload?.products ?? [];
+
+    const mapped: LightningDealItem[] = products.map((item: any) => {
+        const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
+        const price = item.current_price ?? item.price ?? originalPrice;
+        const discountPercent = item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
+
+        return {
+            id: item.id,
+            title: item.title,
+            price,
+            originalPrice,
+            discountPercent,
+            rrp: originalPrice,
+            image: item.image_url || '',
+            tag: item.deal_type === 'flash_sale' ? 'Flash sale' : item.deal_type === 'lightning_deal' ? 'Lightning' : undefined,
+            accent: undefined
+        };
+    });
+
+    return mapped;
+};
+
+export const fetchDealsProducts = async (
+    limit = 40,
+    categoryId?: string,
+    userId?: string
+): Promise<{ products: Product[]; categories: DealCategoryNavItem[] }> => {
+    const { data, error } = await supabase.rpc('get_personalized_suggestions_v2', {
+        p_user_param: userId ?? null,
+        p_limit: limit,
+        min_rating: 3,
+        min_stock: 1,
+        include_categories: true,
+        categories_limit: 8,
+        min_deals_per_category: 1
+    });
+
+    if (error) {
+        console.error('Error fetching deal products', error);
+        return { products: [], categories: [] };
+    }
+
+    const payload = Array.isArray(data) ? data[0] : data;
+    const productPayload = payload?.products ?? [];
+    const categoryPayload = payload?.categories ?? [];
+
+    const mappedProducts: Product[] = productPayload
+        .filter((item: any) => !categoryId || item.category_id === categoryId)
+        .map((item: any) => {
+            const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
+            const price = item.current_price ?? item.price ?? originalPrice;
+            return {
+                id: item.id,
+                title: item.title,
+                price,
+                originalPrice,
+                promoText: undefined,
+                promoCode: undefined,
+                discountPercent: item.discount_percent,
+                currency: item.currency || 'USD',
+                rating: item.rating || 0,
+                reviews: 0,
+                image: item.image_url || '',
+                stock: item.stock ?? item.stock_quantity ?? undefined,
+                gallery_media: [],
+                badge: item.deal_type === 'flash_sale' ? 'FLASH SALE' : undefined,
+                deliveryDate: undefined,
+                description: undefined,
+                categoryId: item.category_id,
+                categoryName: undefined,
+                category: undefined,
+                lower_than_similar: undefined,
+                price_gap: undefined,
+                similar_avg_price: undefined,
+                activeCoupon: undefined
+            };
+        });
+
+    const mappedCategories: DealCategoryNavItem[] = categoryPayload.map((cat: any) => ({
+        categoryId: cat.id ?? cat.category_id,
+        categoryName: cat.name ?? cat.category_name,
+        categoryHandle: cat.handle ?? cat.category_handle,
+        departmentName: cat.department_name,
+        featuredImageUrl: cat.featured_product?.image_url,
+        activeDeals: cat.deals_count ?? cat.active_deals_count,
+        finalScore: cat.score ?? cat.category_score,
+        dealPriority: cat.has_hot_deal ? 'hot_deal' : cat.user_has_history ? 'personalized' : 'trending',
+    }));
+
+    return { products: mappedProducts, categories: mappedCategories };
+};
+
+export const fetchDealsNavbarCategories = async (
+    userId?: string,
+    departmentLimit = 6,
+    categoriesPerDepartment = 8
+): Promise<DealCategoryNavItem[]> => {
+    const { data, error } = await supabase.rpc('get_deals_navbar_categories', {
+        p_user_id: userId ?? null,
+        department_limit: departmentLimit,
+        categories_per_department: categoriesPerDepartment,
+        include_all_categories: true
+    });
+
+    if (error) {
+        console.error('Error fetching deals navbar categories', error);
+        return [];
+    }
+
+    return (data || []).map((item: any) => ({
+        categoryId: item.category_id,
+        categoryName: item.category_name,
+        categoryHandle: item.category_handle,
+        departmentName: item.department_name,
+        featuredImageUrl: item.featured_deal_image_url,
+        activeDeals: item.active_deals_count,
+        finalScore: item.final_score,
+        dealPriority: item.deal_priority,
+    }));
+};
 
 export const fetchProducts = async (): Promise<Product[]> => {
     console.log('Fetching products from Supabase...');
@@ -560,6 +722,10 @@ export interface NavbarCategory {
     is_hot: boolean;
     product_count: number;
     department_sort_order: number;
+    trending_product_id?: string | null;
+    trending_product_name?: string | null;
+    trending_product_image_url?: string | null;
+    activeDeals?: number;
 }
 
 export const fetchNavbarCategories = async (): Promise<NavbarCategory[]> => {
@@ -577,7 +743,24 @@ export const fetchNavbarCategories = async (): Promise<NavbarCategory[]> => {
 
     console.log('Fetched navbar categories:', data?.length, 'items');
     console.log('Categories data:', data);
-    return data || [];
+    return (data || []).map((item: any) => ({
+        department_id: item.department_id,
+        department_name: item.department_name,
+        department_handle: item.department_handle,
+        category_id: item.category_id,
+        category_name: item.category_name,
+        category_handle: item.category_handle,
+        trend_score: Number(item.trend_score ?? 0),
+        is_hot: Boolean(item.is_hot),
+        product_count: Number(item.product_count ?? 0),
+        department_sort_order: Number(item.department_sort_order ?? 0),
+        trending_product_id: item.trending_product_id ?? null,
+        trending_product_name: item.trending_product_name ?? null,
+        trending_product_image_url: item.trending_product_image_url ?? item.featured_image_url ?? null,
+        activeDeals: typeof item.active_deals_count === 'number'
+            ? Number(item.active_deals_count)
+            : (typeof item.product_count === 'number' ? Number(item.product_count) : undefined)
+    }));
 };
 
 export interface PersonalizedNavbarCategory {
@@ -777,7 +960,8 @@ export const fetchRecentViews = async (currentProductId?: string): Promise<Recen
 export const checkout = async (
     userId: string | number,
     paymentMethod: string,
-    shippingAddress: string
+    shippingAddress: string,
+    options?: { couponCode?: string | null; expressDelivery?: boolean }
 ): Promise<number | null> => {
     console.log('Processing checkout for user:', userId);
 
@@ -785,7 +969,9 @@ export const checkout = async (
         .rpc('final_checkout_from_cart', {
             p_user_id: userId,
             p_payment_method: paymentMethod,
-            p_shipping_address: shippingAddress
+            p_shipping_address: shippingAddress,
+            p_coupon_code: options?.couponCode ?? null,
+            p_express_delivery: options?.expressDelivery ?? false
         });
 
     console.log('Checkout successful, order ID:', data);
@@ -1239,6 +1425,142 @@ export const fetchCoupons = async (sellerId: string): Promise<PromoCoupon[]> => 
         return [];
     }
     return data || [];
+};
+
+export const fetchActiveCoupons = async (limit = 30): Promise<PromoCoupon[]> => {
+    const nowIso = new Date().toISOString();
+
+    const { data, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('status', 'Ongoing')
+        .lte('start_time', nowIso)
+        .gt('end_time', nowIso)
+        .order('end_time', { ascending: true })
+        .limit(limit);
+
+    if (error) {
+        console.error('Error fetching active coupons:', error);
+        return [];
+    }
+
+    return (data || []).filter(c => !c.total_quantity || (c.claimed_quantity ?? 0) < c.total_quantity);
+};
+
+export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> => {
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+        .from('orders')
+        .select(`
+            id,
+            created_at,
+            status,
+            total_amount,
+            currency,
+            tracking_code,
+            shipping_method,
+            items:order_items (
+                id,
+                product_id,
+                product_title,
+                variant_sku,
+                quantity,
+                unit_price,
+                image_url
+            )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching buyer orders:', error);
+        return [];
+    }
+
+    return (data || []).map((row: any) => ({
+        id: row.id,
+        created_at: row.created_at,
+        status: row.status,
+        total_amount: row.total_amount ?? 0,
+        currency: row.currency || 'USD',
+        tracking_code: row.tracking_code,
+        shipping_method: row.shipping_method,
+        items: (row.items || []).map((item: any) => ({
+            id: item.id,
+            product_id: item.product_id,
+            product_title: item.product_title || 'Item',
+            variant_sku: item.variant_sku,
+            quantity: item.quantity ?? 1,
+            unit_price: item.unit_price ?? 0,
+            image_url: item.image_url
+        }))
+    })) as BuyerOrder[];
+};
+
+const deriveUserCouponStatus = (coupon?: PromoCoupon, usedAt?: string): UserCoupon['status'] => {
+    if (!coupon) return 'expired';
+    if (usedAt) return 'used';
+
+    const now = Date.now();
+    const start = coupon.start_time ? new Date(coupon.start_time).getTime() : undefined;
+    const end = coupon.end_time ? new Date(coupon.end_time).getTime() : undefined;
+
+    if (coupon.status === 'Expired' || (end && end <= now)) return 'expired';
+    if (coupon.status === 'Upcoming' || (start && start > now)) return 'upcoming';
+
+    const remaining = coupon.total_quantity ? coupon.total_quantity - (coupon.claimed_quantity ?? 0) : undefined;
+    if (typeof remaining === 'number' && remaining <= 0) return 'out_of_stock';
+
+    return 'active';
+};
+
+export const fetchUserCoupons = async (userId: string): Promise<UserCoupon[]> => {
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+        .from('user_coupons')
+        .select(`
+            claimed_at,
+            used_at,
+            coupon:coupon_id (
+                id,
+                seller_id,
+                name,
+                code,
+                discount_amount,
+                discount_percentage,
+                start_time,
+                end_time,
+                status,
+                total_quantity,
+                claimed_quantity,
+                used_quantity,
+                created_at
+            )
+        `)
+        .eq('user_id', userId)
+        .order('claimed_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching user coupons:', error);
+        return [];
+    }
+
+    return (data || [])
+        .filter((row: any) => row.coupon)
+        .map((row: any) => {
+            const coupon = row.coupon as PromoCoupon;
+            const remaining = coupon.total_quantity ? Math.max((coupon.total_quantity ?? 0) - (coupon.claimed_quantity ?? 0), 0) : undefined;
+
+            return {
+                coupon,
+                claimed_at: row.claimed_at,
+                used_at: row.used_at,
+                status: deriveUserCouponStatus(coupon, row.used_at),
+                remaining_quantity: remaining
+            } as UserCoupon;
+        });
 };
 
 export const createCoupon = async (
@@ -1727,6 +2049,49 @@ export const submitReview = async (reviewData: SubmitReviewData): Promise<string
     }
 
     return review.id;
+};
+
+export const fetchUserReviews = async (userId: string): Promise<Review[]> => {
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+        .from('enhanced_reviews')
+        .select(`
+            id,
+            product_id,
+            user_id,
+            order_id,
+            title,
+            content,
+            rating,
+            is_verified_purchase,
+            is_featured,
+            helpful_votes,
+            total_votes,
+            status,
+            pros,
+            cons,
+            recommended,
+            would_buy_again,
+            fit_rating,
+            value_rating,
+            quality_rating,
+            created_at,
+            updated_at,
+            user_name,
+            user_avatar,
+            product_title,
+            product_image
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching user reviews:', error);
+        return [];
+    }
+
+    return (data || []) as Review[];
 };
 
 // Followed Stores API Functions

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Product } from '../types';
-import { checkout } from '../lib/api';
+import React, { useMemo, useState } from 'react';
+import { CouponApplicationResult, Product } from '../types';
+import { applyCoupon, checkout } from '../lib/api';
 import { getCurrencySymbol } from '@/lib/currency';
 
 interface CheckoutViewProps {
@@ -22,16 +22,81 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         country: 'United Kingdom',
     });
 
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState<CouponApplicationResult['coupon'] | null>(null);
+    const [discountAmount, setDiscountAmount] = useState(0);
+    const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const currencySymbol = getCurrencySymbol(cartItems[0]?.currency || 'USD');
+    const groupedItems = useMemo(() => {
+        return cartItems.reduce((acc, item) => {
+            const key = item.id.toString();
+            if (!acc[key]) {
+                acc[key] = { ...item, quantity: 0 } as Product & { quantity: number };
+            }
+            acc[key].quantity += 1;
+            return acc;
+        }, {} as Record<string, Product & { quantity: number }>);
+    }, [cartItems]);
+
+    const items = useMemo(() => Object.values(groupedItems) as (Product & { quantity: number })[], [groupedItems]);
+    const subtotal = useMemo(() => {
+        if (items.length === 0) return totalAmount;
+        return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    }, [items, totalAmount]);
+
+    const currencySymbol = getCurrencySymbol(items[0]?.currency || cartItems[0]?.currency || 'USD');
     const deliveryFee = 0;
-    const finalTotal = totalAmount + deliveryFee;
+    const finalTotal = Math.max(0, subtotal + deliveryFee - discountAmount);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setIsApplyingCoupon(true);
+        setCouponMessage(null);
+
+        try {
+            const productIds = cartItems.map(p => p.id.toString());
+            const result = await applyCoupon(couponCode.trim(), productIds);
+
+            if (result.success && result.coupon) {
+                let calcDiscount = 0;
+                if (result.coupon.type === 'fixed') {
+                    calcDiscount = result.coupon.discount_amount || 0;
+                } else if (result.coupon.type === 'percentage') {
+                    calcDiscount = (subtotal * (result.coupon.discount_percentage || 0)) / 100;
+                }
+
+                calcDiscount = Math.min(calcDiscount, subtotal);
+
+                setAppliedCoupon(result.coupon);
+                setDiscountAmount(calcDiscount);
+                setCouponMessage({ type: 'success', text: `Coupon applied: ${result.coupon.code}` });
+            } else {
+                setAppliedCoupon(null);
+                setDiscountAmount(0);
+                setCouponMessage({ type: 'error', text: result.message || 'Coupon not valid for your cart' });
+            }
+        } catch (err) {
+            console.error(err);
+            setCouponMessage({ type: 'error', text: 'Failed to apply coupon' });
+        } finally {
+            setIsApplyingCoupon(false);
+        }
+    };
+
+    const handleRemoveCoupon = () => {
+        setCouponCode('');
+        setAppliedCoupon(null);
+        setDiscountAmount(0);
+        setCouponMessage(null);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -47,7 +112,9 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
         try {
             const shippingAddress = `${formData.addressLine1}, ${formData.townCity}, ${formData.county}, ${formData.postcode}, ${formData.country}`;
-            const orderId = await checkout(userId, 'Card', shippingAddress);
+            const orderId = await checkout(userId, 'Card', shippingAddress, {
+                couponCode: appliedCoupon?.code || null,
+            });
 
             if (orderId) {
                 onCheckoutComplete();
@@ -228,20 +295,22 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                         <div className="space-y-4 mb-6">
                             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                 <span>Item(s) total</span>
-                                <span>{currencySymbol}{totalAmount.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                                <span>Item(s) discount</span>
-                                <span className="text-green-600">-£0.00</span>
+                                <span>{currencySymbol}{subtotal.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                 <span>Subtotal</span>
-                                <span>{currencySymbol}{totalAmount.toFixed(2)}</span>
+                                <span>{currencySymbol}{subtotal.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                 <span>Shipping</span>
                                 <span className="text-green-600">FREE</span>
                             </div>
+                            {discountAmount > 0 && (
+                                <div className="flex justify-between text-sm text-green-700 dark:text-green-400">
+                                    <span>{appliedCoupon?.name || 'Discount'}</span>
+                                    <span>-{currencySymbol}{discountAmount.toFixed(2)}</span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mb-6">
@@ -250,6 +319,39 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                 <span className="font-bold text-xl text-orange-600">{currencySymbol}{finalTotal.toFixed(2)}</span>
                             </div>
                             <p className="text-xs text-gray-500 mt-1 text-right">VAT included</p>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={couponCode}
+                                    onChange={(e) => setCouponCode(e.target.value)}
+                                    placeholder="Coupon code"
+                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500 uppercase"
+                                />
+                                {appliedCoupon ? (
+                                    <button
+                                        onClick={handleRemoveCoupon}
+                                        className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                    >
+                                        Remove
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleApplyCoupon}
+                                        disabled={isApplyingCoupon || !couponCode}
+                                        className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-600 disabled:opacity-60 transition-colors"
+                                    >
+                                        {isApplyingCoupon ? 'Applying...' : 'Apply'}
+                                    </button>
+                                )}
+                            </div>
+                            {couponMessage && (
+                                <p className={`text-xs ${couponMessage.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                                    {couponMessage.text}
+                                </p>
+                            )}
                         </div>
 
                         <button
