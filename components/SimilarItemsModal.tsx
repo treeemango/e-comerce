@@ -162,7 +162,6 @@ const SimilarItemsModal: React.FC<SimilarItemsModalProps> = ({ product, onClose,
                   <ProductCard
                     key={prod.id}
                     product={prod}
-                    showLocalBadge={prod.vendor?.business_country === 'Kenya'}
                     onProductClick={(p) => {
                       onClose();
                       onProductClick?.(p);

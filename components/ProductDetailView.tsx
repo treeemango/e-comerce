@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon } from '../lib/api';
+import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo } from '../lib/api';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
 import { playFollowSound, playUnfollowSound } from '../lib/sounds';
@@ -68,6 +68,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [productVariants, setProductVariants] = useState<ProductVariant[]>(product.variants || []);
    const [isLoadingVariants, setIsLoadingVariants] = useState(false);
 
+   const [resolvedVendor, setResolvedVendor] = useState(product.vendor);
+
    // Coupon State
    const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
    const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
@@ -76,8 +78,12 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       const loadCoupons = async () => {
          if (product.id) {
             const coupons = await getProductCoupons(product.id.toString());
+
+            // Deduplicate coupons
+            const uniqueCoupons = Array.from(new Map(coupons.map((c: PromoCoupon) => [c.id, c])).values()) as PromoCoupon[];
+
             // Filter for valid ongoing coupons
-            const validCoupons = coupons.filter((c: PromoCoupon) => c.status === 'Ongoing');
+            const validCoupons = uniqueCoupons.filter((c: PromoCoupon) => c.status === 'Ongoing');
             setProductCoupons(validCoupons);
          }
       };
@@ -168,6 +174,38 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       return null; // avoid fake RRPs to prevent misleading discounts
    }, [product.originalPrice, product.rrp]);
 
+   useEffect(() => {
+      setResolvedVendor(product.vendor);
+   }, [product.vendor]);
+
+   useEffect(() => {
+      const hydrateVendor = async () => {
+         if (resolvedVendor) return;
+         if (!product.id) return;
+         const vendorMap = await fetchVendorInfo([product.id.toString()]);
+         const candidateKeys = [product.seller_id, product.vendor?.vendor_id]
+            .filter(Boolean)
+            .map(k => k!.toString());
+
+         let vendor = undefined;
+         for (const key of candidateKeys) {
+            vendor = vendorMap.get(key);
+            if (vendor) break;
+         }
+
+         // Fallback: take any vendor if map has entries
+         if (!vendor && vendorMap.size > 0) {
+            vendor = vendorMap.values().next().value;
+         }
+
+         if (vendor) {
+            setResolvedVendor(vendor);
+         }
+      };
+
+      hydrateVendor();
+   }, [product.id, product.seller_id, product.vendor, resolvedVendor]);
+
    const discountPercent = useMemo(() => {
       if (typeof product.discountPercent === 'number') return Math.round(product.discountPercent);
       if (displayRRP && displayRRP > displayPrice) {
@@ -186,11 +224,12 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
    const ratingValue = typeof product.rating === 'number' ? product.rating : null;
    const formattedRating = ratingValue !== null ? ratingValue.toFixed(1) : '—';
+   const vendor = resolvedVendor ?? product.vendor;
    const soldLabel = useMemo(() => {
       if (typeof product.stock === 'number') return `${product.stock.toLocaleString()} in stock`;
-      if (product.vendor?.completed_orders) return `${product.vendor.completed_orders.toLocaleString()} orders`;
+      if (resolvedVendor?.completed_orders) return `${resolvedVendor.completed_orders.toLocaleString()} orders`;
       return 'Popular item';
-   }, [product.stock, product.vendor?.completed_orders]);
+   }, [product.stock, resolvedVendor?.completed_orders]);
 
    // Generate styles for known color names
    const getColorStyle = (colorName: string) => {
@@ -250,8 +289,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    // Check if user is following this store
    useEffect(() => {
       const checkFollowStatus = async () => {
-         if (product?.vendor?.vendor_id && user?.id) {
-            const status = await getFollowStatus(user.id, product.vendor.vendor_id);
+         if (vendor?.vendor_id && user?.id) {
+            const status = await getFollowStatus(user.id, vendor.vendor_id);
             if (status) {
                setIsFollowing(status.is_following);
                setFollowerCount(status.follower_count);
@@ -262,7 +301,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          }
       };
       checkFollowStatus();
-   }, [product?.vendor?.vendor_id, user?.id]);
+   }, [vendor?.vendor_id, user?.id]);
 
    const handleMessageClick = () => {
       if (!user) {
@@ -282,7 +321,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    };
 
    const handleFollowToggle = async () => {
-      if (!product?.vendor?.vendor_id) return;
+      if (!vendor?.vendor_id) return;
 
       if (!user) {
          alert('Please sign in to follow stores');
@@ -292,7 +331,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       setIsFollowLoading(true);
 
       try {
-         const result = await toggleFollowStore(user.id, product.vendor.vendor_id);
+         const result = await toggleFollowStore(user.id, vendor.vendor_id);
          if (result?.success) {
             setIsFollowing(result.is_following);
             setFollowerCount(result.follower_count);
@@ -462,9 +501,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
    // SEO: Compute page metadata and structured data for product
    const productSeoConfig = useMemo(() => {
-      const seoConfig = getProductPageSEO(product, product.vendor);
+      const seoConfig = getProductPageSEO(product, vendor);
       const schemas = [];
-      schemas.push(generateProductSchema(product, product.vendor));
+      schemas.push(generateProductSchema(product, vendor));
 
       if (breadcrumbs.length > 0) {
          const breadcrumbUrls = breadcrumbs.map((crumb) => ({
@@ -480,7 +519,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          structuredData: schemas,
          structuredDataId: 'product-detail-seo'
       };
-   }, [product.id, product.title, product.price, product.image, product.vendor, breadcrumbs]);
+   }, [product.id, product.title, product.price, product.image, vendor, breadcrumbs]);
 
    // Apply SEO configuration (hook called at top level)
    useSEO(productSeoConfig);
@@ -845,25 +884,25 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             </div>
 
             <div className="w-full lg:w-96 flex-shrink-0 space-y-8">
-               {product.vendor ? (
+               {vendor ? (
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
                      <div className="flex items-center gap-3 mb-4">
                         <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-xl uppercase">
-                           {product.vendor.business_name.charAt(0)}
+                           {vendor.business_name.charAt(0)}
                         </div>
                         <div className="flex-1">
                            <div className="flex items-center gap-1">
-                              <h3 className="font-bold text-slate-900 dark:text-white">{product.vendor.business_name}</h3>
-                              {product.vendor.is_verified && (
+                              <h3 className="font-bold text-slate-900 dark:text-white">{vendor.business_name}</h3>
+                              {vendor.is_verified && (
                                  <span className="material-icons text-blue-500 dark:text-blue-400 text-sm" title="Verified Seller">verified</span>
                               )}
                            </div>
                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                              <span>{product.vendor.total_products} Items</span>
+                              <span>{vendor.total_products} Items</span>
                               <span className="w-px h-3 bg-slate-300 dark:bg-slate-600"></span>
-                              <span className="flex items-center">{product.vendor.vendor_rating} <span className="material-icons text-[10px] ml-0.5">star</span></span>
+                              <span className="flex items-center">{vendor.vendor_rating} <span className="material-icons text-[10px] ml-0.5">star</span></span>
                               <span className="w-px h-3 bg-slate-300 dark:bg-slate-600"></span>
-                              <span>{product.vendor.review_count} Reviews</span>
+                              <span>{vendor.review_count} Reviews</span>
                            </div>
                         </div>
                      </div>
@@ -893,7 +932,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         </button>
                         <button
                            className="group relative px-4 py-2 rounded-full text-xs font-bold text-slate-700 dark:text-white overflow-hidden bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-200 dark:border-slate-700 hover:border-orange-500/50"
-                           onClick={() => onVisitStore && product.vendor?.vendor_id && onVisitStore(product.vendor.vendor_id)}
+                           onClick={() => onVisitStore && vendor?.vendor_id && onVisitStore(vendor.vendor_id)}
                         >
                            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                            <span className="relative flex items-center gap-1">
@@ -913,9 +952,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                      {/* Badges */}
                      {
-                        product.vendor.badges && product.vendor.badges.length > 0 && (
+                        vendor?.badges && vendor.badges.length > 0 && (
                            <div className="flex flex-wrap gap-2 mb-4">
-                              {product.vendor.badges.map((badge, idx) => {
+                           {vendor.badges.map((badge, idx) => {
                                  const getBadgeStyle = (category: string) => {
                                     switch (category) {
                                        case 'trust': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800';
@@ -947,18 +986,18 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 dark:text-slate-400 pt-3 border-t border-slate-200 dark:border-slate-700">
                         <div className="flex items-center gap-2">
                            <span className="material-icons text-green-600 dark:text-green-400 text-[16px]">local_shipping</span>
-                           <span className="font-medium">{product.vendor.delivery_speed}</span>
+                           <span className="font-medium">{vendor?.delivery_speed}</span>
                         </div>
-                        {product.vendor.response_time && (
+                        {vendor?.response_time && (
                            <div className="flex items-center gap-2">
                               <span className="material-icons text-slate-400 text-[16px]">chat</span>
-                              <span>{product.vendor.response_time}</span>
+                              <span>{vendor.response_time}</span>
                            </div>
                         )}
-                        {product.vendor.seller_since && (
+                        {vendor?.seller_since && (
                            <div className="flex items-center gap-2">
                               <span className="material-icons text-slate-400 text-[16px]">calendar_today</span>
-                              <span>{product.vendor.seller_since}</span>
+                              <span>{vendor.seller_since}</span>
                            </div>
                         )}
                      </div>
@@ -990,7 +1029,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            <div key={p.id} className="w-[160px] sm:w-[200px] flex-shrink-0 snap-start">
                               <ProductCard
                                  product={p}
-                                 showLocalBadge={p.vendor?.business_country === 'Kenya'}
                                  onProductClick={onRelatedProductClick || onProductClick}
                                  onAddToCart={onAddToCart}
                               />
@@ -1016,7 +1054,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         <ProductCard
                            key={p.id}
                            product={p}
-                           showLocalBadge={p.vendor?.business_country === 'Kenya'}
                            onProductClick={onRelatedProductClick || onProductClick}
                            onAddToCart={onAddToCart}
                         />
@@ -1056,7 +1093,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            <img src={product.image} alt="" className="w-12 h-12 rounded object-cover border border-gray-200" />
                            <div>
                               <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-1">{product.title}</p>
-                              <p className="text-xs text-gray-500">{product.vendor?.shop_name || 'Seller'}</p>
+                              <p className="text-xs text-gray-500">{vendor?.shop_name || 'Seller'}</p>
                            </div>
                         </div>
 

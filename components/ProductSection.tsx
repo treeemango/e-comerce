@@ -243,7 +243,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   const [navbarCategoriesData, setNavbarCategoriesData] = useState<NavbarCategory[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
-  const sortedNavbarCategories = useMemo(() => {
+  const sortedNavbarCategories = useMemo<NavbarCategory[]>(() => {
     const deduped = navbarCategoriesData.reduce<Map<string, NavbarCategory>>((map, cat) => {
       const existing = map.get(cat.category_id);
       if (!existing) {
@@ -257,7 +257,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     }, new Map());
 
     return Array.from(deduped.values())
-      .sort((a, b) => {
+      .sort((a: NavbarCategory, b: NavbarCategory) => {
         const orderDiff = (a.department_sort_order || 0) - (b.department_sort_order || 0);
         if (orderDiff !== 0) return orderDiff;
         return (b.trend_score || 0) - (a.trend_score || 0);
@@ -308,6 +308,25 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     displayedProducts = products.filter(p => p.rating >= 5);
   }
 
+  const uniqueDisplayedProducts = useMemo(() => {
+    const map = new Map<string, Product>();
+    displayedProducts.forEach((p, index) => {
+      const key = p.id?.toString() || `product-${index}`;
+      if (!map.has(key)) map.set(key, p);
+    });
+    return Array.from(map.values());
+  }, [displayedProducts]);
+
+  // Sort newest first (modern feed)
+  const orderedProducts = useMemo(() => {
+    return [...uniqueDisplayedProducts].sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (bTime !== aTime) return bTime - aTime;
+      return (b.id?.toString() || '').localeCompare(a.id?.toString() || '');
+    });
+  }, [uniqueDisplayedProducts]);
+
   // Landing "Recommended" state: show skeleton while we wait for the initial feed
   const showRecommendedSkeleton =
     !searchQuery && !hasActiveFilters() && !isFiveStarView && products.length === 0 && !isLoadingProducts;
@@ -317,8 +336,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     setVisibleCount(baseline);
   }, [displayedProducts.length, gridColumns, searchQuery, categoryIdsHash]);
 
-  const visibleProducts = displayedProducts.slice(0, visibleCount);
-  const hasMoreProducts = visibleCount < displayedProducts.length;
+  const visibleProducts = orderedProducts.slice(0, visibleCount);
+  const hasMoreProducts = visibleCount < orderedProducts.length;
 
 
 
@@ -437,13 +456,13 @@ const ProductSection: React.FC<ProductSectionProps> = ({
               <div className="h-16 w-16 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm" style={{ backgroundSize: '200% 100%' }} />
             </div>
           ) : (
-            <div className="flex items-start gap-6 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
+            <div className="flex items-start gap-6 overflow-x-auto pb-4 pt-1 scrollbar-hide mask-fade-right">
               <button
                 onClick={() => handleCategoryClick(null)}
                 className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === null ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
               >
-                <span className={`relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-400 text-white shadow-lg ${selectedCategoryId === null ? 'ring-2 ring-shop-red/40' : ''}`}>
-                  <span className="text-lg font-bold">All</span>
+                <span className={`relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm ring-2 ${selectedCategoryId === null ? 'ring-shop-red/50' : 'ring-slate-200 dark:ring-slate-600'}`}>
+                  <span className="material-icons text-3xl">grid_view</span>
                 </span>
                 <span className="text-sm font-semibold text-center">Recommended</span>
               </button>
@@ -967,7 +986,6 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 <ProductCard
                   key={product.id}
                   product={product}
-                  showLocalBadge={!!searchQuery}
                   onProductClick={onProductClick}
                   onAddToCart={onAddToCart}
                 />

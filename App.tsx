@@ -92,6 +92,32 @@ const App: React.FC = () => {
   ].includes(view);
   const [showBuyerAuthModal, setShowBuyerAuthModal] = useState(false);
 
+  const dedupeCategories = useCallback((items: DealCategoryNavItem[]) => {
+    const unique = new Map<string, DealCategoryNavItem>();
+
+    items.forEach((item, index) => {
+      const key = item.categoryId || item.categoryHandle || item.categoryName || `fallback-${index}`;
+      if (!unique.has(key)) {
+        unique.set(key, item);
+      }
+    });
+
+    return Array.from(unique.values());
+  }, []);
+
+  const dedupeProducts = useCallback((items: Product[]) => {
+    const unique = new Map<string, Product>();
+
+    items.forEach((item, index) => {
+      const key = item.id?.toString() || `product-${index}`;
+      if (!unique.has(key)) {
+        unique.set(key, item);
+      }
+    });
+
+    return Array.from(unique.values());
+  }, []);
+
   // SEO: Compute page metadata based on current view
   const seoConfig = useMemo(() => {
     if (currentView === 'home') {
@@ -138,11 +164,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadProducts = async () => {
       const data = await fetchProductsWithVendors();
-      setProducts(data);
+      setProducts(dedupeProducts(data));
     };
     loadProducts();
     // Auth context will be handled by the auth state listener
-  }, []);
+  }, [dedupeProducts]);
 
   // Auth state listener
   useEffect(() => {
@@ -533,7 +559,7 @@ const App: React.FC = () => {
       setDealProducts(deals);
 
       if (categories && categories.length > 0) {
-        setDealCategories(categories);
+        setDealCategories(dedupeCategories(categories));
       } else {
         // Fallback to navbar categories if deals RPC returns no categories
         const fallbackNav: NavbarCategory[] = await fetchNavbarCategories();
@@ -547,7 +573,7 @@ const App: React.FC = () => {
           finalScore: c.trend_score,
           dealPriority: c.is_hot ? 'hot_deal' : undefined
         }));
-        setDealCategories(mappedFallback);
+        setDealCategories(dedupeCategories(mappedFallback));
       }
     } catch (error) {
       console.error('Error loading deals data', error);
@@ -555,7 +581,7 @@ const App: React.FC = () => {
     } finally {
       setDealsLoading(false);
     }
-  }, [user?.id]);
+  }, [dedupeCategories, user?.id]);
 
   useEffect(() => {
     if (currentView === 'deals') {
@@ -750,7 +776,12 @@ const App: React.FC = () => {
           <>
             <HeroSection />
             <FeaturesBar />
-            <LightningDealsRow userId={user?.id} onViewAllDeals={() => handleDealsClick(null)} />
+            <LightningDealsRow
+              userId={user?.id}
+              onViewAllDeals={() => handleDealsClick(null)}
+              onAddToCart={addToCart}
+              onProductClick={handleProductClick}
+            />
             <ProductSection isFiveStarView={false} onProductClick={handleProductClick} products={products} onAddToCart={addToCart} />
           </>
         )}

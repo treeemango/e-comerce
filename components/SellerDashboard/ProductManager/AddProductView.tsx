@@ -159,6 +159,12 @@ const SUPPORTED_CURRENCIES = [
     { code: 'MRO', flag: '🇲🇷', name: 'Mauritanian Ouguiya (Old)' }
 ];
 
+const DELIVERY_SCOPE_OPTIONS = [
+    { value: 'nationwide', label: 'Nationwide', detail: 'Deliver across the whole country.' },
+    { value: 'regional', label: 'Regional', detail: 'Deliver to selected regions or states.' },
+    { value: 'local', label: 'Local', detail: 'Deliver within one city or pickup radius.' }
+];
+
 const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onSuccess }) => {
     const [currentStep, setCurrentStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -190,8 +196,23 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [seoTitle, setSeoTitle] = useState('');
     const [metaDescription, setMetaDescription] = useState('');
     const [slug, setSlug] = useState('');
+    const [canonicalUrl, setCanonicalUrl] = useState('');
+    const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
+    const [seoKeywordInput, setSeoKeywordInput] = useState('');
+    const [freeDelivery, setFreeDelivery] = useState(false);
+    const [deliveryScope, setDeliveryScope] = useState('nationwide');
+    const [minOrderValue, setMinOrderValue] = useState<number>(0);
     const [deliveryCost, setDeliveryCost] = useState<number>(0);
     const [deliveryTime, setDeliveryTime] = useState('');
+    const [deliveryTimeDays, setDeliveryTimeDays] = useState<number>(1);
+    const [isExpressDelivery, setIsExpressDelivery] = useState(false);
+    const [minOrderForFreeDelivery, setMinOrderForFreeDelivery] = useState<number>(0);
+    const [tags, setTags] = useState<string[]>([]);
+    const [useCaseTags, setUseCaseTags] = useState<string[]>([]);
+    const [occasionTags, setOccasionTags] = useState<string[]>([]);
+    const [tagInput, setTagInput] = useState('');
+    const [useCaseInput, setUseCaseInput] = useState('');
+    const [occasionInput, setOccasionInput] = useState('');
 
     // Media State
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -588,6 +609,17 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         });
     };
 
+    const addToken = (raw: string, setter: React.Dispatch<React.SetStateAction<string[]>>, clearInput: () => void) => {
+        const value = raw.trim();
+        if (!value) return;
+        setter(prev => prev.includes(value) ? prev : [...prev, value]);
+        clearInput();
+    };
+
+    const removeToken = (value: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+        setter(prev => prev.filter(item => item !== value));
+    };
+
     // Final Submission
     const handleSubmit = async () => {
         if (!categoryId || !title || !basePrice) {
@@ -615,6 +647,33 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
             const allMedia = [...uploadedMedia, ...youtubeMedia];
 
+            const safeTags = tags.map(t => t.trim()).filter(Boolean);
+            const safeUseCases = useCaseTags.map(t => t.trim()).filter(Boolean);
+            const safeOccasions = occasionTags.map(t => t.trim()).filter(Boolean);
+            const joinedSeoKeywords = seoKeywords.map(k => k.trim()).filter(Boolean).join(', ');
+
+            const preparedVariants = (variants.length > 0 ? variants : [{
+                sku: `${title.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`,
+                price: basePrice,
+                compare_at_price: baseCompareAtPrice ?? basePrice,
+                original_price: baseCompareAtPrice ?? basePrice,
+                stock: baseStock,
+                options: {},
+                is_default: true
+            }]).map(variant => {
+                const rrp = typeof variant.compare_at_price === 'number' ? variant.compare_at_price : variant.price;
+                const discountPercent = rrp && variant.price ? Math.max(0, Math.round(((rrp - variant.price) / rrp) * 100)) : undefined;
+                return {
+                    ...variant,
+                    rrp,
+                    discount_percent: discountPercent
+                };
+            });
+
+            const safeDeliveryScope = DELIVERY_SCOPE_OPTIONS.some(opt => opt.value === deliveryScope)
+                ? deliveryScope
+                : 'nationwide';
+
             const payload = {
                 title,
                 description,
@@ -623,21 +682,24 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 currency: currency,
                 promo_text: promoText || undefined,
                 promo_code: promoCode || undefined,
+                free_delivery: freeDelivery,
+                delivery_scope: safeDeliveryScope,
+                min_order_value: Number.isFinite(minOrderValue) ? minOrderValue : 0,
+                min_order_for_free_delivery: Number.isFinite(minOrderForFreeDelivery) ? minOrderForFreeDelivery : 0,
+                is_express_delivery: isExpressDelivery,
                 seo_title: seoTitle,
                 meta_description: metaDescription,
                 url_slug: slug,
-                delivery_cost: deliveryCost,
+                canonical_url: canonicalUrl || undefined,
+                seo_keywords: joinedSeoKeywords || undefined,
+                delivery_cost: Number.isFinite(deliveryCost) ? deliveryCost : 0,
                 delivery_time_estimate: deliveryTime,
+                delivery_time_days: Number.isFinite(deliveryTimeDays) ? deliveryTimeDays : 1,
+                tags: safeTags,
+                use_case_tags: safeUseCases,
+                occasion_tags: safeOccasions,
                 attributes,
-                variants: variants.length > 0 ? variants : [{
-                    sku: `${title.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`,
-                    price: basePrice,
-                    compare_at_price: baseCompareAtPrice ?? basePrice,
-                    original_price: baseCompareAtPrice ?? basePrice,
-                    stock: baseStock,
-                    options: {},
-                    is_default: true
-                }],
+                variants: preparedVariants,
                 media: allMedia.map((m, i) => ({ ...m, position: i }))
             };
 
@@ -801,7 +863,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             {/* SEO & Delivery Sections */}
                             <div className="pt-6 border-t border-gray-100 animate-fade-in">
                                 <h3 className="text-sm font-semibold text-gray-900 mb-4">Currency & Shipping</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
                                         <select
@@ -826,6 +888,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                 onChange={(e) => setDeliveryCost(parseFloat(e.target.value))}
                                                 className="w-full border border-gray-300 rounded-lg pl-8 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                                 placeholder="0.00"
+                                                min={0}
+                                                step="0.01"
                                             />
                                         </div>
                                     </div>
@@ -838,6 +902,103 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                             className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                             placeholder="e.g. 3-5 Days"
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Time (Days)</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={deliveryTimeDays}
+                                            onChange={(e) => setDeliveryTimeDays(parseInt(e.target.value) || 1)}
+                                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                            placeholder="1"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Used for delivery SLA and express promises.</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Order Value</label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                value={minOrderValue}
+                                                onChange={(e) => setMinOrderValue(parseFloat(e.target.value) || 0)}
+                                                className="w-full border border-gray-300 rounded-lg pl-8 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Orders below this amount are prevented at checkout.</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Free Delivery Threshold</label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                value={minOrderForFreeDelivery}
+                                                onChange={(e) => setMinOrderForFreeDelivery(parseFloat(e.target.value) || 0)}
+                                                className={`w-full border rounded-lg pl-8 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none ${freeDelivery ? 'border-gray-300' : 'border-gray-200 bg-gray-50'}`}
+                                                placeholder="e.g. 50.00"
+                                                disabled={!freeDelivery}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Set the spend required to unlock free delivery.</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6">
+                                    <p className="text-xs font-semibold text-gray-700 mb-2">Delivery Scope</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        {DELIVERY_SCOPE_OPTIONS.map(option => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setDeliveryScope(option.value)}
+                                                className={`text-left p-4 rounded-lg border transition shadow-sm ${deliveryScope === option.value ? 'border-orange-500 bg-orange-50 text-orange-900' : 'border-gray-200 bg-white hover:border-orange-200'}`}
+                                            >
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="font-medium">{option.label}</span>
+                                                    <span className={`material-icons text-sm ${deliveryScope === option.value ? 'text-orange-500' : 'text-gray-300'}`}>
+                                                        {deliveryScope === option.value ? 'check_circle' : 'radio_button_unchecked'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-600">{option.detail}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                    <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900">Free Delivery</p>
+                                            <p className="text-xs text-gray-500">Toggle if delivery cost is waived above the threshold.</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreeDelivery(!freeDelivery)}
+                                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${freeDelivery ? 'bg-orange-600' : 'bg-gray-300'}`}
+                                        >
+                                            <span className={`${freeDelivery ? 'translate-x-6' : 'translate-x-1'} inline-block h-5 w-5 transform rounded-full bg-white transition-transform`} />
+                                        </button>
+                                    </div>
+                                    <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900">Express Delivery</p>
+                                            <p className="text-xs text-gray-500">Flag orders that can ship faster than standard.</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsExpressDelivery(!isExpressDelivery)}
+                                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${isExpressDelivery ? 'bg-orange-600' : 'bg-gray-300'}`}
+                                        >
+                                            <span className={`${isExpressDelivery ? 'translate-x-6' : 'translate-x-1'} inline-block h-5 w-5 transform rounded-full bg-white transition-transform`} />
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -876,6 +1037,156 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                                 placeholder="Brief description for search results"
                                             />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Canonical URL</label>
+                                            <input
+                                                type="url"
+                                                value={canonicalUrl}
+                                                onChange={(e) => setCanonicalUrl(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                placeholder="https://yourstore.com/products/slug"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">SEO Keywords</label>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={seoKeywordInput}
+                                                    onChange={(e) => setSeoKeywordInput(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            addToken(seoKeywordInput, setSeoKeywords, () => setSeoKeywordInput(''));
+                                                        }
+                                                    }}
+                                                    className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                    placeholder="Add keyword and press Enter"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => addToken(seoKeywordInput, setSeoKeywords, () => setSeoKeywordInput(''))}
+                                                    className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                                                >
+                                                    Add
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {seoKeywords.map(keyword => (
+                                                    <span key={keyword} className="bg-orange-100 text-orange-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
+                                                        {keyword}
+                                                        <button type="button" onClick={() => removeToken(keyword, setSeoKeywords)} className="hover:text-red-500">×</button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-6 border-t border-gray-100 animate-fade-in">
+                                <h3 className="text-sm font-semibold text-gray-900 mb-4">Discovery Tags</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={tagInput}
+                                                onChange={(e) => setTagInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addToken(tagInput, setTags, () => setTagInput(''));
+                                                    }
+                                                }}
+                                                className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                placeholder="Add tag and press Enter"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => addToken(tagInput, setTags, () => setTagInput(''))}
+                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {tags.map(tag => (
+                                                <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
+                                                    {tag}
+                                                    <button type="button" onClick={() => removeToken(tag, setTags)} className="hover:text-red-500">×</button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Use Case Tags</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={useCaseInput}
+                                                onChange={(e) => setUseCaseInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addToken(useCaseInput, setUseCaseTags, () => setUseCaseInput(''));
+                                                    }
+                                                }}
+                                                className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                placeholder="e.g. Remote work, Travel"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => addToken(useCaseInput, setUseCaseTags, () => setUseCaseInput(''))}
+                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {useCaseTags.map(tag => (
+                                                <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
+                                                    {tag}
+                                                    <button type="button" onClick={() => removeToken(tag, setUseCaseTags)} className="hover:text-red-500">×</button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Occasion Tags</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={occasionInput}
+                                                onChange={(e) => setOccasionInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addToken(occasionInput, setOccasionTags, () => setOccasionInput(''));
+                                                    }
+                                                }}
+                                                className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                placeholder="e.g. Birthday, Wedding"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => addToken(occasionInput, setOccasionTags, () => setOccasionInput(''))}
+                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {occasionTags.map(tag => (
+                                                <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
+                                                    {tag}
+                                                    <button type="button" onClick={() => removeToken(tag, setOccasionTags)} className="hover:text-red-500">×</button>
+                                                </span>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>

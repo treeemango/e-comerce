@@ -74,7 +74,6 @@ const BestSellersView: React.FC<BestSellersViewProps> = ({ onProductClick, produ
                            key={product.id}
                            product={product}
                            ranking={product.saleRank || idx + 1}
-                           showLocalBadge={true}
                            onProductClick={onProductClick}
                         />
                      ))

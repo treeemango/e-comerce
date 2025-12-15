@@ -1,0 +1,6 @@
+components/ErrorBoundary.tsx(49,53): error TS2339: Property 'setState' does not exist on type 'ErrorBoundary'.
+components/ErrorBoundary.tsx(64,21): error TS2339: Property 'props' does not exist on type 'ErrorBoundary'.
+components/ProductSection.tsx(261,30): error TS2339: Property 'department_sort_order' does not exist on type 'unknown'.
+components/ProductSection.tsx(261,63): error TS2339: Property 'department_sort_order' does not exist on type 'unknown'.
+components/ProductSection.tsx(263,19): error TS2339: Property 'trend_score' does not exist on type 'unknown'.
+components/ProductSection.tsx(263,42): error TS2339: Property 'trend_score' does not exist on type 'unknown'.

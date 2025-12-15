@@ -12,10 +12,16 @@ export interface Product {
     reviews: number;
     image: string;
     stock?: number; // Optional vendor stock for buyer-side availability messaging
+    seller_id?: string;
+    createdAt?: string | null;
     media?: MediaItem[];
     gallery_media?: GalleryMediaItem[];
     badge?: string;
     deliveryDate?: string;
+    deliveryTimeEstimate?: string;
+    deliveryTimeDays?: number;
+    isExpressDelivery?: boolean;
+    deliveryScope?: string;
     description?: string;
     vendor?: VendorInfo;
     categoryId?: string;
@@ -36,6 +42,14 @@ export interface Product {
         finalPrice: number;
         savings: number;
     };
+    // Deal-specific fields
+    deal_type?: 'coupon' | 'hot_discount' | 'standard';
+    coupon_name?: string;
+    coupon_end?: string; // ISO date string for countdown
+    coupon_discount_percent?: number;
+    score?: number; // Overall product score
+    personalization_score?: number; // 0.0-1.0 personalization match
+    in_stock?: boolean; // Inventory availability flag
 }
 
 // Product interface that includes similarity score
@@ -569,6 +583,8 @@ export interface ProductVariantData {
     options: Record<string, string>;
     compare_at_price?: number;
     original_price?: number;
+    rrp?: number;
+    discount_percent?: number;
     is_default: boolean;
     image_url?: string;
 }
@@ -590,11 +606,22 @@ export interface CreateProductPayload {
     currency: string;
     promo_text?: string;
     promo_code?: string;
+    free_delivery?: boolean;
+    delivery_scope?: string;
+    min_order_value?: number;
+    min_order_for_free_delivery?: number;
+    is_express_delivery?: boolean;
     seo_title?: string;
     meta_description?: string;
     url_slug?: string;
+    canonical_url?: string;
+    seo_keywords?: string;
     delivery_cost?: number;
     delivery_time_estimate?: string;
+    delivery_time_days?: number;
+    tags?: string[];
+    use_case_tags?: string[];
+    occasion_tags?: string[];
     attributes: ProductAttributeData[];
     variants: ProductVariantData[];
     media: MediaUploadData[];

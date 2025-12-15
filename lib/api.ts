@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem } from '@/types';
 
 export interface LightningDealItem {
     id: string;
@@ -9,8 +9,25 @@ export interface LightningDealItem {
     discountPercent: number;
     rrp?: number;
     image: string;
+    image_url?: string;
+    media?: MediaItem[];
+    gallery_media?: GalleryMediaItem[];
+    delivery_time_estimate?: string;
+    delivery_time_days?: number;
+    is_express_delivery?: boolean;
+    delivery_scope?: string;
+    vendor_country?: string;
+    seller_id?: string;
     tag?: string;
     accent?: string;
+    currency?: string;
+    // Modern deal fields
+    deal_type?: 'coupon' | 'hot_discount' | 'standard';
+    coupon_name?: string;
+    coupon_end?: string;
+    coupon_discount_percent?: number;
+    personalization_score?: number;
+    in_stock?: boolean;
 }
 
 export interface DealCategoryNavItem {
@@ -48,6 +65,30 @@ export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<L
         const price = item.current_price ?? item.price ?? originalPrice;
         const discountPercent = item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
 
+        const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
+            ? item.gallery.map((media: any, idx: number) => ({
+                  id: media.id ?? `${item.id}-media-${idx}`,
+                  image_url: media.image_url ?? media.url ?? undefined,
+                  thumbnail_url: media.thumbnail_url ?? undefined,
+                  is_main: media.is_main ?? false,
+                  type: media.type ?? 'image',
+                  video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
+                  alt_text: media.alt_text ?? undefined,
+              }))
+            : [];
+
+        const mediaItems: MediaItem[] = galleryMedia
+            .map((media, idx) => ({
+                id: (media.id ?? `${item.id}-media-${idx}`).toString(),
+                type: (media.type as MediaItem['type']) ?? 'image',
+                url: (media.video_url ?? media.image_url ?? '').toString(),
+                thumbnail: media.thumbnail_url ?? undefined,
+                isMain: media.is_main ?? undefined,
+            }))
+            .filter(m => !!m.url);
+
+        const primaryImage = item.image_url || mediaItems.find(m => m.type === 'image')?.url || mediaItems[0]?.url || '';
+
         return {
             id: item.id,
             title: item.title,
@@ -55,9 +96,26 @@ export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<L
             originalPrice,
             discountPercent,
             rrp: originalPrice,
-            image: item.image_url || '',
+            image: primaryImage,
+            image_url: item.image_url || undefined,
+            media: mediaItems,
+            gallery_media: galleryMedia,
+            delivery_time_estimate: item.delivery_time_estimate || undefined,
+            delivery_time_days: item.delivery_time_days || undefined,
+            is_express_delivery: item.is_express_delivery ?? undefined,
+            delivery_scope: item.delivery_scope || undefined,
+            vendor_country: item.vendor_country || undefined,
+            seller_id: item.vendor_id || item.seller_id || undefined,
             tag: item.deal_type === 'flash_sale' ? 'Flash sale' : item.deal_type === 'lightning_deal' ? 'Lightning' : undefined,
-            accent: undefined
+            accent: undefined,
+            currency: item.currency || 'USD',
+            // Modern deal fields
+            deal_type: item.deal_type || 'standard',
+            coupon_name: item.coupon_name || undefined,
+            coupon_end: item.coupon_end || undefined,
+            coupon_discount_percent: item.coupon_discount_percent || undefined,
+            personalization_score: item.personalization_score || undefined,
+            in_stock: item.in_stock ?? (item.stock > 0)
         };
     });
 
@@ -93,6 +151,29 @@ export const fetchDealsProducts = async (
         .map((item: any) => {
             const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
             const price = item.current_price ?? item.price ?? originalPrice;
+            const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
+                ? item.gallery.map((media: any, idx: number) => ({
+                      id: media.id ?? `${item.id}-media-${idx}`,
+                      image_url: media.image_url ?? media.url ?? undefined,
+                      thumbnail_url: media.thumbnail_url ?? undefined,
+                      is_main: media.is_main ?? false,
+                      type: media.type ?? 'image',
+                      video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
+                      alt_text: media.alt_text ?? undefined,
+                  }))
+                : [];
+
+            const mediaItems: MediaItem[] = galleryMedia
+                .map((media, idx) => ({
+                    id: (media.id ?? `${item.id}-media-${idx}`).toString(),
+                    type: (media.type as MediaItem['type']) ?? 'image',
+                    url: (media.video_url ?? media.image_url ?? '').toString(),
+                    thumbnail: media.thumbnail_url ?? undefined,
+                    isMain: media.is_main ?? undefined,
+                }))
+                .filter(m => !!m.url);
+
+            const primaryImage = item.image_url || mediaItems.find(m => m.type === 'image')?.url || mediaItems[0]?.url || '';
             return {
                 id: item.id,
                 title: item.title,
@@ -102,11 +183,18 @@ export const fetchDealsProducts = async (
                 promoCode: undefined,
                 discountPercent: item.discount_percent,
                 currency: item.currency || 'USD',
+                seller_id: item.seller_id || item.vendor_id || undefined,
                 rating: item.rating || 0,
                 reviews: 0,
-                image: item.image_url || '',
+                image: primaryImage,
                 stock: item.stock ?? item.stock_quantity ?? undefined,
-                gallery_media: [],
+                media: mediaItems,
+                gallery_media: galleryMedia,
+                deliveryTimeEstimate: item.delivery_time_estimate || undefined,
+                deliveryTimeDays: item.delivery_time_days || undefined,
+                isExpressDelivery: item.is_express_delivery ?? false,
+                deliveryScope: item.delivery_scope || undefined,
+                vendorCountry: item.vendor_country || undefined,
                 badge: item.deal_type === 'flash_sale' ? 'FLASH SALE' : undefined,
                 deliveryDate: undefined,
                 description: undefined,
@@ -116,9 +204,18 @@ export const fetchDealsProducts = async (
                 lower_than_similar: undefined,
                 price_gap: undefined,
                 similar_avg_price: undefined,
-                activeCoupon: undefined
+                activeCoupon: undefined,
+                // Modern deal fields
+                deal_type: item.deal_type || 'standard',
+                coupon_name: item.coupon_name || undefined,
+                coupon_end: item.coupon_end || undefined,
+                coupon_discount_percent: item.coupon_discount_percent || undefined,
+                score: item.score || undefined,
+                personalization_score: item.personalization_score || undefined,
+                in_stock: item.in_stock ?? (item.stock > 0)
             };
         });
+
 
     const mappedCategories: DealCategoryNavItem[] = categoryPayload.map((cat: any) => ({
         categoryId: cat.id ?? cat.category_id,
@@ -168,7 +265,8 @@ export const fetchProducts = async (): Promise<Product[]> => {
     const { data, error } = await supabase
         .from('products_with_media')
         .select('*')
-        .eq('status', 'approved'); // Only show approved products to buyers
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false }); // Newest first
 
     if (error) {
         console.error('Error fetching products:', error);
@@ -186,6 +284,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
         promoCode: item.promoCode || item.promo_code,
         discountPercent: item.discountPercent || item.discount_percent,
         currency: item.currency || 'USD',
+        seller_id: item.seller_id || undefined,
         rating: item.rating || 0,
         reviews: item.review_count || 0,
         image: item.featured_image_url || '',
@@ -200,6 +299,10 @@ export const fetchProducts = async (): Promise<Product[]> => {
         gallery_media: item.gallery_media,
         badge: item.is_flash_sale ? 'FLASH SALE' : item.is_new ? 'NEW' : undefined,
         deliveryDate: item.delivery_time_estimate || '3-5 days',
+        deliveryTimeEstimate: item.delivery_time_estimate || undefined,
+        deliveryTimeDays: item.delivery_time_days || undefined,
+        isExpressDelivery: item.is_express_delivery ?? false,
+        deliveryScope: item.delivery_scope || undefined,
         description: item.description,
         categoryId: item.category_id,
         categoryName: item.category_name,
@@ -207,7 +310,16 @@ export const fetchProducts = async (): Promise<Product[]> => {
         lower_than_similar: item.lower_than_similar,
         price_gap: item.price_gap,
         similar_avg_price: item.similar_avg_price,
-        activeCoupon: item.activeCoupon // Mapped from view
+        activeCoupon: item.activeCoupon, // Mapped from view
+        createdAt: item.created_at || item.createdAt || null,
+        // Modern deal fields from SQL view
+        deal_type: item.deal_type || 'standard',
+        coupon_name: item.activeCoupon?.label || undefined,
+        coupon_end: item.coupon_expires_at || undefined,
+        coupon_discount_percent: item.activeCoupon?.percent || undefined,
+        score: item.score || undefined,
+        personalization_score: item.personalization_score || undefined,
+        in_stock: item.stock > 0
     }));
 };
 
@@ -416,7 +528,8 @@ export const fetchFilteredProducts = async (
     let query = supabase
         .from('products_with_media')
         .select('*')
-        .eq('status', 'approved'); // Only show approved products to buyers
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false }); // Newest first
 
     // Apply text search if provided
     if (searchQuery) {
@@ -475,6 +588,10 @@ export const fetchFilteredProducts = async (
         gallery_media: item.gallery_media,
         badge: item.is_flash_sale ? 'FLASH SALE' : item.is_new ? 'NEW' : undefined,
         deliveryDate: item.delivery_time_estimate || '3-5 days',
+        deliveryTimeEstimate: item.delivery_time_estimate || undefined,
+        deliveryTimeDays: item.delivery_time_days || undefined,
+        isExpressDelivery: item.is_express_delivery ?? false,
+        deliveryScope: item.delivery_scope || undefined,
         description: item.description,
         categoryId: item.category_id,
         categoryName: item.category_name,
@@ -482,7 +599,16 @@ export const fetchFilteredProducts = async (
         lower_than_similar: item.lower_than_similar,
         price_gap: item.price_gap,
         similar_avg_price: item.similar_avg_price,
-        activeCoupon: item.activeCoupon
+        activeCoupon: item.activeCoupon,
+        createdAt: item.created_at || item.createdAt || null,
+        // Modern deal fields from SQL view
+        deal_type: item.deal_type || 'standard',
+        coupon_name: item.activeCoupon?.label || undefined,
+        coupon_end: item.coupon_expires_at || undefined,
+        coupon_discount_percent: item.activeCoupon?.percent || undefined,
+        score: item.score || undefined,
+        personalization_score: item.personalization_score || undefined,
+        in_stock: item.stock > 0
     }));
 
     // Fetch vendor information for filtered products
