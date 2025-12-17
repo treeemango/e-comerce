@@ -7,9 +7,10 @@ import { supabase } from '../lib/supabase';
 interface MessagesViewProps {
     user: User;
     activeConversationId?: string | null;
+    compactMode?: boolean; // forces single-pane (list then conversation) UX
 }
 
-const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId }) => {
+const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId, compactMode = false }) => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -329,7 +330,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId 
         setSelectedConversation(conv);
         setMessages([]);
         loadMessages(conv.id);
-        if (window.innerWidth < 768) setShowList(false);
+        if (compactMode || window.innerWidth < 768) setShowList(false);
         // Mark as read immediately
         if (conv.unread_count > 0) {
             markMessagesRead(conv.id, user.id);
@@ -350,10 +351,14 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId 
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    const rootHeightClass = compactMode ? 'h-full' : 'h-[calc(100vh-64px)]';
+
+    const listWidthClass = compactMode ? 'w-full' : 'w-full md:w-80';
+
     return (
-        <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+        <div className={`flex ${rootHeightClass} overflow-hidden`}>
             {/* Sidebar */}
-            <div className={`w-full md:w-80 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col ${showList ? 'flex' : 'hidden md:flex'}`}>
+            <div className={`${listWidthClass} border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col ${compactMode ? (showList ? 'flex' : 'hidden') : (showList ? 'flex' : 'hidden md:flex')}`}>
                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Messages</h2>
                     <div className="relative">
@@ -416,12 +421,12 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId 
                 </div>
             </div>
 
-            <div className={`flex-1 flex flex-col bg-white dark:bg-gray-900 ${showList ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`flex-1 flex flex-col bg-white dark:bg-gray-900 ${compactMode ? (showList ? 'hidden' : 'flex') : (showList ? 'hidden md:flex' : 'flex')}`}>
                 {selectedConversation ? (
                     <>
                         <div className="h-16 px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shadow-sm z-10">
                             <div className="flex items-center gap-4">
-                                <button onClick={handleBackToList} className="md:hidden text-gray-500 hover:text-slate-900">
+                                <button onClick={handleBackToList} className={`${compactMode ? '' : 'md:hidden'} text-gray-500 hover:text-slate-900`}>
                                     <span className="material-icons">arrow_back</span>
                                 </button>
 

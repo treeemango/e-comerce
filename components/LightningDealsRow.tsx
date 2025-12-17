@@ -237,7 +237,7 @@ const LightningDealCard: React.FC<{
             {/* Countdown Timer for Coupons */}
             {deal.deal_type === 'coupon' && timeRemaining && (
               <div className="absolute bottom-2 right-2 left-2 z-20">
-                <div className="bg-black/70 backdrop-blur-md rounded-lg px-2 py-1 text-white">
+                <div className="bg-black/50 backdrop-blur-md rounded-lg px-2 py-1 text-white">
                   <div className="text-[7px] font-semibold opacity-80 text-center mb-0.5">ENDS IN</div>
                   <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
                     {timeRemaining.days > 0 && (

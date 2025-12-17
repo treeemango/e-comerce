@@ -1,0 +1,5 @@
+{
+  "name": "jua",
+  "description": "A responsive e-commerce application for JuaExpress with dynamic category navigation, sub-category filtering, and detailed product grids.",
+  "requestFramePermissions": []
+}

@@ -67,14 +67,14 @@ export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<L
 
         const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
             ? item.gallery.map((media: any, idx: number) => ({
-                  id: media.id ?? `${item.id}-media-${idx}`,
-                  image_url: media.image_url ?? media.url ?? undefined,
-                  thumbnail_url: media.thumbnail_url ?? undefined,
-                  is_main: media.is_main ?? false,
-                  type: media.type ?? 'image',
-                  video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
-                  alt_text: media.alt_text ?? undefined,
-              }))
+                id: media.id ?? `${item.id}-media-${idx}`,
+                image_url: media.image_url ?? media.url ?? undefined,
+                thumbnail_url: media.thumbnail_url ?? undefined,
+                is_main: media.is_main ?? false,
+                type: media.type ?? 'image',
+                video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
+                alt_text: media.alt_text ?? undefined,
+            }))
             : [];
 
         const mediaItems: MediaItem[] = galleryMedia
@@ -153,14 +153,14 @@ export const fetchDealsProducts = async (
             const price = item.current_price ?? item.price ?? originalPrice;
             const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
                 ? item.gallery.map((media: any, idx: number) => ({
-                      id: media.id ?? `${item.id}-media-${idx}`,
-                      image_url: media.image_url ?? media.url ?? undefined,
-                      thumbnail_url: media.thumbnail_url ?? undefined,
-                      is_main: media.is_main ?? false,
-                      type: media.type ?? 'image',
-                      video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
-                      alt_text: media.alt_text ?? undefined,
-                  }))
+                    id: media.id ?? `${item.id}-media-${idx}`,
+                    image_url: media.image_url ?? media.url ?? undefined,
+                    thumbnail_url: media.thumbnail_url ?? undefined,
+                    is_main: media.is_main ?? false,
+                    type: media.type ?? 'image',
+                    video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
+                    alt_text: media.alt_text ?? undefined,
+                }))
                 : [];
 
             const mediaItems: MediaItem[] = galleryMedia
@@ -260,6 +260,43 @@ export const fetchDealsNavbarCategories = async (
     }));
 };
 
+// Trending Categories Overlay Interface (matches get_trending_categories_overlay SQL function)
+export interface TrendingCategoryOverlay {
+    parent_category_id: string;
+    parent_category_name: string;
+    subcategory_id: string;
+    subcategory_name: string;
+    subcategory_handle: string;
+    trending_product_id?: string;
+    trending_product_name?: string;
+    trending_product_image_url?: string;
+    trend_score: number;
+    is_hot: boolean;
+    is_trending: boolean;
+    product_count: number;
+    hot_badge_text: string;
+    parent_category_sort_order: number;
+    data_quality: string;
+}
+
+export const fetchTrendingCategoriesOverlay = async (
+    limitParentCategories = 35,
+    limitSubcategoriesPerParent = 35
+): Promise<TrendingCategoryOverlay[]> => {
+    const { data, error } = await supabase.rpc('get_trending_categories_overlay', {
+        limit_parent_categories: limitParentCategories,
+        limit_subcategories_per_parent: limitSubcategoriesPerParent
+    });
+
+    if (error) {
+        console.error('Error fetching trending categories overlay:', error);
+        return [];
+    }
+
+    return (data || []) as TrendingCategoryOverlay[];
+};
+
+
 export const fetchProducts = async (): Promise<Product[]> => {
     console.log('Fetching products from Supabase...');
     const { data, error } = await supabase
@@ -275,52 +312,84 @@ export const fetchProducts = async (): Promise<Product[]> => {
 
     console.log('Fetched products:', data?.length);
 
-    return data.map((item: any) => ({
-        id: item.id,
-        title: item.title,
-        price: item.price,
-        originalPrice: item.originalPrice || item.original_price, // View provides both
-        promoText: item.promoText || item.promo_text,
-        promoCode: item.promoCode || item.promo_code,
-        discountPercent: item.discountPercent || item.discount_percent,
-        currency: item.currency || 'USD',
-        seller_id: item.seller_id || undefined,
-        rating: item.rating || 0,
-        reviews: item.review_count || 0,
-        image: item.featured_image_url || '',
-        stock: item.stock ?? item.available_stock ?? item.inventory_quantity ?? item.quantity_available ?? undefined,
-        media: item.gallery_media ? item.gallery_media.map((m: any) => ({
+    return data.map((item: any) => {
+        const galleryMedia = Array.isArray(item.gallery_media) ? item.gallery_media : [];
+        const media = galleryMedia.map((m: any) => ({
             id: m.id,
             type: m.type,
             url: m.type === 'image' ? m.image_url : m.video_url,
             thumbnail: m.thumbnail_url || m.image_url,
             isMain: m.is_main
-        })) : [],
-        gallery_media: item.gallery_media,
-        badge: item.is_flash_sale ? 'FLASH SALE' : item.is_new ? 'NEW' : undefined,
-        deliveryDate: item.delivery_time_estimate || '3-5 days',
-        deliveryTimeEstimate: item.delivery_time_estimate || undefined,
-        deliveryTimeDays: item.delivery_time_days || undefined,
-        isExpressDelivery: item.is_express_delivery ?? false,
-        deliveryScope: item.delivery_scope || undefined,
-        description: item.description,
-        categoryId: item.category_id,
-        categoryName: item.category_name,
-        category: item.category,
-        lower_than_similar: item.lower_than_similar,
-        price_gap: item.price_gap,
-        similar_avg_price: item.similar_avg_price,
-        activeCoupon: item.activeCoupon, // Mapped from view
-        createdAt: item.created_at || item.createdAt || null,
-        // Modern deal fields from SQL view
-        deal_type: item.deal_type || 'standard',
-        coupon_name: item.activeCoupon?.label || undefined,
-        coupon_end: item.coupon_expires_at || undefined,
-        coupon_discount_percent: item.activeCoupon?.percent || undefined,
-        score: item.score || undefined,
-        personalization_score: item.personalization_score || undefined,
-        in_stock: item.stock > 0
-    }));
+        }));
+
+        const primaryVideo = galleryMedia.find((m: any) => m.type === 'video' || m.type === 'youtube');
+        const badges: string[] = [];
+        if (item.deal_type === 'flash_sale' || item.is_flash_sale) badges.push('FLASH SALE');
+        if (item.deal_type === 'coupon' || item.activeCoupon) badges.push('COUPON');
+        if (item.is_new) badges.push('NEW');
+
+        return {
+            id: item.id,
+            title: item.title,
+            price: item.price,
+            originalPrice: item.originalPrice || item.original_price, // View provides both
+            promoText: item.promoText || item.promo_text,
+            promoCode: item.promoCode || item.promo_code,
+            discountPercent: item.discountPercent || item.discount_percent,
+            currency: item.currency || 'USD',
+            seller_id: item.seller_id || undefined,
+            rating: item.rating || 0,
+            reviews: item.review_count || 0,
+            image: item.featured_image_url || '',
+            stock: item.stock ?? item.available_stock ?? item.inventory_quantity ?? item.quantity_available ?? undefined,
+            media,
+            gallery_media: galleryMedia,
+            video: primaryVideo?.video_url,
+            badge: item.is_flash_sale ? 'FLASH SALE' : item.is_new ? 'NEW' : undefined,
+            badges,
+            deliveryDate: item.delivery_time_estimate || '3-5 days',
+            deliveryTimeEstimate: item.delivery_time_estimate || undefined,
+            deliveryTimeDays: item.delivery_time_days || undefined,
+            isExpressDelivery: item.is_express_delivery ?? false,
+            deliveryScope: item.delivery_scope || undefined,
+            deliveryText: item.free_delivery ? 'Free delivery' : undefined,
+            shippingInfo: item.delivery_time_estimate || undefined,
+            description: item.description,
+            categoryId: item.category_id,
+            categoryName: item.category_name,
+            category: item.category,
+            lower_than_similar: item.lower_than_similar,
+            price_gap: item.price_gap,
+            similar_avg_price: item.similar_avg_price,
+            activeCoupon: item.activeCoupon, // Mapped from view
+            createdAt: item.created_at || item.createdAt || null,
+            // Modern deal fields from SQL view
+            deal_type: item.deal_type || 'standard',
+            coupon_name: item.activeCoupon?.label || undefined,
+            coupon_end: item.coupon_expires_at || undefined,
+            coupon_discount_percent: item.activeCoupon?.percent || undefined,
+            score: item.score || undefined,
+            personalization_score: item.personalization_score || undefined,
+            in_stock: item.stock > 0,
+
+            // Modern card features
+            is_new: item.is_new || false,
+            is_featured: item.is_featured || false,
+            brand_name: item.brand_name || undefined,
+            free_delivery: item.free_delivery || false,
+            delivery_time_estimate: item.delivery_time_estimate || undefined,
+            seller_rating: item.seller_rating || undefined,
+            vendor: item.business_name
+                ? {
+                    vendor_id: item.seller_id?.toString?.() || '',
+                    business_name: item.business_name,
+                    vendor_rating: item.seller_rating,
+                    review_count: item.review_count,
+                    is_verified: item.vendor_active,
+                  }
+                : undefined,
+        } as Product;
+    });
 };
 
 export interface SearchSuggestion {
@@ -922,41 +991,6 @@ export const fetchPersonalizedNavbarCategories = async (
     return data || [];
 };
 
-export interface TrendingCategoryOverlay {
-    parent_category_id: string;
-    parent_category_name: string;
-    parent_category_handle: string;
-    parent_category_sort_order: number;
-    subcategory_id: string;
-    subcategory_name: string;
-    subcategory_handle: string;
-    trending_product_id: string | null;
-    trending_product_name: string | null;
-    trending_product_image_url: string | null;
-    trend_score: number;
-    is_hot: boolean;
-    is_trending: boolean;
-    product_count: number;
-    hot_badge_text: string;
-    data_quality: string;
-}
-
-export const fetchTrendingCategoriesOverlay = async (userId?: string): Promise<TrendingCategoryOverlay[]> => {
-    console.log('Fetching trending categories overlay...', userId ? 'with personalization' : 'generic');
-    const { data, error } = await supabase
-        .rpc('get_trending_categories_overlay', {
-            limit_parent_categories: 35,
-            limit_subcategories_per_parent: 35
-        });
-
-    if (error) {
-        console.error('Error fetching trending categories overlay:', error);
-        return [];
-    }
-
-    console.log('Fetched trending categories overlay:', data?.length, 'items');
-    return data || [];
-};
 
 export interface RecentViewProduct {
     id: string;
@@ -1918,33 +1952,43 @@ export const checkShopNameAvailability = async (shopName: string): Promise<boole
     return true;
 };
 
-export const createBusinessProfile = async (
-    userId: string,
-    shopName: string,
-    description: string,
-    primaryCategory: string,
-    country: string
-): Promise<{ business: Business | null, error: any }> => {
-    const slug = shopName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
+// Accepts a full onboarding payload and inserts all fields
+export const createBusinessProfile = async (payload: {
+    user_id: string,
+    shop_name: string,
+    business_name: string,
+    business_slug: string,
+    business_description: string,
+    primary_category: string,
+    primary_category_description?: string,
+    business_type?: string,
+    business_email?: string,
+    business_phone?: string,
+    website_url?: string,
+    years_in_business?: number | string,
+    tax_id?: string,
+    registration_number?: string,
+    business_license_number?: string,
+    address_street?: string,
+    address_city?: string,
+    address_state?: string,
+    address_country?: string,
+    address_postal_code?: string;
+    follower_count?: number;
+    return_policy?: string;
+    shipping_policy?: string;
+    monthly_revenue?: string;
+    bank_details?: any;
+}): Promise<{ business: Business | null, error: any }> => {
     const { data, error } = await supabase
         .from('vendors')
-        .insert({
-            user_id: userId,
-            shop_name: shopName,
-            business_slug: slug,
-            business_description: description,
-            primary_category: primaryCategory,
-            follower_count: 0
-        })
+        .upsert(payload, { onConflict: 'user_id' })
         .select()
         .single();
-
     if (error) {
-        console.error('Error creating business profile:', error);
+        console.error('Error creating/updating business profile:', error);
         return { business: null, error };
     }
-
     return { business: data as Business, error: null };
 };
 
@@ -1972,48 +2016,73 @@ export const addVendorBankAccount = async (
     return { bankAccount: data as VendorBankAccount, error: null };
 };
 
-// Step 4: Assets & Policies
-export const uploadVendorMedia = async (file: File, bucketPath: string): Promise<{ url: string | null, id: string | null, error: any }> => {
+// Step 4: Assets & Policies - Upload to storage only
+export const uploadVendorMediaToStorage = async (file: File, bucketPath: string): Promise<{ url: string | null, path: string | null, error: any }> => {
     // 1. Upload to Storage
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
     const filePath = `${bucketPath}/${fileName}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('vendor-assets') // Assuming a bucket named 'vendor-assets' exists
+        .from('seller-documents')
         .upload(filePath, file);
 
     if (uploadError) {
         console.error('Error uploading file to storage:', uploadError);
-        return { url: null, id: null, error: uploadError };
+        return { url: null, path: null, error: uploadError };
     }
 
     // 2. Get Public URL
     const { data: { publicUrl } } = supabase.storage
-        .from('vendor-assets')
+        .from('seller-documents')
         .getPublicUrl(filePath);
 
-    // 3. Insert into 'media' table
-    const { data: mediaEntry, error: dbError } = await supabase
-        .from('media')
+    return { url: publicUrl, path: filePath, error: null };
+};
+
+// Create vendor media record in vendor_media table
+export const createVendorMediaRecord = async (
+    vendorId: string,
+    imageUrl: string,
+    storagePath: string,
+    mediaType: 'logo' | 'banner' | 'license' | 'other_document',
+    mimeType: string,
+    fileSize: number,
+    originalFilename: string,
+    uploadedBy?: string
+): Promise<{ id: string | null, error: any }> => {
+    const { data, error } = await supabase
+        .from('vendor_media')
         .insert({
-            image_url: publicUrl,
-            storage_path: filePath,
-            mime_type: file.type,
-            file_size: file.size,
-            original_filename: file.name,
-            media_type: 'image',
-            upload_source: 'seller_onboarding'
+            vendor_id: vendorId,
+            image_url: imageUrl,
+            storage_path: storagePath,
+            media_type: mediaType,
+            mime_type: mimeType,
+            file_size: fileSize,
+            original_filename: originalFilename,
+            uploaded_by: uploadedBy,
+            is_main: mediaType === 'logo' || mediaType === 'banner'
         })
-        .select()
+        .select('id')
         .single();
 
-    if (dbError) {
-        console.error('Error creating media record:', dbError);
-        return { url: publicUrl, id: null, error: dbError };
+    if (error) {
+        console.error('Error creating vendor media record:', error);
+        return { id: null, error };
     }
 
-    return { url: publicUrl, id: mediaEntry.id, error: null };
+    return { id: data.id, error: null };
+};
+
+// Legacy function - redirects to new flow
+export const uploadVendorMedia = async (file: File, bucketPath: string): Promise<{ url: string | null, id: string | null, error: any }> => {
+    const { url, path, error } = await uploadVendorMediaToStorage(file, bucketPath);
+    if (error) return { url: null, id: null, error };
+
+    // Can't create vendor_media record without vendor_id, so return null for id
+    // Callers should use the new two-step flow instead
+    return { url, id: null, error: null };
 };
 
 export const updateBusinessMedia = async (businessId: string, logoMediaId?: string, bannerMediaId?: string) => {
@@ -3195,9 +3264,10 @@ export async function rejectProduct(
 }
 
 // Seller Verification Functions
+// Seller Verification Functions
 export async function fetchPendingSellerVerifications(): Promise<SellerVerificationRequest[]> {
     try {
-        const { data, error } = await supabase
+        const { data: vendors, error } = await supabase
             .from('vendors')
             .select(`
                 id,
@@ -3210,7 +3280,11 @@ export async function fetchPendingSellerVerifications(): Promise<SellerVerificat
                 created_at,
                 verified_by,
                 verified_at,
-                verification_notes
+                verification_notes,
+                monthly_revenue,
+                years_in_business,
+                bank_details,
+                tax_id
             `)
             .eq('verification_status', 'pending')
             .order('created_at', { ascending: false });
@@ -3220,20 +3294,56 @@ export async function fetchPendingSellerVerifications(): Promise<SellerVerificat
             return [];
         }
 
-        const requests: SellerVerificationRequest[] = (data || []).map(vendor => ({
-            id: vendor.id,
-            user_id: vendor.user_id,
-            business_name: vendor.business_name,
-            business_email: vendor.business_email,
-            business_phone: vendor.business_phone,
-            business_address: vendor.business_address,
-            status: vendor.verification_status as 'pending' | 'approved' | 'rejected',
-            submitted_at: vendor.created_at,
-            reviewed_by: vendor.verified_by,
-            reviewed_at: vendor.verified_at,
-            rejection_reason: vendor.verification_notes,
-            verification_notes: vendor.verification_notes
-        }));
+        if (!vendors || vendors.length === 0) return [];
+
+        const vendorIds = vendors.map(v => v.id);
+
+        // Fetch media for these vendors
+        const { data: mediaData, error: mediaError } = await supabase
+            .from('vendor_media')
+            .select('*')
+            .in('vendor_id', vendorIds);
+
+        if (mediaError) {
+            console.error('Error fetching verification media:', mediaError);
+        }
+
+        const requests: SellerVerificationRequest[] = vendors.map(vendor => {
+            const vendorMedia = mediaData?.filter(m => m.vendor_id === vendor.id) || [];
+
+            // Map vendor_media to MediaItem format
+            const documents = vendorMedia.map(m => {
+                const isImage = m.media_type === 'logo' || m.media_type === 'banner' || m.mime_type?.startsWith('image/');
+                return {
+                    id: m.id,
+                    type: (isImage ? 'image' : 'video') as 'image' | 'video' | 'youtube',
+                    url: m.image_url,
+                    thumbnail: m.image_url,
+                    isMain: m.media_type === 'logo'
+                };
+            });
+
+            return {
+                id: vendor.id,
+                user_id: vendor.user_id,
+                business_name: vendor.business_name,
+                business_email: vendor.business_email,
+                business_phone: vendor.business_phone,
+                business_address: vendor.business_address,
+                tax_id: vendor.tax_id,
+                business_license: vendorMedia.find(m => m.media_type === 'license')?.image_url,
+                monthly_revenue: vendor.monthly_revenue,
+                years_in_business: vendor.years_in_business,
+                bank_details: vendor.bank_details,
+                documents: documents,
+                status: vendor.verification_status as 'pending' | 'approved' | 'rejected',
+                submitted_at: vendor.created_at,
+                reviewed_by: vendor.verified_by,
+                reviewed_at: vendor.verified_at,
+                rejection_reason: vendor.verification_notes,
+                verification_notes: vendor.verification_notes
+            };
+        });
 
         return requests;
     } catch (error) {
@@ -3805,6 +3915,7 @@ export interface SellerProfile {
     postal_code: string;
     country: string;
     return_settings?: any;
+    verification_status?: string;
 }
 
 export const fetchSellerProfile = async (sellerId: string): Promise<SellerProfile | null> => {
@@ -3813,7 +3924,6 @@ export const fetchSellerProfile = async (sellerId: string): Promise<SellerProfil
         .from('vendors')
         .select('*')
         .eq('user_id', sellerId)
-        .eq('verification_status', 'approved')
         .limit(1);
 
     if (error) {
@@ -3840,7 +3950,8 @@ export const fetchSellerProfile = async (sellerId: string): Promise<SellerProfil
         state: data.address_state || "",
         postal_code: data.address_postal_code || "",
         country: data.address_country || "",
-        return_settings: data.return_settings || {}
+        return_settings: data.return_settings || {},
+        verification_status: data.verification_status
     };
 };
 

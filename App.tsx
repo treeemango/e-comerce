@@ -891,6 +891,7 @@ const App: React.FC = () => {
           <SellerOnboardingView
             onComplete={() => {
               setCurrentView('seller-dashboard'); // Navigate to dashboard on success
+              setDashboardTab('account-profile'); // Redirect to profile to see verification status
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onCancel={() => {
@@ -1041,7 +1042,11 @@ const App: React.FC = () => {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }} />
       )}
-      <FloatingWidget />
+      <FloatingWidget
+        user={user}
+        activeConversationId={activeConversationId}
+        onRequireAuth={() => setShowBuyerAuthModal(true)}
+      />
     </div>
   );
 };

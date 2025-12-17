@@ -255,7 +255,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
           {/* Countdown Timer for Coupon Deals */}
           {product.deal_type === 'coupon' && timeRemaining && (
             <div className="absolute bottom-2 left-2 right-2 z-20">
-              <div className="bg-black/70 backdrop-blur-md rounded-lg px-2 py-1.5 text-white">
+              <div className="bg-black/50 backdrop-blur-md rounded-lg px-2 py-1.5 text-white">
                 <div className="text-[8px] font-semibold opacity-80 text-center mb-0.5">ENDS IN</div>
                 <div className="flex items-center justify-center gap-1 text-xs font-bold">
                   {timeRemaining.days > 0 && (
@@ -390,32 +390,32 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
             const scopeLabel = product.deliveryScope ? product.deliveryScope.replace(/_/g, ' ') : undefined;
             return (product.isExpressDelivery || deliveryLabel || scopeLabel || locationLabel);
           })() && (
-            <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-slate-700 dark:text-slate-200 mb-1.5">
-              {(product.deliveryTimeEstimate || product.deliveryTimeDays || product.deliveryDate) && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-slate-100 via-white to-slate-100 px-2.75 py-1 font-semibold text-slate-800 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm dark:from-slate-800/60 dark:via-slate-900/60 dark:to-slate-800/60 dark:text-slate-100 dark:ring-slate-700/70">
-                  <span className="material-icons !text-[13px] leading-none text-slate-500 dark:text-slate-300">
-                    {product.isExpressDelivery ? 'bolt' : 'local_shipping'}
+              <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-slate-700 dark:text-slate-200 mb-1.5">
+                {(product.deliveryTimeEstimate || product.deliveryTimeDays || product.deliveryDate) && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-slate-100 via-white to-slate-100 px-2.75 py-1 font-semibold text-slate-800 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm dark:from-slate-800/60 dark:via-slate-900/60 dark:to-slate-800/60 dark:text-slate-100 dark:ring-slate-700/70">
+                    <span className="material-icons !text-[13px] leading-none text-slate-500 dark:text-slate-300">
+                      {product.isExpressDelivery ? 'bolt' : 'local_shipping'}
+                    </span>
+                    <span className="leading-none">
+                      {product.isExpressDelivery ? 'Express' : 'Delivery'} {product.deliveryTimeEstimate || (product.deliveryTimeDays ? `${product.deliveryTimeDays} day${product.deliveryTimeDays === 1 ? '' : 's'}` : product.deliveryDate)}
+                    </span>
                   </span>
-                  <span className="leading-none">
-                    {product.isExpressDelivery ? 'Express' : 'Delivery'} {product.deliveryTimeEstimate || (product.deliveryTimeDays ? `${product.deliveryTimeDays} day${product.deliveryTimeDays === 1 ? '' : 's'}` : product.deliveryDate)}
-                  </span>
-                </span>
-              )}
+                )}
 
-              {product.deliveryScope && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
-                  <span className="material-icons !text-[13px] leading-none">travel_explore</span>
-                  <span className="leading-none">{product.deliveryScope.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}</span>
-                </span>
-              )}
-              {locationLabel && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
-                  <span className="material-icons !text-[13px] leading-none">public</span>
-                  <span className="leading-none">{locationLabel}</span>
-                </span>
-              )}
-            </div>
-          )}
+                {product.deliveryScope && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
+                    <span className="material-icons !text-[13px] leading-none">travel_explore</span>
+                    <span className="leading-none">{product.deliveryScope.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}</span>
+                  </span>
+                )}
+                {locationLabel && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
+                    <span className="material-icons !text-[13px] leading-none">public</span>
+                    <span className="leading-none">{locationLabel}</span>
+                  </span>
+                )}
+              </div>
+            )}
 
           {hasStock && (
             <div className="flex items-center gap-1.5 text-[10.5px] text-emerald-700 dark:text-emerald-200 mb-2">

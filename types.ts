@@ -16,12 +16,16 @@ export interface Product {
     createdAt?: string | null;
     media?: MediaItem[];
     gallery_media?: GalleryMediaItem[];
+    video?: string; // Primary video url if present
     badge?: string;
+    badges?: string[]; // Additional badges for cards (e.g. coupon, flash_sale)
     deliveryDate?: string;
     deliveryTimeEstimate?: string;
     deliveryTimeDays?: number;
     isExpressDelivery?: boolean;
     deliveryScope?: string;
+    deliveryText?: string;
+    shippingInfo?: string;
     description?: string;
     vendor?: VendorInfo;
     categoryId?: string;
@@ -43,13 +47,21 @@ export interface Product {
         savings: number;
     };
     // Deal-specific fields
-    deal_type?: 'coupon' | 'hot_discount' | 'standard';
+    deal_type?: 'coupon' | 'hot_discount' | 'flash_sale' | 'lightning_deal' | 'standard';
     coupon_name?: string;
     coupon_end?: string; // ISO date string for countdown
     coupon_discount_percent?: number;
     score?: number; // Overall product score
     personalization_score?: number; // 0.0-1.0 personalization match
     in_stock?: boolean; // Inventory availability flag
+
+    // Modern card features
+    is_new?: boolean;
+    is_featured?: boolean;
+    brand_name?: string;
+    free_delivery?: boolean;
+    delivery_time_estimate?: string;
+    seller_rating?: number;
 }
 
 // Product interface that includes similarity score
@@ -531,24 +543,46 @@ export interface OnboardingState {
     step: number;
     userId?: string;
     businessId?: string;
-    shopName: string;
-    businessLocation: string;
+    // Step 1: Authentication
     email: string;
     password: string;
     confirmPassword: string;
-    // Step 2
+    // Step 2: Basic Business Info
+    shopName: string;
+    businessName?: string;
+    businessLocation: string;
+    businessType?: string;
+    businessEmail?: string;
+    businessPhone?: string;
+    website?: string;
     description: string;
     categoryId: string;
-    // Step 3
+    categoryDescription?: string;
+    yearsInBusiness?: number | string;
+    // Step 3: Legal & Compliance
+    taxId?: string;
+    registrationNumber?: string;
+    businessLicenseNumber?: string;
+    // Step 4: Address
+    addressStreet?: string;
+    addressCity?: string;
+    addressState?: string;
+    addressCountry?: string;
+    addressPostalCode?: string;
+    // Step 5: Financial Details
+    monthlyRevenue?: string;
     bankName: string;
     accountHolder: string;
     accountNumber: string;
     routingNumber: string;
-    // Step 4
+    // Step 6: Assets & Policies
     logoFile: File | null;
     bannerFile: File | null;
+    businessLicenseFile?: File | null;
+    otherDocumentsFiles?: File[];
     returnPolicy: string;
     shippingPolicy: string;
+    // Status
     isLoading: boolean;
     error: string | null;
 }
@@ -990,6 +1024,10 @@ export interface SellerVerificationRequest {
     business_address?: string;
     tax_id?: string;
     business_license?: string;
+    years_in_business?: number;
+    monthly_revenue?: string;
+    bank_details?: any; // Displayed securely
+    documents?: MediaItem[];
     status: 'pending' | 'approved' | 'rejected';
     submitted_at: string;
     reviewed_by?: string;

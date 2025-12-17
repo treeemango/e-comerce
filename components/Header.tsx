@@ -60,7 +60,7 @@ const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     const loadOverlayData = async () => {
-      const data = await fetchTrendingCategoriesOverlay(user?.id);
+      const data = await fetchTrendingCategoriesOverlay();
       setOverlayData(data);
       if (data.length > 0) {
         setActiveParentCategoryId(data[0].parent_category_id);

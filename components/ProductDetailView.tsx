@@ -50,6 +50,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [similarItems, setSimilarItems] = useState<RelatedProduct[]>([]);
    const [isLoadingRelated, setIsLoadingRelated] = useState(false);
    const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+   const [hoverPreviewMedia, setHoverPreviewMedia] = useState<MediaItem | null>(null);
    const [userHasSelected, setUserHasSelected] = useState(false);
    const [isFollowing, setIsFollowing] = useState(false);
    const [isFollowLoading, setIsFollowLoading] = useState(false);
@@ -432,6 +433,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    }, [variantShowcaseMedia, userHasSelected]);
 
    const activeMedia = variantShowcaseMedia[activeMediaIndex] || variantShowcaseMedia[0];
+   const effectiveActiveMedia = hoverPreviewMedia ?? activeMedia;
 
    // Generate dynamic breadcrumbs from product category data
    const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
@@ -586,33 +588,33 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                </div>
 
                <div className="flex-1 relative aspect-[3/4] rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 shadow-sm">
-                  {activeMedia.type === 'youtube' ? (
+                  {effectiveActiveMedia.type === 'youtube' ? (
                      <div className="w-full h-full bg-black flex items-center justify-center">
                         <iframe
-                           src={`${activeMedia.video_url}?mute=1&autoplay=1&modestbranding=1&rel=0`}
+                           src={`${effectiveActiveMedia.video_url}?mute=1&autoplay=1&modestbranding=1&rel=0`}
                            title="Product video"
                            className="w-full h-full"
                            frameBorder="0"
                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         />
                      </div>
-                  ) : activeMedia.type === 'video' ? (
+                  ) : effectiveActiveMedia.type === 'video' ? (
                      <video
-                        src={activeMedia.video_url}
+                        src={effectiveActiveMedia.video_url}
                         controls
                         autoPlay
                         muted
                         playsInline
                         className="w-full h-full object-contain bg-black"
-                        poster={activeMedia.thumbnail_url || activeMedia.image_url}
+                        poster={effectiveActiveMedia.thumbnail_url || effectiveActiveMedia.image_url}
                      >
                         Your browser does not support the video tag.
                      </video>
                   ) : (
                      <div className="w-full h-full flex items-center justify-center p-3 bg-white dark:bg-slate-900">
                         <ImageMagnifier
-                           src={activeMedia.image_url!}
-                           alt={activeMedia.alt_text || product.title}
+                           src={effectiveActiveMedia.image_url!}
+                           alt={effectiveActiveMedia.alt_text || product.title}
                            className="w-full h-full flex items-center justify-center"
                         />
                      </div>
@@ -763,11 +765,28 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  const previewVariant = findVariantFor({ [colorOptionName]: label }) || variant;
                                  const variantPrice = previewVariant?.price ?? product.price;
                                  const variantStock = previewVariant?.stock;
+                                 const previewImage = previewVariant?.image || variant.image;
+                                 const previewMedia = previewImage
+                                    ? {
+                                       id: `hover-${label}`,
+                                       image_url: previewImage,
+                                       thumbnail_url: previewImage,
+                                       type: 'image' as const,
+                                       alt_text: `${product.title} - ${label}`
+                                    }
+                                    : null;
 
                                  return (
                                     <button
                                        key={label}
                                        onClick={() => setSelectedOptions(prev => ({ ...prev, [colorOptionName]: label }))}
+                                       onMouseEnter={() => {
+                                          if (previewMedia) {
+                                             setHoverPreviewMedia(previewMedia);
+                                             setUserHasSelected(true);
+                                          }
+                                       }}
+                                       onMouseLeave={() => setHoverPreviewMedia(null)}
                                        className={`relative flex items-center gap-3 p-3 rounded-xl border text-left transition-all shadow-sm ${isSelected
                                           ? 'border-orange-500 ring-1 ring-orange-500 bg-orange-50/70 dark:bg-orange-900/10'
                                           : 'border-slate-200 dark:border-slate-700 hover:border-orange-200 dark:hover:border-slate-600 bg-white dark:bg-slate-800'
