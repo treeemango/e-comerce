@@ -21,6 +21,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
   const [ripples, setRipples] = useState<Ripple[]>([]);
 
+  // Keep haptic feedback opt-in to real user activation to avoid browser blocking warnings
+  const triggerHaptic = () => {
+    if ('vibrate' in navigator && navigator.userActivation?.isActive) {
+      navigator.vibrate(10);
+    }
+  };
+
   const handleTabClick = (tabName: string, e: React.MouseEvent | React.TouchEvent) => {
     // Create ripple effect
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -41,9 +48,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     }, 600);
 
     // Navigate with haptic feedback (if supported)
-    if ('vibrate' in navigator) {
-      navigator.vibrate(10);
-    }
+    triggerHaptic();
 
     onTabChange(tabName);
   };

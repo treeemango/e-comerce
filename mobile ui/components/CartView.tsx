@@ -2,13 +2,21 @@ import React from 'react';
 import { Product } from '../types';
 import { ProductCard } from './ProductCard';
 
-interface CartViewProps {
-    cartItems: Product[];
-    recommendations: Product[];
-    onProductClick: (product: Product) => void;
+interface CartItem {
+    product: Product;
+    quantity: number;
 }
 
-export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, onProductClick }) => {
+interface CartViewProps {
+    cartItems: CartItem[];
+    recommendations: Product[];
+    onProductClick: (product: Product) => void;
+    onUpdateQuantity: (productId: string | number | undefined, quantity: number) => void;
+    onRemove: (productId: string | number | undefined) => void;
+    onCheckout: () => void;
+}
+
+export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, onProductClick, onUpdateQuantity, onRemove, onCheckout }) => {
     const formatPrice = (price: number, currency?: string) => {
         try {
             return new Intl.NumberFormat('en', {
@@ -21,10 +29,10 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
         }
     };
 
-    const subtotal = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
+    const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price || 0) * item.quantity, 0);
     const savings = cartItems.reduce((sum, item) => {
-        const original = item.originalPrice || item.price;
-        return sum + Math.max((original || 0) - (item.price || 0), 0);
+        const original = item.product.originalPrice || item.product.price;
+        return sum + Math.max((original || 0) - (item.product.price || 0), 0) * item.quantity;
     }, 0);
 
     return (
@@ -55,52 +63,88 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
             </div>
 
             {/* Cart Items */}
-            {cartItems.map((item, idx) => (
-                <div key={item.id ?? idx} className="bg-surface-light dark:bg-surface-dark mt-2 p-3 flex gap-3">
+            {cartItems.map((item, idx) => {
+                const stock = item.product.stock;
+                const remaining = typeof stock === 'number' ? Math.max(stock - item.quantity, 0) : null;
+                const barPct = typeof stock === 'number' && stock > 0 ? Math.max(Math.min((remaining / stock) * 100, 100), 0) : 100;
+                const isLow = typeof remaining === 'number' && remaining <= 3;
+
+                return (
+                <div key={item.product.id ?? idx} className="bg-surface-light dark:bg-surface-dark mt-2 p-3 flex gap-3">
                     <div className="flex items-center cursor-pointer">
                         <span className="material-icons-round text-black dark:text-white text-xl">check_circle</span>
                     </div>
                     <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-md flex-shrink-0 overflow-hidden border border-gray-100 dark:border-gray-700">
-                        <img src={item.image} className="w-full h-full object-cover" alt={item.title} />
+                        <img src={item.product.image} className="w-full h-full object-cover" alt={item.product.title} />
                     </div>
                     <div className="flex-grow min-w-0 flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start mb-1">
-                                <p className="text-xs text-black dark:text-white line-clamp-1 leading-tight">{item.title}</p>
-                                <button className="text-gray-400 hover:text-red-500">
+                                <p className="text-xs text-black dark:text-white line-clamp-1 leading-tight">{item.product.title}</p>
+                                <button className="text-gray-400 hover:text-red-500" onClick={() => onRemove(item.product.id)}>
                                     <span className="material-icons-outlined text-lg">delete</span>
                                 </button>
                             </div>
                             <div className="text-[10px] text-price-red font-bold mb-1">
-                                {item.deal_type === 'coupon' && item.activeCoupon?.label ? item.activeCoupon.label : item.deal_type === 'flash_sale' ? 'Flash sale' : item.badge}
+                                {item.product.deal_type === 'coupon' && item.product.activeCoupon?.label ? item.product.activeCoupon.label : item.product.deal_type === 'flash_sale' ? 'Flash sale' : item.product.badge}
                             </div>
                         </div>
 
                         <div className="flex justify-between items-end">
                             <div>
                                 <div className="flex items-baseline gap-1">
-                                    <span className="text-base font-bold text-price-red">{formatPrice(item.price, item.currency)}</span>
-                                    {item.originalPrice && (
-                                        <span className="text-xs text-gray-400 line-through">{formatPrice(item.originalPrice, item.currency)}</span>
+                                    <span className="text-base font-bold text-price-red">{formatPrice(item.product.price, item.product.currency)}</span>
+                                    {item.product.originalPrice && (
+                                        <span className="text-xs text-gray-400 line-through">{formatPrice(item.product.originalPrice, item.product.currency)}</span>
                                     )}
-                                    {item.discountPercent && (
-                                        <span className="text-[10px] text-price-red border border-price-red px-0.5 rounded ml-1 font-bold">-{item.discountPercent}%</span>
+                                    {item.product.discountPercent && (
+                                        <span className="text-[10px] text-price-red border border-price-red px-0.5 rounded ml-1 font-bold">-{item.product.discountPercent}%</span>
                                     )}
                                 </div>
-                                {item.deliveryTimeEstimate && (
+                                {item.product.deliveryTimeEstimate && (
                                     <div className="text-[10px] text-gray-500 flex items-center gap-0.5 mt-0.5">
-                                        {item.deliveryTimeEstimate}
+                                        {item.product.deliveryTimeEstimate}
                                     </div>
                                 )}
                             </div>
-                            <div className="border border-gray-300 dark:border-gray-600 rounded px-2 py-0.5 flex items-center gap-2 cursor-pointer bg-white dark:bg-black">
-                                <span className="text-xs font-medium text-black dark:text-white">1</span>
-                                <span className="material-icons-outlined text-[12px] text-gray-500">expand_more</span>
+                            <div className="flex flex-col items-end gap-1 w-28">
+                                {typeof stock === 'number' && (
+                                    <div className="w-full space-y-1">
+                                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-600 dark:text-gray-200">
+                                            <span>Vendor stock</span>
+                                            <span className={isLow ? 'text-orange-600 dark:text-orange-400' : ''}>{remaining} left</span>
+                                        </div>
+                                        <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full ${isLow ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-green-500 to-emerald-500'}`}
+                                                style={{ width: `${barPct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="border border-gray-300 dark:border-gray-600 rounded px-2 py-0.5 flex items-center gap-2 bg-white dark:bg-black">
+                                    <button
+                                        aria-label="Decrease quantity"
+                                        className="text-gray-500 text-sm"
+                                        onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
+                                    >
+                                        -
+                                    </button>
+                                    <span className="text-xs font-medium text-black dark:text-white min-w-[16px] text-center">{item.quantity}</span>
+                                    <button
+                                        aria-label="Increase quantity"
+                                        className="text-gray-500 text-sm"
+                                        onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+                                        disabled={typeof stock === 'number' && item.quantity >= stock}
+                                    >
+                                        +
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            ))}
+            );})}
 
             {/* Unavailable */}
             <div className="bg-surface-light dark:bg-surface-dark mt-2 p-3">
@@ -178,12 +222,12 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
             <div className="fixed bottom-[50px] left-0 right-0 bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 p-2 z-40 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                 <div className="flex flex-col items-start ml-2">
                     <div className="text-lg font-bold text-black dark:text-white flex items-center gap-1 leading-none">
-                        {formatPrice(subtotal, cartItems[0]?.currency)} <span className="material-icons-outlined text-sm text-gray-500">expand_less</span>
+                        {formatPrice(subtotal, cartItems[0]?.product.currency)} <span className="material-icons-outlined text-sm text-gray-500">expand_less</span>
                     </div>
-                    <div className="text-price-red text-xs font-bold mt-0.5">{savings > 0 ? `${formatPrice(savings, cartItems[0]?.currency)} saved` : ''}</div>
+                    <div className="text-price-red text-xs font-bold mt-0.5">{savings > 0 ? `${formatPrice(savings, cartItems[0]?.product.currency)} saved` : ''}</div>
                 </div>
-                <button className="bg-primary hover:bg-orange-600 text-white font-bold rounded-full px-10 py-2.5 shadow-md transition-colors text-sm">
-                    Checkout ({cartItems.length})
+                <button className="bg-primary hover:bg-orange-600 text-white font-bold rounded-full px-10 py-2.5 shadow-md transition-colors text-sm" onClick={onCheckout}>
+                    Checkout ({cartItems.reduce((sum, item) => sum + item.quantity, 0)})
                 </button>
             </div>
         </div>

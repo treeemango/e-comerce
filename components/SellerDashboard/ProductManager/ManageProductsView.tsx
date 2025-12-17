@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchFilteredProducts, updateProductDetails } from '../../../lib/api';
-import { Product } from '../../../types';
+import { Product, ProductStatus } from '../../../types';
 import QuickEditModal, { ProductUpdates } from './QuickEditModal';
 
 interface ManageProductsViewProps {
@@ -9,36 +9,66 @@ interface ManageProductsViewProps {
     sellerId: string;
 }
 
+type ProductStatusFilter = 'all' | 'archive' | 'inactive' | 'incomplete' | 'draft' | 'deleted';
+
+const statusApiMap: Record<ProductStatusFilter, ProductStatus | 'all'> = {
+    all: 'all',
+    archive: 'archived',
+    inactive: 'inactive',
+    incomplete: 'incomplete',
+    draft: 'draft',
+    deleted: 'deleted'
+};
+
+const statusThemes: Record<string, { label: string; badge: string; text: string }> = {
+    approved: { label: 'Active', badge: 'bg-green-100 text-green-800', text: 'text-green-800' },
+    active: { label: 'Active', badge: 'bg-green-100 text-green-800', text: 'text-green-800' },
+    archived: { label: 'Archived', badge: 'bg-gray-100 text-gray-800', text: 'text-gray-800' },
+    inactive: { label: 'Inactive', badge: 'bg-amber-100 text-amber-800', text: 'text-amber-800' },
+    incomplete: { label: 'Incomplete', badge: 'bg-yellow-100 text-yellow-800', text: 'text-yellow-800' },
+    draft: { label: 'Draft', badge: 'bg-slate-100 text-slate-800', text: 'text-slate-800' },
+    deleted: { label: 'Deleted', badge: 'bg-red-100 text-red-700', text: 'text-red-700' },
+};
+
 const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, sellerId }) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeFilter, setActiveFilter] = useState<'all' | 'archive' | 'inactive' | 'incomplete' | 'draft' | 'deleted'>('all');
+    const [activeFilter, setActiveFilter] = useState<ProductStatusFilter>('all');
     const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-    const filters = [
-        { id: 'all', label: 'All' },
-        { id: 'archive', label: 'Archive' },
-        { id: 'inactive', label: 'Inactive' },
-        { id: 'incomplete', label: 'Incomplete' },
-        { id: 'draft', label: 'Draft' },
-        { id: 'deleted', label: 'Deleted' },
+    const filters: { id: ProductStatusFilter; label: string; hint?: string }[] = [
+        { id: 'all', label: 'All', hint: 'Everything you listed' },
+        { id: 'archive', label: 'Archive', hint: 'Hidden from buyers' },
+        { id: 'inactive', label: 'Inactive', hint: 'Temporarily paused' },
+        { id: 'incomplete', label: 'Incomplete', hint: 'Needs data to go live' },
+        { id: 'draft', label: 'Draft', hint: 'Work in progress' },
+        { id: 'deleted', label: 'Deleted', hint: 'Removed items' },
     ];
+
+    const formatDate = (value?: string | null) => {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
 
     const loadProducts = async () => {
         setIsLoading(true);
+        setSelectedProducts([]);
         if (sellerId) {
             // Fetch products for this seller
             // We pass empty appliedFilters to get all products for the vendor
+            const statusValue = statusApiMap[activeFilter];
             const data = await fetchFilteredProducts(searchQuery, {
                 category_ids: [],
                 brand_ids: [],
                 price_min: null,
                 price_max: null,
                 attributes: {}
-            }, sellerId);
+            }, sellerId, statusValue === 'all' ? null : statusValue);
             setProducts(data);
         }
         setIsLoading(false);
@@ -47,7 +77,7 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
     useEffect(() => {
         // Debounce search could be added here, but for now simple dependency is fine for reasonable item counts
         loadProducts();
-    }, [sellerId, searchQuery]);
+    }, [sellerId, searchQuery, activeFilter]);
 
     const handleEditProduct = (product: Product) => {
         setEditingProduct(product);
@@ -119,13 +149,19 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                 {filters.map(filter => (
                     <button
                         key={filter.id}
-                        onClick={() => setActiveFilter(filter.id as any)}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeFilter === filter.id
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        onClick={() => setActiveFilter(filter.id)}
+                        className={`flex-1 px-4 py-2 rounded-md text-left transition-colors border ${activeFilter === filter.id
+                            ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                            : 'text-gray-700 border-transparent hover:border-gray-200 hover:bg-gray-50'
                             }`}
                     >
-                        {filter.label}
+                        <div className="flex items-center gap-2">
+                            <span className="material-icons text-sm opacity-70">label</span>
+                            <div className="flex flex-col leading-tight">
+                                <span className="text-sm font-semibold">{filter.label}</span>
+                                {filter.hint && <span className="text-[11px] text-gray-400">{filter.hint}</span>}
+                            </div>
+                        </div>
                     </button>
                 ))}
             </div>
@@ -169,6 +205,7 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                     Category
                                 </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Units</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Price</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Rating</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -195,11 +232,18 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                                             />
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">
-                                                Active
-                                            </span>
-                                            {/* We don't have created_at in Product interface yet, using deliveryDate as placeholder or empty */}
-                                            <div className="text-xs text-gray-500 mt-1">{product.deliveryDate || '-'}</div>
+                                            {(() => {
+                                                const statusKey = (product.status || 'approved').toString();
+                                                const theme = statusThemes[statusKey] || { label: statusKey, badge: 'bg-gray-100 text-gray-800', text: 'text-gray-800' };
+                                                return (
+                                                    <div>
+                                                        <span className={`px-2 py-1 text-xs font-semibold rounded ${theme.badge}`}>
+                                                            {theme.label}
+                                                        </span>
+                                                        <div className="text-xs text-gray-500 mt-1">{formatDate(product.createdAt || product.deliveryDate)}</div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-start gap-3">
@@ -210,7 +254,10 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                                         <td className="px-4 py-3 text-sm text-gray-600">
                                             {product.categoryName || '-'}
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">£{product.price}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                            {typeof product.stock === 'number' ? product.stock : '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">{product.currency || '£'}{product.price}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600">{product.rating} ({product.reviews})</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">

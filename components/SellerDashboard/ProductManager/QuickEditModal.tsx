@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product } from '../../../types';
+import { Product, ProductStatus } from '../../../types';
 
 interface QuickEditModalProps {
     isOpen: boolean;
@@ -9,16 +9,24 @@ interface QuickEditModalProps {
 }
 
 export interface ProductUpdates {
+    title: string;
+    categoryName?: string;
     price: number;
     originalPrice: number;
+    stock?: number;
+    status?: ProductStatus;
     promoText: string;
     promoCode?: string;
     youtubeUrl: string;
 }
 
 const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave, product }) => {
+    const [title, setTitle] = useState('');
+    const [categoryName, setCategoryName] = useState('');
     const [price, setPrice] = useState<number | ''>(0);
     const [originalPrice, setOriginalPrice] = useState<number | ''>(0);
+    const [stock, setStock] = useState<number | ''>('');
+    const [status, setStatus] = useState<ProductStatus | undefined>('approved');
     const [promoText, setPromoText] = useState('');
     const [youtubeUrl, setYoutubeUrl] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -27,8 +35,12 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
     // Initialize state when product changes or modal opens
     useEffect(() => {
         if (isOpen && product) {
+            setTitle(product.title || '');
+            setCategoryName(product.categoryName || '');
             setPrice(product.price || 0);
             setOriginalPrice(product.originalPrice || 0); // Assuming originalPrice is available on Product
+            setStock(typeof product.stock === 'number' ? product.stock : '');
+            setStatus(product.status || 'approved');
             setPromoText(product.promoText || '');
 
             // Try to find youtube URL in media
@@ -44,6 +56,11 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
         setError(null);
 
         // Validation
+        if (!title.trim()) {
+            setError('Product name is required.');
+            return;
+        }
+
         if (price === '' || originalPrice === '') {
             setError('Price and Original Price are required.');
             return;
@@ -59,11 +76,20 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
             return;
         }
 
+        if (stock !== '' && Number(stock) < 0) {
+            setError('Units in stock cannot be negative.');
+            return;
+        }
+
         try {
             setIsSaving(true);
             await onSave(product.id.toString(), {
+                title: title.trim(),
+                categoryName: categoryName.trim() || undefined,
                 price: Number(price),
                 originalPrice: Number(originalPrice),
+                stock: stock === '' ? undefined : Number(stock),
+                status,
                 promoText,
                 youtubeUrl
             });
@@ -97,6 +123,34 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
                         </div>
                     )}
 
+                    {/* Basics */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Product name
+                            </label>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                                placeholder="e.g. Wireless earbuds"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Category
+                            </label>
+                            <input
+                                type="text"
+                                value={categoryName}
+                                onChange={(e) => setCategoryName(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                                placeholder="e.g. Audio & Video"
+                            />
+                        </div>
+                    </div>
+
                     {/* Price Inputs */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -126,6 +180,40 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({ isOpen, onClose, onSave
                                 min="0"
                                 step="0.01"
                             />
+                        </div>
+                    </div>
+
+                    {/* Inventory & Status */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Units in stock
+                            </label>
+                            <input
+                                type="number"
+                                value={stock}
+                                onChange={(e) => setStock(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                                placeholder="0"
+                                min="0"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Status
+                            </label>
+                            <select
+                                value={status}
+                                onChange={(e) => setStatus(e.target.value as ProductStatus)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 bg-white"
+                            >
+                                <option value="approved">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="archived">Archived</option>
+                                <option value="draft">Draft</option>
+                                <option value="incomplete">Incomplete</option>
+                                <option value="deleted">Deleted</option>
+                            </select>
                         </div>
                     </div>
 

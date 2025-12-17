@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus } from '@/types';
 
 export interface LightningDealItem {
     id: string;
@@ -592,13 +592,36 @@ export const fetchVendorInfo = async (productIds: string[]): Promise<Map<string,
 export const fetchFilteredProducts = async (
     searchQuery: string,
     appliedFilters: AppliedFilters,
-    vendorId?: string
+    vendorId?: string,
+    statusFilter?: ProductStatus | ProductStatus[] | 'all' | null
 ): Promise<Product[]> => {
+    const normalizeStatus = (value?: ProductStatus | ProductStatus[] | 'all' | null) => {
+        if (value === 'all' || value === null) return null;
+        const map: Record<string, ProductStatus> = {
+            active: 'approved',
+            archive: 'archived'
+        };
+
+        if (Array.isArray(value)) {
+            return value.map(v => map[v] || v);
+        }
+
+        const resolved = value ?? 'approved';
+        return map[resolved] || resolved;
+    };
+
+    const normalizedStatus = normalizeStatus(statusFilter);
+
     let query = supabase
         .from('products_with_media')
         .select('*')
-        .eq('status', 'approved')
         .order('created_at', { ascending: false }); // Newest first
+
+    if (Array.isArray(normalizedStatus) && normalizedStatus.length > 0) {
+        query = query.in('status', normalizedStatus);
+    } else if (typeof normalizedStatus === 'string' && normalizedStatus.length > 0) {
+        query = query.eq('status', normalizedStatus);
+    }
 
     // Apply text search if provided
     if (searchQuery) {
@@ -665,6 +688,8 @@ export const fetchFilteredProducts = async (
         categoryId: item.category_id,
         categoryName: item.category_name,
         category: item.category,
+        stock: item.stock ?? item.stock_quantity ?? item.inventory ?? item.quantity ?? null,
+        status: item.status || 'approved',
         lower_than_similar: item.lower_than_similar,
         price_gap: item.price_gap,
         similar_avg_price: item.similar_avg_price,
@@ -677,7 +702,7 @@ export const fetchFilteredProducts = async (
         coupon_discount_percent: item.activeCoupon?.percent || undefined,
         score: item.score || undefined,
         personalization_score: item.personalization_score || undefined,
-        in_stock: item.stock > 0
+        in_stock: typeof item.in_stock === 'boolean' ? item.in_stock : (item.stock ?? 0) > 0
     }));
 
     // Fetch vendor information for filtered products
@@ -4075,11 +4100,16 @@ export const getMessageAttachmentUrl = (path: string) => {
 };
 
 export const updateProductDetails = async (productId: string | number, updates: {
-    price: number;
-    originalPrice: number;
+    price?: number;
+    originalPrice?: number;
     promoText?: string;
     promoCode?: string;
     youtubeUrl?: string;
+    title?: string;
+    categoryId?: string;
+    categoryName?: string;
+    status?: ProductStatus;
+    stock?: number;
 }) => {
     console.log('Updating product details:', productId, updates);
     const {
@@ -4087,42 +4117,59 @@ export const updateProductDetails = async (productId: string | number, updates: 
         originalPrice,
         promoText,
         promoCode,
-        youtubeUrl
+        youtubeUrl,
+        title,
+        categoryId,
+        categoryName,
+        status,
+        stock
     } = updates;
 
-    // STEP 1: Update Product Metadata (Promos)
-    const { error: productError } = await supabase
-        .from('products')
-        .update({
-            promo_text: promoText,
-            promo_code: promoCode
-        })
-        .eq('id', productId);
+    const productUpdatePayload: Record<string, any> = {};
+    if (typeof promoText !== 'undefined') productUpdatePayload.promo_text = promoText;
+    if (typeof promoCode !== 'undefined') productUpdatePayload.promo_code = promoCode;
+    if (typeof title === 'string' && title.trim()) productUpdatePayload.title = title.trim();
+    if (typeof categoryId === 'string') productUpdatePayload.category_id = categoryId;
+    if (typeof categoryName === 'string') productUpdatePayload.category_name = categoryName;
+    if (status) productUpdatePayload.status = status === 'active' ? 'approved' : status;
+    if (typeof stock === 'number') productUpdatePayload.stock = stock;
 
-    if (productError) {
-        console.error('Error updating product promo:', productError);
-        throw new Error("Failed to update product promo text");
+    if (Object.keys(productUpdatePayload).length > 0) {
+        const { error: productError } = await supabase
+            .from('products')
+            .update(productUpdatePayload)
+            .eq('id', productId);
+
+        if (productError) {
+            console.error('Error updating product metadata:', productError);
+            throw new Error("Failed to update product metadata");
+        }
     }
 
     // STEP 2: Update Pricing (Default Variant)
     // We update the variant where is_default = true
-    const discountPercent = (originalPrice && price && originalPrice > price)
-        ? Math.round(((originalPrice - price) / originalPrice) * 100)
-        : 0;
+    const variantUpdatePayload: Record<string, any> = {};
+    if (typeof price === 'number') variantUpdatePayload.price = price;
+    if (typeof originalPrice === 'number') variantUpdatePayload.compare_at_price = originalPrice;
+    if (typeof price === 'number' && typeof originalPrice === 'number' && originalPrice > 0) {
+        const discountPercent = originalPrice > price
+            ? Math.round(((originalPrice - price) / originalPrice) * 100)
+            : 0;
+        variantUpdatePayload.discount_percent = discountPercent;
+    }
+    if (typeof stock === 'number') variantUpdatePayload.stock = stock;
 
-    const { error: variantError } = await supabase
-        .from('product_variants')
-        .update({
-            price: price,
-            compare_at_price: originalPrice,
-            discount_percent: discountPercent
-        })
-        .eq('product_id', productId)
-        .eq('is_default', true);
+    if (Object.keys(variantUpdatePayload).length > 0) {
+        const { error: variantError } = await supabase
+            .from('product_variants')
+            .update(variantUpdatePayload)
+            .eq('product_id', productId)
+            .eq('is_default', true);
 
-    if (variantError) {
-        console.error('Error updating product variant price:', variantError);
-        throw new Error("Failed to update product pricing");
+        if (variantError) {
+            console.error('Error updating product variant price:', variantError);
+            throw new Error("Failed to update product pricing");
+        }
     }
 
     // STEP 3: Update or Insert YouTube Link

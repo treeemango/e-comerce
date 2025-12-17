@@ -4,9 +4,10 @@ import { Product } from '@/types';
 interface ProductCardProps {
     product: Product;
     onClick?: () => void;
+    onAddToCart?: (product: Product) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAddToCart }) => {
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isPressed, setIsPressed] = useState(false);
 
@@ -22,10 +23,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
         }
     };
 
-    // Haptic feedback function
+    // Haptic feedback function gated by user activation to avoid browser intervention warnings
     const triggerHaptic = () => {
-        if ('vibrate' in navigator) {
-            // Short, subtle vibration (10ms)
+        if ('vibrate' in navigator && navigator.userActivation?.isActive) {
             navigator.vibrate(10);
         }
     };
@@ -34,6 +34,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
     const handlePressStart = () => {
         setIsPressed(true);
         triggerHaptic();
+    };
+
+    // Handle hover start (no haptic to keep browsers happy)
+    const handleHoverStart = () => {
+        setIsPressed(true);
     };
 
     // Handle touch/press end
@@ -110,13 +115,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
             onClick={onClick}
             onTouchStart={handlePressStart}
             onTouchEnd={handlePressEnd}
-            onMouseEnter={handlePressStart}
+            onMouseDown={handlePressStart}
+            onMouseUp={handlePressEnd}
+            onMouseEnter={handleHoverStart}
             onMouseLeave={handlePressEnd}
         >
             {/* Image Container */}
-            <div className="aspect-[3/4] overflow-hidden bg-gray-200 dark:bg-gray-800 relative">
+            <div className="aspect-square overflow-hidden bg-gray-200 dark:bg-gray-800 relative">
                 <img
-                    src={product.image}
+                    src={product.image || 'https://images.unsplash.com/photo-1560393464-5c69a73c5770?auto=format&fit=crop&q=80&w=400'}
                     alt={product.title}
                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
@@ -265,7 +272,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
                 <div className="mb-2 pr-10">
                     <div className="flex items-baseline gap-2 mb-1">
                         <span className="text-lg font-bold text-gray-900 dark:text-white">
-                            {formatPrice(product.price, product.currency)}
+                            {formatPrice(product.price || 0, product.currency)}
                         </span>
                         {product.originalPrice && (
                             <span className="text-sm line-through text-gray-500">
@@ -296,17 +303,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
                 </div>
 
                 {/* Modern Cart Button - Bottom Right - Small Circular Icon */}
-                <button
-                    className="absolute bottom-2.5 right-2 w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 flex items-center justify-center hover:border-primary hover:bg-primary/5 active:scale-90 transition-all"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        triggerHaptic();
-                        // Add to cart logic here
-                    }}
-                    aria-label="Add to cart"
-                >
-                    <span className="material-icons-outlined text-gray-500 dark:text-gray-400 text-[18px]">add_shopping_cart</span>
-                </button>
+                {onAddToCart && (
+                    <button
+                        className="absolute bottom-2.5 right-2 w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 flex items-center justify-center hover:border-primary hover:bg-primary/5 active:scale-90 transition-all"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            triggerHaptic();
+                            onAddToCart(product);
+                        }}
+                        aria-label="Add to cart"
+                    >
+                        <span className="material-icons-outlined text-gray-500 dark:text-gray-400 text-[18px]">add_shopping_cart</span>
+                    </button>
+                )}
             </div>
         </div>
     );

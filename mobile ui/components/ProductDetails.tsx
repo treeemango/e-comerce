@@ -7,6 +7,8 @@ interface ProductDetailsProps {
     onBack: () => void;
     onProductClick: (product: Product) => void;
     recommendations: Product[];
+    onAddToCart?: (product: Product) => void;
+    onBuyNow?: (product: Product) => void;
 }
 
 interface TouchPosition {
@@ -15,7 +17,7 @@ interface TouchPosition {
     time: number;
 }
 
-export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack, onProductClick, recommendations }) => {
+export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack, onProductClick, recommendations, onAddToCart, onBuyNow }) => {
     const [currentImage, setCurrentImage] = useState(0);
     const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
     const [isTransitioning, setIsTransitioning] = useState(false);
@@ -394,8 +396,23 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     <span className="material-icons-outlined text-xl">chat_bubble_outline</span>
                     <span className="text-[10px]">Chat</span>
                 </div>
-                <button className="flex-grow bg-primary hover:bg-orange-600 text-white font-bold rounded-full py-3 text-sm shadow-md transition-colors">
-                    Select an option
+                <button
+                    className="flex-1 bg-white dark:bg-black text-primary dark:text-white font-bold rounded-full py-3 text-sm shadow-md border border-primary/30 dark:border-gray-700 transition-colors"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToCart?.(product);
+                    }}
+                >
+                    Add to cart
+                </button>
+                <button
+                    className="flex-1 bg-primary hover:bg-orange-600 text-white font-bold rounded-full py-3 text-sm shadow-md transition-colors"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onBuyNow?.(product);
+                    }}
+                >
+                    Buy now
                 </button>
             </div>
 
@@ -418,23 +435,39 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         {/* Check if current image is a video */}
                         {(() => {
                             const currentMedia = product.gallery_media?.[currentImage];
-                            const isYouTubeVideo = currentMedia?.type === 'youtube' || currentMedia?.video_url?.includes('youtube.com') || currentMedia?.video_url?.includes('youtu.be');
-                            const videoUrl = currentMedia?.video_url || (isYouTubeVideo ? currentMedia?.image_url : null);
+                            const videoUrl = currentMedia?.video_url || currentMedia?.image_url;
+                            const isYouTubeVideo = currentMedia?.type === 'youtube'
+                                || videoUrl?.includes('youtube.com')
+                                || videoUrl?.includes('youtu.be');
 
                             if (isYouTubeVideo && videoUrl) {
-                                // Extract YouTube video ID
-                                const videoId = videoUrl.includes('youtube.com/watch?v=')
-                                    ? videoUrl.split('v=')[1]?.split('&')[0]
-                                    : videoUrl.includes('youtu.be/')
-                                        ? videoUrl.split('youtu.be/')[1]?.split('?')[0]
-                                        : null;
+                                // Extract YouTube video ID from common URL shapes (watch, share, embed, shorts)
+                                const extractYouTubeId = (url: string) => {
+                                    try {
+                                        const parsed = new URL(url.replace('youtu.be/', 'youtube.com/watch?v='));
+                                        const directId = parsed.searchParams.get('v');
+                                        if (directId) return directId;
+                                        const path = parsed.pathname.split('/').filter(Boolean);
+                                        const embedIdx = path.indexOf('embed');
+                                        if (embedIdx >= 0 && path[embedIdx + 1]) return path[embedIdx + 1];
+                                        const shortsIdx = path.indexOf('shorts');
+                                        if (shortsIdx >= 0 && path[shortsIdx + 1]) return path[shortsIdx + 1];
+                                        // fallback: last path segment
+                                        return path[path.length - 1];
+                                    } catch {
+                                        return null;
+                                    }
+                                };
+
+                                const videoId = extractYouTubeId(videoUrl);
 
                                 if (videoId) {
+                                    const embedSrc = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${videoId}&modestbranding=1&rel=0&playsinline=1`;
                                     return (
                                         <iframe
-                                            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${videoId}&modestbranding=1&rel=0`}
+                                            src={embedSrc}
                                             className="w-full h-full max-w-screen max-h-screen"
-                                            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                             allowFullScreen
                                             title="Product video"
                                         />

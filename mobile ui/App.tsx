@@ -12,20 +12,28 @@ import { SearchOverlay } from './components/SearchOverlay';
 import { SearchResults } from './components/SearchResults';
 import { AccountOverlay } from './components/AccountOverlay';
 import { CartView } from './components/CartView';
+import { CheckoutSheet } from './components/CheckoutSheet';
 import { ProductDetails } from './components/ProductDetails';
 import { AccountSection } from './components/AccountSection';
 import { SellerAccess } from './components/SellerAccess';
 import { SellerDashboard } from './components/SellerDashboard';
-import { fetchProducts, fetchNavbarCategories, NavbarCategory } from '@/lib/api';
+import { BuyerMessagesView } from './components/BuyerMessagesView';
+import { SellerOnboardingView } from './components/SellerOnboardingView';
+import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount } from '@/lib/api';
 import { Product } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 
-type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout';
+type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages';
+
+type CartItem = {
+    product: Product;
+    quantity: number;
+};
 
 const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('home');
     const [products, setProducts] = useState<Product[]>([]);
-    const [cartItems, setCartItems] = useState<Product[]>([]);
+    const [cartItems, setCartItems] = useState<CartItem[]>([]);
     const [categories, setCategories] = useState<NavbarCategory[]>([]);
     const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -40,6 +48,9 @@ const App: React.FC = () => {
     const [selectedCategoryForSubs, setSelectedCategoryForSubs] = useState<{ id: string; name: string } | null>(null);
     const [activeSubcategoryId, setActiveSubcategoryId] = useState<string>('all');
     const [categoryViewOpen, setCategoryViewOpen] = useState<{ departmentId: string; departmentName: string } | null>(null);
+    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [buyerMessageCount, setBuyerMessageCount] = useState(0);
+    const [isOnboarding, setIsOnboarding] = useState(false);
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -66,7 +77,7 @@ const App: React.FC = () => {
                     fetchNavbarCategories()
                 ]);
                 setProducts(fetchedProducts);
-                setCartItems(fetchedProducts.slice(0, 2));
+                setCartItems([]);
                 setCategories(fetchedCategories);
             } catch (error) {
                 console.error("Failed to load data", error);
@@ -85,6 +96,10 @@ const App: React.FC = () => {
         const role = userProfile?.role?.toString?.().toLowerCase?.();
         const sellerRoles = ['seller', 'vendor', 'admin', 'staff'];
         setSellerView(role && sellerRoles.includes(role) ? 'dashboard' : 'guest');
+
+        if (userProfile?.id) {
+            getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
+        }
     }, [userProfile]);
 
     useEffect(() => {
@@ -101,6 +116,10 @@ const App: React.FC = () => {
             }
             if (isAccountOpen) {
                 setIsAccountOpen(false);
+                return;
+            }
+            if (isOnboarding) {
+                setIsOnboarding(false);
                 return;
             }
             if (typeof view === 'string') {
@@ -276,6 +295,14 @@ const App: React.FC = () => {
                     </AccountSection>
                 );
             }
+            case 'messages': {
+                if (!userProfile?.id) return null;
+                return <BuyerMessagesView userId={userProfile.id} onBack={() => {
+                    setActiveAccountSection(null);
+                    // Refresh count when coming back
+                    getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
+                }} />;
+            }
             default:
                 return null;
         }
@@ -291,6 +318,31 @@ const App: React.FC = () => {
         setSearchQuery(null);
         setActiveTab('home');
     };
+
+    const addToCart = (product: Product) => {
+        setCartItems((prev) => {
+            const existingIndex = prev.findIndex((item) => item.product.id === product.id);
+            if (existingIndex >= 0) {
+                const next = [...prev];
+                next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + 1 };
+                return next;
+            }
+            return [...prev, { product, quantity: 1 }];
+        });
+    };
+
+    const updateCartQuantity = (productId: string | number | undefined, quantity: number) => {
+        setCartItems((prev) => prev
+            .map((item) => item.product.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item)
+            .filter((item) => item.quantity > 0));
+    };
+
+    const removeFromCart = (productId: string | number | undefined) => {
+        setCartItems((prev) => prev.filter((item) => item.product.id !== productId));
+    };
+
+    const openCheckout = () => setIsCheckoutOpen(true);
+    const closeCheckout = () => setIsCheckoutOpen(false);
 
     const handleProductClick = (product: Product) => {
         setSelectedProduct(product);
@@ -368,7 +420,16 @@ const App: React.FC = () => {
 
         switch (activeTab) {
             case 'cart':
-                return <CartView cartItems={cartItems} recommendations={products.slice(0, 4)} onProductClick={handleProductClick} />;
+                return (
+                    <CartView
+                        cartItems={cartItems}
+                        recommendations={products.slice(0, 4)}
+                        onProductClick={handleProductClick}
+                        onUpdateQuantity={updateCartQuantity}
+                        onRemove={removeFromCart}
+                        onCheckout={openCheckout}
+                    />
+                );
             case 'categories':
                 return (
                     <CategoriesPage
@@ -398,7 +459,7 @@ const App: React.FC = () => {
                 ) : (
                     <SellerAccess
                         onLogin={handleSellerAuth}
-                        onSignup={handleSellerAuth}
+                        onSignup={() => setIsOnboarding(true)}
                         onBackToShop={() => setActiveTab('home')}
                     />
                 );
@@ -449,6 +510,7 @@ const App: React.FC = () => {
                                 <HomeView
                                     products={filteredProducts}
                                     onProductClick={handleProductClick}
+                                    onAddToCart={addToCart}
                                     showPromotions={activeCategoryId === 'all' && (!selectedCategoryForSubs || activeSubcategoryId === 'all')}
                                 />
                             )}
@@ -505,6 +567,7 @@ const App: React.FC = () => {
                         <HomeView
                             products={filteredProducts}
                             onProductClick={handleProductClick}
+                            onAddToCart={addToCart}
                             showPromotions={false}
                         />
                     </div>
@@ -517,6 +580,11 @@ const App: React.FC = () => {
                     onBack={() => setSelectedProduct(null)}
                     onProductClick={handleProductClick}
                     recommendations={products.slice(0, 4)}
+                    onAddToCart={() => addToCart(selectedProduct)}
+                    onBuyNow={() => {
+                        addToCart(selectedProduct);
+                        openCheckout();
+                    }}
                 />
             )}
 
@@ -526,7 +594,7 @@ const App: React.FC = () => {
                     onClose={() => setIsAccountOpen(false)}
                     userName={userProfile?.name || userProfile?.email}
                     avatarUrl={userProfile?.avatar_url}
-                    messageCount={userProfile ? 0 : undefined}
+                    messageCount={userProfile ? buyerMessageCount : undefined}
                     couponCount={userProfile ? 0 : undefined}
                     onSignIn={async () => {
                         await signInWithGoogle({ view: 'buyer-auth' });
@@ -584,8 +652,33 @@ const App: React.FC = () => {
                         setActiveTab(tab);
                         window.history.pushState({ view: tab }, '', window.location.href);
                     }}
-                    cartCount={cartItems.length}
+                    cartCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
                     notificationCount={0} // TODO: Add notification count from API
+                />
+            )}
+
+            {isCheckoutOpen && (
+                <CheckoutSheet
+                    items={cartItems}
+                    onClose={closeCheckout}
+                    onPlaceOrder={() => {
+                        setCartItems([]);
+                        closeCheckout();
+                        setActiveTab('home');
+                    }}
+                />
+            )}
+
+            {/* Seller Onboarding Overlay */}
+            {isOnboarding && (
+                <SellerOnboardingView
+                    userId={userProfile?.id}
+                    onComplete={async () => {
+                        setIsOnboarding(false);
+                        await refreshUserProfile();
+                        setSellerView('dashboard');
+                    }}
+                    onCancel={() => setIsOnboarding(false)}
                 />
             )}
         </div>

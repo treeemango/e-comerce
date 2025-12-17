@@ -1042,11 +1042,13 @@ const App: React.FC = () => {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }} />
       )}
-      <FloatingWidget
-        user={user}
-        activeConversationId={activeConversationId}
-        onRequireAuth={() => setShowBuyerAuthModal(true)}
-      />
+      {isBuyerSurface(currentView) && (
+        <FloatingWidget
+          user={user}
+          activeConversationId={activeConversationId}
+          onRequireAuth={() => setShowBuyerAuthModal(true)}
+        />
+      )}
     </div>
   );
 };

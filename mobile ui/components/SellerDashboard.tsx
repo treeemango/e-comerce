@@ -1,21 +1,37 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { fetchSellerInventory, fetchSellerOrders, fetchSellerStats, getSellerUnreadCount } from '@/lib/api';
-import { SellerInventoryItem, SellerOrder, SellerStats } from '@/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  fetchSellerStats,
+  fetchSellerOrders,
+  getSellerUnreadCount,
+  fetchFilteredProducts,
+} from '../../lib/api';
+import {
+  SellerStats,
+  SellerOrder,
+  Product,
+} from '../../types';
+import { formatCurrency, cn } from '../../lib/utils';
+import { createPortal } from 'react-dom';
+
+// Sub-components
+import { SellerProductsView } from './SellerProductsView';
+import { SellerOrdersView } from './SellerOrdersView';
+import { SellerAddProductView } from './SellerAddProductView';
+import { SellerPromotionsView } from './SellerPromotionsView';
+import { SellerCreateCouponView } from './SellerCreateCouponView';
+import { SellerMessagesView } from './SellerMessagesView';
 
 interface SellerDashboardProps {
-  sellerId?: string | null;
-  userName?: string | null;
-  storeName?: string | null;
-  onSignOut?: () => void;
-  onSwitchAccount?: () => void;
-  onCreateProduct?: () => void;
-  onOpenMessages?: () => void;
-  onOpenOrders?: () => void;
-  onOpenPayouts?: () => void;
+  sellerId: string;
+  userName: string;
+  storeName: string;
+  onSignOut: () => void;
+  onSwitchAccount: () => void;
+  onCreateProduct: () => void;
+  onOpenMessages: () => void;
+  onOpenOrders: () => void;
+  onOpenPayouts: () => void;
 }
-
-const formatCurrency = (value: number, currency = 'USD') =>
-  new Intl.NumberFormat('en', { style: 'currency', currency }).format(value || 0);
 
 export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   sellerId,
@@ -29,49 +45,51 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   onOpenPayouts,
 }) => {
   const [stats, setStats] = useState<SellerStats | null>(null);
-  const [inventory, setInventory] = useState<SellerInventoryItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<SellerOrder[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (!sellerId) {
-      setStats(null);
-      setInventory([]);
-      setOrders([]);
-      setUnreadCount(0);
-      return;
-    }
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'promotions' | 'messages' | 'menu'>('overview');
 
-    let mounted = true;
-    setLoading(true);
-    (async () => {
+  // Modal State (Overlays)
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showCreateCoupon, setShowCreateCoupon] = useState(false);
+
+  // Initial Data Load
+  useEffect(() => {
+    const loadData = async () => {
+      if (!sellerId) return;
+      setLoading(true);
       try {
-        const [statsData, inventoryData, ordersData, unread] = await Promise.all([
+        const [statsData, invData, ordersData, msgCount] = await Promise.all([
           fetchSellerStats(sellerId),
-          fetchSellerInventory(sellerId),
+          fetchFilteredProducts('', {
+            category_ids: [],
+            brand_ids: [],
+            price_min: null,
+            price_max: null,
+            attributes: {}
+          }, sellerId),
           fetchSellerOrders(sellerId),
           getSellerUnreadCount(sellerId),
         ]);
-
-        if (!mounted) return;
-        setStats(statsData || null);
-        setInventory(Array.isArray(inventoryData) ? inventoryData : []);
-        setOrders(Array.isArray(ordersData) ? ordersData : []);
-        setUnreadCount(typeof unread === 'number' ? unread : 0);
+        setStats(statsData);
+        setProducts(invData);
+        setOrders(ordersData);
+        setUnreadCount(msgCount);
       } catch (error) {
-        console.error('[SellerDashboard] Failed to load seller data', error);
+        console.error('Failed to load seller dashboard data', error);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
-    })();
-
-    return () => {
-      mounted = false;
     };
+    loadData();
   }, [sellerId]);
 
-  const lowStockItems = useMemo(() => inventory.filter((item) => item.current_stock < 5).slice(0, 4), [inventory]);
+  // Derived Data
+  const lowStockItems = useMemo(() => products.filter(i => (i.stock || 0) < 5), [products]);
   const recentOrders = useMemo(() => orders.slice(0, 3), [orders]);
 
   const dashboardCards = useMemo(
@@ -81,171 +99,305 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
         value: formatCurrency(stats?.total_sales ?? 0),
         sub: stats?.sales_7d ? `${formatCurrency(stats.sales_7d)} last 7d` : 'Live from Seller Center',
         accent: 'from-emerald-400/80 to-emerald-600/80',
+        icon: 'payments'
       },
       {
-        title: 'Products',
-        value: (stats?.total_products ?? 0).toString(),
-        sub: `${lowStockItems.length || stats?.low_stock_count || 0} low stock`,
-        accent: 'from-sky-400/80 to-blue-600/80',
+        title: 'Active Products',
+        value: stats?.total_products?.toString() ?? '0',
+        sub: `${lowStockItems.length} low stock`,
+        accent: 'from-blue-400/80 to-blue-600/80',
+        icon: 'inventory_2'
       },
       {
         title: 'Messages',
-        value: unreadCount > 99 ? '99+' : unreadCount.toString(),
-        sub: 'Open conversations',
-        accent: 'from-fuchsia-400/80 to-purple-600/80',
+        value: unreadCount.toString(),
+        sub: 'Unread inquiries',
+        accent: 'from-purple-400/80 to-purple-600/80',
+        icon: 'chat'
       },
     ],
     [stats, lowStockItems.length, unreadCount]
   );
 
-  const quickActions = [
-    { icon: 'add_box', label: 'New listing', actionKey: 'create' },
-    { icon: 'local_shipping', label: 'Ship orders', actionKey: 'orders' },
-    { icon: 'payments', label: 'Payouts', actionKey: 'payouts' },
-    { icon: 'chat', label: 'Messages', actionKey: 'messages' },
-  ];
+  // Handlers
+  const handleRefresh = async () => {
+    // Re-fetch logic can be duplicated here or made into a reusable function
+    // For now we just close modals
+    setShowAddProduct(false);
+    setShowCreateCoupon(false);
+  };
 
-  const handleAction = (actionKey: string) => {
-    if (actionKey === 'create') onCreateProduct?.();
-    if (actionKey === 'orders') onOpenOrders?.();
-    if (actionKey === 'payouts') onOpenPayouts?.();
-    if (actionKey === 'messages') onOpenMessages?.();
+  // --- Render Content ---
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'products':
+        return (
+          <SellerProductsView
+            products={products}
+            loading={loading}
+            onCreateProduct={() => setShowAddProduct(true)}
+          />
+        );
+      case 'orders':
+        return (
+          <SellerOrdersView
+            orders={orders}
+            loading={loading}
+          />
+        );
+      case 'promotions':
+        return (
+          <SellerPromotionsView
+            sellerId={sellerId}
+            onCreateCoupon={() => setShowCreateCoupon(true)}
+          />
+        );
+      case 'messages':
+        return (
+          <SellerMessagesView
+            sellerId={sellerId}
+            onBack={() => setActiveTab('overview')}
+          />
+        );
+      case 'menu':
+        return (
+          <div className="bg-gray-50 min-h-full p-6 space-y-6">
+            <h2 className="text-xl font-bold text-gray-900">Menu</h2>
+
+            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+              <div className="p-4 border-b flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-lg">
+                  {storeName[0]?.toUpperCase()}
+                </div>
+                <div>
+                  <div className="font-bold text-gray-900">{storeName}</div>
+                  <div className="text-xs text-gray-500">{userName}</div>
+                </div>
+              </div>
+              <button
+                onClick={onSwitchAccount}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+              >
+                Switch Account
+                <span className="material-icons text-gray-300">chevron_right</span>
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+              <button onClick={() => setActiveTab('messages')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
+                <span className="material-icons text-gray-400">mail</span> Messages
+              </button>
+              <button onClick={onOpenPayouts} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
+                <span className="material-icons text-gray-400">account_balance_wallet</span> Payouts
+              </button>
+              <button className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+                <span className="material-icons text-gray-400">settings</span> Settings
+              </button>
+            </div>
+
+            <button
+              onClick={onSignOut}
+              className="w-full py-3 bg-white border border-red-100 text-red-600 font-bold rounded-xl shadow-sm"
+            >
+              Sign Out
+            </button>
+          </div>
+        );
+      case 'overview':
+      default:
+        return (
+          <div className="bg-gray-50 min-h-full pb-20">
+            {/* Header */}
+            <div className="bg-white px-5 pt-12 pb-6 rounded-b-[2rem] shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-5">
+                <span className="material-icons text-9xl">storefront</span>
+              </div>
+              <div className="relative z-10 flex justify-between items-start mb-6">
+                <div>
+                  <h1 className="text-2xl font-black text-slate-800 tracking-tight">Seller Hub</h1>
+                  <p className="text-slate-500 text-sm font-medium">Welcome back, {storeName}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setActiveTab('messages')} className="relative p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition">
+                    <span className="material-icons text-gray-600">notifications_none</span>
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-2">
+                {dashboardCards.map((card, idx) => (
+                  <div
+                    key={idx}
+                    className="snap-center bg-white border border-gray-100 p-4 rounded-2xl shadow-sm relative overflow-hidden min-w-[280px]"
+                  >
+                    <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${card.accent} blur-2xl opacity-10 rounded-full translate-x-1/3 -translate-y-1/3`} />
+                    <div className="relative z-10">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`material-icons text-lg text-transparent bg-clip-text bg-gradient-to-br ${card.accent}`}>
+                          {card.icon}
+                        </span>
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{card.title}</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-800">{card.value}</div>
+                      <div className="text-xs font-medium text-slate-400 mt-1">{card.sub}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="px-5 mt-6 mb-8">
+              <h3 className="text-sm font-bold text-slate-900 mb-4 px-1">Quick Actions</h3>
+              <div className="grid grid-cols-4 gap-3">
+                <button onClick={() => setShowAddProduct(true)} className="flex flex-col items-center gap-2 group">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100 group-active:scale-95 transition">
+                    <span className="material-icons">add</span>
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">New Listing</span>
+                </button>
+                <button onClick={() => setActiveTab('orders')} className="flex flex-col items-center gap-2 group">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shadow-sm border border-purple-100 group-active:scale-95 transition">
+                    <span className="material-icons">local_shipping</span>
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">Ship Orders</span>
+                </button>
+                <button onClick={() => setShowCreateCoupon(true)} className="flex flex-col items-center gap-2 group">
+                  <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600 shadow-sm border border-orange-100 group-active:scale-95 transition">
+                    <span className="material-icons">confirmation_number</span>
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">Coupons</span>
+                </button>
+                <button onClick={() => setActiveTab('messages')} className="flex flex-col items-center gap-2 group">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100 group-active:scale-95 transition">
+                    <span className="material-icons">chat_bubble_outline</span>
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">Messages</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Low Stock Watchlist */}
+            {lowStockItems.length > 0 && (
+              <div className="px-5 mb-8">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <h3 className="text-sm font-bold text-slate-900">Low Stock Alert</h3>
+                  <button onClick={() => setActiveTab('products')} className="text-xs text-orange-600 font-bold">View All</button>
+                </div>
+                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+                  {lowStockItems.map(item => (
+                    <div key={item.product_id} className="min-w-[140px] bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
+                      <div className="w-full aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden">
+                        {/* Placeholder for image if we had it in inventory item */}
+                        {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-200" />}
+                      </div>
+                      <div className="text-xs font-bold text-gray-800 truncate mb-1">{item.product_title}</div>
+                      <div className="flex justify-between items-end">
+                        <div className="text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded">
+                          {item.current_stock} left
+                        </div>
+                        <div className="text-xs font-bold text-gray-900">${item.current_price}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-black text-white pb-24">
-      <div className="px-5 pt-12 pb-6 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-white/60 uppercase tracking-wide">Seller dashboard</div>
-          <div className="text-2xl font-black leading-snug">{storeName || 'Your Store'}</div>
-          <div className="text-sm text-white/70">Signed in as {userName || 'seller'}</div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onSwitchAccount} className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-            <span className="material-icons-outlined">switch_account</span>
-          </button>
-          <button onClick={onSignOut} className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-            <span className="material-icons-outlined">logout</span>
-          </button>
-        </div>
+    <div className="h-full flex flex-col bg-white">
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto no-scrollbar relative">
+        {renderContent()}
       </div>
 
-      <div className="px-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {dashboardCards.map((card) => (
-          <div
-            key={card.title}
-            className={`rounded-2xl p-4 bg-gradient-to-br ${card.accent} shadow-[0_20px_50px_rgba(0,0,0,0.35)] border border-white/10`}
-          >
-            <div className="text-xs text-white/80 uppercase tracking-wide">{card.title}</div>
-            <div className="text-2xl font-black mt-1">{card.value}</div>
-            <div className="text-[12px] text-white/75 mt-1">{card.sub}</div>
-          </div>
-        ))}
-      </div>
+      {/* Overlays / Modals */}
+      {showAddProduct && createPortal(
+        <div className="fixed inset-0 z-50">
+          <SellerAddProductView
+            sellerId={sellerId}
+            onClose={() => setShowAddProduct(false)}
+            onSuccess={() => {
+              setShowAddProduct(false);
+              handleRefresh();
+            }}
+          />
+        </div>,
+        document.body
+      )}
 
-      <div className="px-5 mt-5">
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex items-center justify-between shadow-[0_15px_40px_rgba(0,0,0,0.35)]">
-          <div>
-            <div className="text-sm text-white/75">This week</div>
-            <div className="text-2xl font-black">{formatCurrency(stats?.sales_7d ?? stats?.total_sales ?? 0)}</div>
-            <div className="text-xs text-emerald-300">Live from Seller Center</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/10 text-xs font-semibold">
-              <span className="material-icons-outlined text-sm">trending_up</span>
-              Growth mode
-            </span>
-          </div>
-        </div>
-      </div>
+      {showCreateCoupon && createPortal(
+        <div className="fixed inset-0 z-50">
+          <SellerCreateCouponView
+            sellerId={sellerId}
+            onClose={() => setShowCreateCoupon(false)}
+            onSuccess={() => {
+              setShowCreateCoupon(false);
+              handleRefresh();
+            }}
+          />
+        </div>,
+        document.body
+      )}
 
-      <div className="px-5 mt-5">
-        <div className="grid grid-cols-2 gap-3">
-          {quickActions.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => handleAction(item.actionKey)}
-              className="rounded-2xl bg-white/5 border border-white/10 p-4 text-left text-white/80 flex items-start gap-3 hover:bg-white/10 transition-colors"
-            >
-              <span className="material-icons-outlined text-xl text-white">{item.icon}</span>
-              <div className="text-sm font-semibold leading-tight">{item.label}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-5 mt-6 space-y-3">
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">Recent orders</div>
-              <div className="text-xs text-white/70">{recentOrders.length > 0 ? `${recentOrders.length} in progress` : 'No orders yet'}</div>
-            </div>
-            <button onClick={onOpenOrders} className="text-xs font-bold text-emerald-300">View all</button>
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {loading ? (
-              <div className="text-xs text-white/60">Loading orders...</div>
-            ) : recentOrders.length === 0 ? (
-              <div className="text-xs text-white/60">Start selling to see orders here.</div>
-            ) : (
-              recentOrders.map((order) => {
-                const itemCount = (order.items || []).reduce((acc, item) => acc + (item.quantity || 0), 0);
-                const badgeTone = order.status === 'pending' ? 'bg-amber-300/20 text-amber-200' : order.status === 'shipped' ? 'bg-sky-300/20 text-sky-200' : 'bg-emerald-300/20 text-emerald-200';
-                return (
-                  <div key={order.id} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold truncate">Order #{order.id}</div>
-                      <div className="text-[11px] text-white/65 truncate">{itemCount} items • {order.customer_name || 'Buyer'}</div>
-                    </div>
-                    <span className={`text-[11px] px-3 py-1 rounded-full font-bold capitalize ${badgeTone}`}>{order.status || 'open'}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">Messages</div>
-              <div className="text-xs text-white/70">{unreadCount > 0 ? `${unreadCount} unread` : 'Inbox is clear'}</div>
-            </div>
-            <button onClick={onOpenMessages} className="text-xs font-bold text-sky-300">Open inbox</button>
-          </div>
-          <div className="mt-3 text-[11px] text-white/65">
-            Fast replies boost performance score. Notifications mirror Seller Center.
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">Inventory watchlist</div>
-              <div className="text-xs text-white/70">{lowStockItems.length > 0 ? 'Restock soon' : 'All stocked'}</div>
-            </div>
-            <button onClick={onCreateProduct} className="text-xs font-bold text-amber-200">Restock</button>
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {loading ? (
-              <div className="text-xs text-white/60">Checking inventory...</div>
-            ) : lowStockItems.length === 0 ? (
-              <div className="text-xs text-white/60">No low-stock alerts.</div>
-            ) : (
-              lowStockItems.map((item) => (
-                <div key={item.variant_id || item.product_id} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">{item.product_title}</div>
-                    <div className="text-[11px] text-white/65">SKU: {item.sku || '—'}</div>
-                  </div>
-                  <span className="text-[11px] px-3 py-1 rounded-full bg-red-300/20 text-red-200 font-bold">{item.current_stock} left</span>
-                </div>
-              ))
-            )}
-          </div>
+      {/* Bottom Navigation */}
+      <div className="border-t border-gray-100 bg-white/90 backdrop-blur-md px-2 pb-safe pt-2 sticky bottom-0 z-40">
+        <div className="grid grid-cols-5 gap-1">
+          <NavButton
+            active={activeTab === 'overview'}
+            icon="home"
+            label="Home"
+            onClick={() => setActiveTab('overview')}
+          />
+          <NavButton
+            active={activeTab === 'products'}
+            icon="inventory_2"
+            label="Products"
+            onClick={() => setActiveTab('products')}
+          />
+          <NavButton
+            active={activeTab === 'orders'}
+            icon="local_shipping"
+            label="Orders"
+            onClick={() => setActiveTab('orders')}
+          />
+          <NavButton
+            active={activeTab === 'messages'}
+            icon="chat"
+            label="Messages"
+            onClick={() => setActiveTab('messages')}
+          />
+          <NavButton
+            active={activeTab === 'menu'}
+            icon="menu"
+            label="Menu"
+            onClick={() => setActiveTab('menu')}
+          />
         </div>
       </div>
     </div>
   );
 };
+
+const NavButton: React.FC<{ active: boolean; icon: string; label: string; onClick: () => void }> = ({ active, icon, label, onClick }) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200",
+      active ? "text-orange-600 bg-orange-50" : "text-gray-400 hover:bg-gray-50"
+    )}
+  >
+    <span className={cn("material-icons text-2xl mb-0.5", active ? "scale-110" : "scale-100")}>{icon}</span>
+    <span className="text-[10px] font-bold tracking-tight">{label}</span>
+  </button>
+);

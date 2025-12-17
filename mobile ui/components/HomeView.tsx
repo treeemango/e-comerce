@@ -5,10 +5,11 @@ import { ProductCard } from './ProductCard';
 interface HomeViewProps {
   products: Product[];
   onProductClick: (p: Product) => void;
+  onAddToCart?: (p: Product) => void;
   showPromotions?: boolean;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, onAddToCart, showPromotions = true }) => {
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -149,6 +150,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
             key={idx}
             product={item}
             onClick={() => onProductClick(item)}
+            onAddToCart={onAddToCart}
           />
         ))}
       </div>

@@ -1,3 +1,15 @@
+export type ProductStatus =
+    | 'approved'
+    | 'active'
+    | 'inactive'
+    | 'archived'
+    | 'incomplete'
+    | 'draft'
+    | 'deleted'
+    | 'pending'
+    | 'rejected'
+    | 'suspended';
+
 export interface Product {
     id: string | number;
     title: string;
@@ -12,6 +24,7 @@ export interface Product {
     reviews: number;
     image: string;
     stock?: number; // Optional vendor stock for buyer-side availability messaging
+    status?: ProductStatus;
     seller_id?: string;
     createdAt?: string | null;
     media?: MediaItem[];
@@ -1063,4 +1076,15 @@ export interface HeroSlide {
     is_active: boolean;
     created_at?: string;
     updated_at?: string;
+}
+
+export interface SellerStats {
+    seller_id: string;
+    total_sales: number;
+    sales_7d: number;
+    sales_30d: number;
+    total_orders: number;
+    total_products: number;
+    low_stock_count: number;
+    last_updated: string;
 }
