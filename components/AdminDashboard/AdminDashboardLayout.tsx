@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminPermissions, ADMIN_TABS, AdminTabConfig } from '@/types';
-import { hasPermissionLevel, supabase } from '@/lib/api';
+import { hasPermissionLevel } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { PermissionBadge } from '@/hooks/useAdminPermissions';
 import AIBackgroundLayer from '../SellerDashboard/AIBackgroundLayer';
 

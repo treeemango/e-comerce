@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CreateProductPayload, ProductAttributeData, ProductVariantData, MediaUploadData, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute } from '../../../types';
 import { createProductFull, fetchVerticals, fetchCategories, fetchBrands, fetchAttributes, fetchAttributeOptions } from '../../../lib/api';
 import { MediaService } from '../../../lib/media';
-import { getCurrencySymbol } from '../../../lib/currency';
+import { getCurrencySymbol, SUPPORTED_CURRENCIES } from '../../../lib/currency';
+import { aiService, SEOMetadata } from '../../../lib/ai-service';
 
 // --- Searchable Select Component ---
 interface SearchableSelectProps {
@@ -111,53 +112,6 @@ interface AddProductViewProps {
 
 const steps = ['Basic Info', 'Media', 'Attributes', 'Variants', 'Review'];
 
-const SUPPORTED_CURRENCIES = [
-    { code: 'USD', flag: '🇺🇸', name: 'US Dollar' },
-    { code: 'DZD', flag: '🇩🇿', name: 'Algerian Dinar' },
-    { code: 'EGP', flag: '🇪🇬', name: 'Egyptian Pound' },
-    { code: 'LYD', flag: '🇱🇾', name: 'Libyan Dinar' },
-    { code: 'MAD', flag: '🇲🇦', name: 'Moroccan Dirham' },
-    { code: 'SDG', flag: '🇸🇩', name: 'Sudanese Pound' },
-    { code: 'SSP', flag: '🇸🇸', name: 'South Sudanese Pound' },
-    { code: 'TND', flag: '🇹🇳', name: 'Tunisian Dinar' },
-    { code: 'MRU', flag: '🇲🇷', name: 'Mauritanian Ouguiya' },
-    { code: 'XOF', flag: '🌍', name: 'West African CFA Franc' },
-    { code: 'GMD', flag: '🇬🇲', name: 'Gambian Dalasi' },
-    { code: 'GHS', flag: '🇬🇭', name: 'Ghanaian Cedi' },
-    { code: 'GNF', flag: '🇬🇳', name: 'Guinean Franc' },
-    { code: 'LRD', flag: '🇱🇷', name: 'Liberian Dollar' },
-    { code: 'NGN', flag: '🇳🇬', name: 'Nigerian Naira' },
-    { code: 'SLL', flag: '🇸🇱', name: 'Sierra Leonean Leone' },
-    { code: 'CVE', flag: '🇨🇻', name: 'Cape Verdean Escudo' },
-    { code: 'XAF', flag: '🌍', name: 'Central African CFA Franc' },
-    { code: 'STN', flag: '🇸🇹', name: 'São Tomé and Príncipe Dobra' },
-    { code: 'BIF', flag: '🇧🇮', name: 'Burundian Franc' },
-    { code: 'CDF', flag: '🇨🇩', name: 'Congolese Franc' },
-    { code: 'RWF', flag: '🇷🇼', name: 'Rwandan Franc' },
-    { code: 'DJF', flag: '🇩🇯', name: 'Djiboutian Franc' },
-    { code: 'ERN', flag: '🇪🇷', name: 'Eritrean Nakfa' },
-    { code: 'ETB', flag: '🇪🇹', name: 'Ethiopian Birr' },
-    { code: 'KES', flag: '🇰🇪', name: 'Kenyan Shilling' },
-    { code: 'KMF', flag: '🇰🇲', name: 'Comorian Franc' },
-    { code: 'MGA', flag: '🇲🇬', name: 'Malagasy Ariary' },
-    { code: 'MUR', flag: '🇲🇺', name: 'Mauritian Rupee' },
-    { code: 'SCR', flag: '🇸🇨', name: 'Seychellois Rupee' },
-    { code: 'SOS', flag: '🇸🇴', name: 'Somali Shilling' },
-    { code: 'TZS', flag: '🇹🇿', name: 'Tanzanian Shilling' },
-    { code: 'UGX', flag: '🇺🇬', name: 'Ugandan Shilling' },
-    { code: 'MWK', flag: '🇲🇼', name: 'Malawian Kwacha' },
-    { code: 'ZMW', flag: '🇿🇲', name: 'Zambian Kwacha' },
-    { code: 'ZWL', flag: '🇿🇼', name: 'Zimbabwean Dollar' },
-    { code: 'AOA', flag: '🇦🇴', name: 'Angolan Kwanza' },
-    { code: 'BWP', flag: '🇧🇼', name: 'Botswana Pula' },
-    { code: 'LSL', flag: '🇱🇸', name: 'Lesotho Loti' },
-    { code: 'MZN', flag: '🇲🇿', name: 'Mozambican Metical' },
-    { code: 'NAD', flag: '🇳🇦', name: 'Namibian Dollar' },
-    { code: 'ZAR', flag: '🇿🇦', name: 'South African Rand' },
-    { code: 'SZL', flag: '🇸🇿', name: 'Swazi Lilangeni' },
-    { code: 'ZWD', flag: '🇿🇼', name: 'Zimbabwean Dollar (Old)' },
-    { code: 'MRO', flag: '🇲🇷', name: 'Mauritanian Ouguiya (Old)' }
-];
 
 const DELIVERY_SCOPE_OPTIONS = [
     { value: 'nationwide', label: 'Nationwide', detail: 'Deliver across the whole country.' },
@@ -186,10 +140,6 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [description, setDescription] = useState('');
     const [categoryId, setCategoryId] = useState('');
     const [brandId, setBrandId] = useState('');
-
-    // Promotions
-    const [promoText, setPromoText] = useState('');
-    const [promoCode, setPromoCode] = useState('');
 
     // SEO & Delivery
     const [currency, setCurrency] = useState('USD');
@@ -232,6 +182,14 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [baseStock, setBaseStock] = useState<number>(100);
     const [optionValueInputs, setOptionValueInputs] = useState<Record<string, string>>({});
     const currencySymbol = useMemo(() => getCurrencySymbol(currency) || '$', [currency]);
+
+    // AI States
+    const [isImprovingTitle, setIsImprovingTitle] = useState(false);
+    const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+    const [isGeneratingSEO, setIsGeneratingSEO] = useState(false);
+    const [isGeneratingTags, setIsGeneratingTags] = useState(false);
+    const [isGeneratingUseCaseTags, setIsGeneratingUseCaseTags] = useState(false);
+    const [isGeneratingOccasionTags, setIsGeneratingOccasionTags] = useState(false);
 
     // Helper to generate variants from options
     useEffect(() => {
@@ -620,6 +578,125 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         setter(prev => prev.filter(item => item !== value));
     };
 
+    // AI Handlers
+    const handleImproveTitle = async () => {
+        if (!title.trim()) return;
+        setIsImprovingTitle(true);
+        try {
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+            const improved = await aiService.improveTitle(title, categoryName);
+            if (improved) setTitle(improved);
+        } catch (error) {
+            console.error('AI Title error:', error);
+            alert('AI was unable to improve the title. Please try again.');
+        } finally {
+            setIsImprovingTitle(false);
+        }
+    };
+
+    const handleGenerateDescription = async () => {
+        if (!title.trim()) {
+            alert('Please enter a product title first.');
+            return;
+        }
+        setIsGeneratingDescription(true);
+        try {
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+            const generated = await aiService.generateDescription(title, categoryName, attributes);
+            if (generated) setDescription(generated);
+        } catch (error) {
+            console.error('AI Description error:', error);
+            alert('AI was unable to generate a description. Please try again.');
+        } finally {
+            setIsGeneratingDescription(false);
+        }
+    };
+
+    const handleGenerateSEO = async () => {
+        if (!title.trim()) {
+            alert('Please enter a product title first.');
+            return;
+        }
+        setIsGeneratingSEO(true);
+        try {
+            const seo = await aiService.generateSEO(title, description);
+            setSeoTitle(seo.seo_title);
+            setMetaDescription(seo.meta_description);
+            if (seo.keywords) {
+                const kwList = seo.keywords.split(',').map(k => k.trim()).filter(Boolean);
+                setSeoKeywords(prev => Array.from(new Set([...prev, ...kwList])));
+            }
+            if (seo.seo_title) {
+                setSlug(seo.seo_title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+            }
+        } catch (error) {
+            console.error('AI SEO error:', error);
+            alert('AI was unable to generate SEO metadata. Please try again.');
+        } finally {
+            setIsGeneratingSEO(false);
+        }
+    };
+
+    const handleGenerateTags = async () => {
+        if (!title.trim()) {
+            alert('Please enter a product title first.');
+            return;
+        }
+        setIsGeneratingTags(true);
+        try {
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateTags(title, categoryName);
+            if (res && res.length > 0) {
+                setTags(prev => Array.from(new Set([...prev, ...res])));
+            }
+        } catch (error) {
+            console.error('AI Tags error:', error);
+            alert('AI was unable to generate tags. Please try again.');
+        } finally {
+            setIsGeneratingTags(false);
+        }
+    };
+
+    const handleGenerateUseCaseTags = async () => {
+        if (!title.trim()) {
+            alert('Please enter a product title first.');
+            return;
+        }
+        setIsGeneratingUseCaseTags(true);
+        try {
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateUseCaseTags(title, categoryName);
+            if (res && res.length > 0) {
+                setUseCaseTags(prev => Array.from(new Set([...prev, ...res])));
+            }
+        } catch (error) {
+            console.error('AI Use Case Tags error:', error);
+            alert('AI was unable to generate use case tags. Please try again.');
+        } finally {
+            setIsGeneratingUseCaseTags(false);
+        }
+    };
+
+    const handleGenerateOccasionTags = async () => {
+        if (!title.trim()) {
+            alert('Please enter a product title first.');
+            return;
+        }
+        setIsGeneratingOccasionTags(true);
+        try {
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateOccasionTags(title, categoryName);
+            if (res && res.length > 0) {
+                setOccasionTags(prev => Array.from(new Set([...prev, ...res])));
+            }
+        } catch (error) {
+            console.error('AI Occasion Tags error:', error);
+            alert('AI was unable to generate occasion tags. Please try again.');
+        } finally {
+            setIsGeneratingOccasionTags(false);
+        }
+    };
+
     // Final Submission
     const handleSubmit = async () => {
         if (!categoryId || !title || !basePrice) {
@@ -680,8 +757,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 category_id: categoryId,
                 brand_id: brandId || undefined,
                 currency: currency,
-                promo_text: promoText || undefined,
-                promo_code: promoCode || undefined,
+
                 free_delivery: freeDelivery,
                 delivery_scope: safeDeliveryScope,
                 min_order_value: Number.isFinite(minOrderValue) ? minOrderValue : 0,
@@ -789,7 +865,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
                             {/* Product Details */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Product Title *</label>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-sm font-medium text-gray-700">Product Title *</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleImproveTitle}
+                                        disabled={isImprovingTitle || !title.trim()}
+                                        className="text-orange-600 text-xs font-semibold flex items-center gap-1 hover:text-orange-700 disabled:opacity-50"
+                                    >
+                                        <span className={`material-icons text-sm ${isImprovingTitle ? 'animate-spin' : ''}`}>
+                                            {isImprovingTitle ? 'autorenew' : 'auto_awesome'}
+                                        </span>
+                                        {isImprovingTitle ? 'Improving...' : 'AI Improve'}
+                                    </button>
+                                </div>
                                 <input
                                     type="text"
                                     value={title}
@@ -800,7 +889,34 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-gray-700">Tags & Descriptors</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateTags}
+                                        disabled={isGeneratingTags || !title.trim()}
+                                        className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-full transition-colors"
+                                    >
+                                        <span className={`material-icons text-sm ${isGeneratingTags ? 'animate-spin' : ''}`}>
+                                            {isGeneratingTags ? 'refresh' : 'auto_awesome'}
+                                        </span>
+                                        {isGeneratingTags ? 'Generating...' : 'AI Generate Tags'}
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-sm font-medium text-gray-700">Description</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateDescription}
+                                        disabled={isGeneratingDescription || !title.trim()}
+                                        className="text-orange-600 text-xs font-semibold flex items-center gap-1 hover:text-orange-700 disabled:opacity-50"
+                                    >
+                                        <span className={`material-icons text-sm ${isGeneratingDescription ? 'animate-spin' : ''}`}>
+                                            {isGeneratingDescription ? 'autorenew' : 'auto_awesome'}
+                                        </span>
+                                        {isGeneratingDescription ? 'Generating...' : 'AI Write'}
+                                    </button>
+                                </div>
                                 <textarea
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
@@ -822,40 +938,17 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                 />
                             </div>
 
-                            {/* Promotional Settings - New for modern posting */}
-                            <div className="pt-6 border-t border-gray-100 animate-fade-in">
-                                <h3 className="text-sm font-semibold text-gray-900 mb-4">Promotional Settings (Optional)</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Promo Text</label>
-                                        <input
-                                            type="text"
-                                            value={promoText}
-                                            onChange={(e) => setPromoText(e.target.value)}
-                                            maxLength={40}
-                                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                            placeholder="e.g. SUMMER SALE - 20% OFF"
-                                        />
-                                        <div className="flex justify-between mt-1">
-                                            <p className="text-xs text-gray-500">Appears as a banner on the product card.</p>
-                                            <p className={`text-xs ${promoText.length > 35 ? 'text-orange-600' : 'text-gray-400'}`}>
-                                                {promoText.length}/40
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Promo Code</label>
-                                        <div className="relative">
-                                            <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">local_offer</span>
-                                            <input
-                                                type="text"
-                                                value={promoCode}
-                                                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                                                className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none uppercase font-mono tracking-wider"
-                                                placeholder="SUMMER20"
-                                            />
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-1">Discount code to be displayed with the promo text.</p>
+
+                            {/* Promotions Info Note */}
+                            <div className="pt-6 border-t border-gray-100">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start space-x-3">
+                                    <span className="material-icons text-blue-600 text-xl">info</span>
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-semibold text-blue-900 mb-1">Want to add a promotion?</h4>
+                                        <p className="text-sm text-blue-800">
+                                            Create coupons and promotional campaigns in the <strong>Promotions</strong> dashboard after publishing this product.
+                                            This gives you better control over discount periods, quantities, and tracking.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -1004,7 +1097,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             </div>
 
                             <div className="pt-6 border-t border-gray-100 animate-fade-in">
-                                <h3 className="text-sm font-semibold text-gray-900 mb-4">SEO Settings (Optional)</h3>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-semibold text-gray-900">SEO Settings (Optional)</h3>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateSEO}
+                                        disabled={isGeneratingSEO || !title.trim()}
+                                        className="bg-orange-50 px-3 py-1 rounded-full text-orange-600 text-xs font-semibold flex items-center gap-1 hover:bg-orange-100 disabled:opacity-50"
+                                    >
+                                        <span className={`material-icons text-sm ${isGeneratingSEO ? 'animate-spin' : ''}`}>
+                                            {isGeneratingSEO ? 'autorenew' : 'auto_awesome'}
+                                        </span>
+                                        {isGeneratingSEO ? 'Writing SEO...' : 'AI Generate SEO'}
+                                    </button>
+                                </div>
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">SEO Title</label>
@@ -1124,7 +1230,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Use Case Tags</label>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="block text-sm font-medium text-gray-700">Use Case Tags</label>
+                                            <button
+                                                type="button"
+                                                onClick={handleGenerateUseCaseTags}
+                                                disabled={isGeneratingUseCaseTags || !title.trim()}
+                                                className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full transition-colors"
+                                            >
+                                                <span className={`material-icons text-[12px] ${isGeneratingUseCaseTags ? 'animate-spin' : ''}`}>
+                                                    {isGeneratingUseCaseTags ? 'refresh' : 'auto_awesome'}
+                                                </span>
+                                                {isGeneratingUseCaseTags ? 'Generating...' : 'AI Generate'}
+                                            </button>
+                                        </div>
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"
@@ -1157,7 +1276,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Occasion Tags</label>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="block text-sm font-medium text-gray-700">Occasion Tags</label>
+                                            <button
+                                                type="button"
+                                                onClick={handleGenerateOccasionTags}
+                                                disabled={isGeneratingOccasionTags || !title.trim()}
+                                                className="flex items-center gap-1.5 text-[10px] font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full transition-colors"
+                                            >
+                                                <span className={`material-icons text-[12px] ${isGeneratingOccasionTags ? 'animate-spin' : ''}`}>
+                                                    {isGeneratingOccasionTags ? 'refresh' : 'auto_awesome'}
+                                                </span>
+                                                {isGeneratingOccasionTags ? 'Generating...' : 'AI Generate'}
+                                            </button>
+                                        </div>
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"

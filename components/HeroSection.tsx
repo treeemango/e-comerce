@@ -63,6 +63,7 @@ const HeroSection: React.FC = () => {
   const [deals, setDeals] = useState<LightningDealItem[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [videoPlayCounts, setVideoPlayCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadDeals();
@@ -88,6 +89,17 @@ const HeroSection: React.FC = () => {
     }, 8000); // Slower rotation for premium feel
     return () => clearInterval(timer);
   }, [deals.length]);
+
+  // Wise action: Track playback counts to limit auto-play and avoid bot detection
+  useEffect(() => {
+    if (deals.length > 0) {
+      const dealId = deals[currentSlide].id.toString();
+      setVideoPlayCounts(prev => ({
+        ...prev,
+        [dealId]: (prev[dealId] || 0) + 1
+      }));
+    }
+  }, [currentSlide, deals]);
 
   const nextSlide = () => {
     setCurrentSlide((prev) => (prev + 1) % deals.length);
@@ -142,8 +154,8 @@ const HeroSection: React.FC = () => {
               <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full animate-pulse" />
               <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-fuchsia-500/10 blur-[120px] rounded-full animate-pulse delay-1000" />
 
-              {/* Optional Video Background Layer */}
-              {youtubeVideo && isActive && (
+              {/* Optional Video Background Layer - limited to 3 plays per session */}
+              {youtubeVideo && isActive && (videoPlayCounts[deal.id.toString()] || 0) <= 3 && (
                 <div className="absolute inset-0 opacity-20 mix-blend-overlay pointer-events-none overflow-hidden">
                   <iframe
                     src={`${youtubeVideo.url}${youtubeVideo.url.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=0&loop=1&playlist=${youtubeVideo.url.split('/').pop()}`}

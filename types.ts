@@ -665,7 +665,9 @@ export interface CreateProductPayload {
     category_id: string;
     brand_id?: string;
     currency: string;
+    /** @deprecated Use coupons table instead. Create coupon via Promotions dashboard and link to product. */
     promo_text?: string;
+    /** @deprecated Use coupons table instead. Create coupon via Promotions dashboard and link to product. */
     promo_code?: string;
     free_delivery?: boolean;
     delivery_scope?: string;

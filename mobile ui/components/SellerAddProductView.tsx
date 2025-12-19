@@ -10,6 +10,8 @@ import {
     createProductFull
 } from '../../lib/api';
 import { MediaService } from '../../lib/media';
+import { aiService } from '../../lib/ai-service';
+import { SUPPORTED_CURRENCIES } from '../../lib/currency';
 import {
     ShopifyVertical,
     ShopifyCategory,
@@ -30,12 +32,12 @@ function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
 }
 
-const STEPS = ['Basics', 'Attributes', 'Variants', 'Pricing', 'Media'];
+const STEPS = ['Basics', 'Attributes', 'Variants', 'Pricing', 'Media', 'SEO'];
 
 const DELIVERY_SCOPE_OPTIONS = [
-    { value: 'nationwide', label: 'Nationwide' },
-    { value: 'regional', label: 'Regional' },
-    { value: 'local', label: 'Local' }
+    { value: 'nationwide', label: 'Nationwide', detail: 'Across the whole country' },
+    { value: 'regional', label: 'Regional', detail: 'Selected regions or states' },
+    { value: 'local', label: 'Local', detail: 'Within one city or radius' }
 ];
 
 export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
@@ -64,6 +66,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [description, setDescription] = useState('');
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
+    const [useCaseTags, setUseCaseTags] = useState<string[]>([]);
+    const [useCaseInput, setUseCaseInput] = useState('');
+    const [occasionTags, setOccasionTags] = useState<string[]>([]);
+    const [occasionInput, setOccasionInput] = useState('');
 
     // Step 1: Attributes
     const [attributes, setAttributes] = useState<ProductAttributeData[]>([]);
@@ -82,7 +88,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [deliveryCost, setDeliveryCost] = useState('');
     const [deliveryTime, setDeliveryTime] = useState('');
     const [freeDelivery, setFreeDelivery] = useState(false);
-    const [promoCode, setPromoCode] = useState('');
+    const [minOrderValue, setMinOrderValue] = useState('0');
+    const [minOrderForFreeDelivery, setMinOrderForFreeDelivery] = useState('0');
+    const [currency, setCurrency] = useState('USD');
+
 
     // Step 4: Media & SEO
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -90,6 +99,20 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [isUploading, setIsUploading] = useState(false);
     const [youtubeInput, setYoutubeInput] = useState('');
     const [youtubeUrls, setYoutubeUrls] = useState<string[]>([]);
+
+    // --- AI States ---
+    const [isImprovingTitle, setIsImprovingTitle] = useState(false);
+    const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+    const [isGeneratingSEO, setIsGeneratingSEO] = useState(false);
+    const [isGeneratingTags, setIsGeneratingTags] = useState(false);
+    const [isGeneratingUseCaseTags, setIsGeneratingUseCaseTags] = useState(false);
+    const [isGeneratingOccasionTags, setIsGeneratingOccasionTags] = useState(false);
+
+    // --- SEO Metadata State ---
+    const [seoTitle, setSeoTitle] = useState('');
+    const [metaDescriptionState, setMetaDescriptionState] = useState('');
+    const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
+    const [urlSlug, setUrlSlug] = useState('');
 
     // --- Effects ---
 
@@ -189,6 +212,106 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
         setVariants(newVariants);
     }, [variantOptions, hasVariants, title]); // Don't depend on price/stock changes to avoid overwriting custom variant edits
 
+    // --- AI Handlers ---
+    const handleImproveTitle = async () => {
+        if (!title.trim()) return;
+        setIsImprovingTitle(true);
+        try {
+            const cat = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.improveTitle(title, cat);
+            if (res) setTitle(res);
+        } finally {
+            setIsImprovingTitle(false);
+        }
+    };
+
+    const handleGenerateDescription = async () => {
+        if (!title.trim()) return;
+        setIsGeneratingDescription(true);
+        try {
+            const cat = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateDescription(title, cat, attributes);
+            if (res) {
+                setDescription(res);
+                // Also default the meta description
+                if (!metaDescriptionState) setMetaDescriptionState(res.substring(0, 160));
+            }
+        } finally {
+            setIsGeneratingDescription(false);
+        }
+    };
+
+    const handleGenerateSEO = async () => {
+        if (!title.trim()) return;
+        setIsGeneratingSEO(true);
+        try {
+            const res = await aiService.generateSEO(title, description);
+            if (res) {
+                if (res.seo_title) setSeoTitle(res.seo_title);
+                if (res.meta_description) setMetaDescriptionState(res.meta_description);
+                if (res.keywords) {
+                    const kws = res.keywords.split(',').map(k => k.trim()).filter(Boolean);
+                    setSeoKeywords(kws);
+                }
+                // Auto-generate slug from SEO title or title
+                const slugSource = res.seo_title || title;
+                setUrlSlug(slugSource.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+            }
+        } catch (err) {
+            console.error('SEO Generation error:', err);
+        } finally {
+            setIsGeneratingSEO(false);
+        }
+    };
+
+    const handleGenerateTags = async () => {
+        if (!title.trim()) return;
+        setIsGeneratingTags(true);
+        try {
+            const cat = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateTags(title, cat);
+            if (res && res.length > 0) {
+                setTags(prev => Array.from(new Set([...prev, ...res])));
+            }
+        } catch (err) {
+            console.error('Tags generation error:', err);
+        } finally {
+            setIsGeneratingTags(false);
+        }
+    };
+
+    const handleGenerateUseCaseTags = async () => {
+        if (!title.trim()) return;
+        setIsGeneratingUseCaseTags(true);
+        try {
+            const cat = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateUseCaseTags(title, cat);
+            if (res && res.length > 0) {
+                setUseCaseTags(prev => Array.from(new Set([...prev, ...res])));
+            }
+        } catch (err) {
+            console.error('Use case tags generation error:', err);
+        } finally {
+            setIsGeneratingUseCaseTags(false);
+        }
+    };
+
+    const handleGenerateOccasionTags = async () => {
+        if (!title.trim()) return;
+        setIsGeneratingOccasionTags(true);
+        try {
+            const cat = categories.find(c => c.id === categoryId)?.name;
+            const res = await aiService.generateOccasionTags(title, cat);
+            if (res && res.length > 0) {
+                setOccasionTags(prev => Array.from(new Set([...prev, ...res])));
+            }
+        } catch (err) {
+            console.error('Occasion tags generation error:', err);
+        } finally {
+            setIsGeneratingOccasionTags(false);
+        }
+    };
+
     // --- Handlers ---
 
     const handleNext = () => {
@@ -274,33 +397,44 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 rrp: numCompare ?? numPrice,
                 discount_percent: numCompare && numPrice ? Math.max(0, Math.round(((numCompare - numPrice) / numCompare) * 100)) : 0
             }];
-
             const payload = {
                 title,
                 description,
                 category_id: categoryId,
                 brand_id: brandId || undefined,
-                currency: 'USD',
+                currency: currency,
                 price: numPrice,
                 variants: finalVariants,
                 media: uploadedMedia.map((m, i) => ({ ...m, position: i })),
                 attributes,
-                tags: tags,
-                seo_title: title,
-                meta_description: description,
-                url_slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                tags: [...tags, ...seoKeywords],
+                use_case_tags: useCaseTags,
+                occasion_tags: occasionTags,
+                seo_title: seoTitle || title,
+                meta_description: metaDescriptionState || description,
+                url_slug: urlSlug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
                 delivery_scope: deliveryScope,
                 delivery_cost: parseFloat(deliveryCost) || 0,
                 delivery_time_estimate: deliveryTime,
                 free_delivery: freeDelivery,
-                min_order_value: 0,
-                promo_code: promoCode || undefined
+                min_order_value: parseFloat(minOrderValue) || 0,
+                min_order_for_free_delivery: parseFloat(minOrderForFreeDelivery) || 0,
+                is_active: true
             };
 
             const pid = await createProductFull(sellerId, payload, finalVariants, payload.media, attributes);
-            if (pid) { alert("Published!"); onSuccess(); } else { throw new Error("Failed"); }
-        } catch (e) { console.error(e); alert("Failed to publish."); }
-        finally { setIsSubmitting(false); }
+            if (pid) {
+                alert("Published!");
+                onSuccess();
+            } else {
+                throw new Error("Failed");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Failed to publish.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -346,13 +480,50 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                         </div>
 
                         <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase text-gray-500">Details</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-bold uppercase text-gray-500">Details</label>
+                                <button
+                                    onClick={handleImproveTitle}
+                                    disabled={isImprovingTitle || !title.trim()}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
+                                >
+                                    <span className={`material-icons text-[12px] ${isImprovingTitle ? 'animate-spin' : ''}`}>
+                                        {isImprovingTitle ? 'sync' : 'auto_awesome'}
+                                    </span>
+                                    {isImprovingTitle ? 'IMPROVING...' : 'AI IMPROVE'}
+                                </button>
+                            </div>
                             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Product Title" className="w-full border p-3 rounded-lg" />
+                            <div className="flex justify-between items-center mt-3 mb-1">
+                                <label className="text-xs font-bold uppercase text-gray-500">Description</label>
+                                <button
+                                    onClick={handleGenerateDescription}
+                                    disabled={isGeneratingDescription || !title.trim()}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
+                                >
+                                    <span className={`material-icons text-[12px] ${isGeneratingDescription ? 'animate-spin' : ''}`}>
+                                        {isGeneratingDescription ? 'sync' : 'auto_awesome'}
+                                    </span>
+                                    {isGeneratingDescription ? 'WRITING...' : 'AI WRITE'}
+                                </button>
+                            </div>
                             <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description..." className="w-full border p-3 rounded-lg h-24" />
                         </div>
 
                         <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase text-gray-500">Tags</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-bold uppercase text-gray-500">Tags</label>
+                                <button
+                                    onClick={handleGenerateTags}
+                                    disabled={isGeneratingTags || !title.trim()}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
+                                >
+                                    <span className={`material-icons text-[12px] ${isGeneratingTags ? 'animate-spin' : ''}`}>
+                                        {isGeneratingTags ? 'sync' : 'auto_awesome'}
+                                    </span>
+                                    {isGeneratingTags ? 'GENERATING...' : 'AI GENERATE TAGS'}
+                                </button>
+                            </div>
                             <div className="flex flex-wrap gap-2 mb-2">
                                 {tags.map(t => (
                                     <span key={t} className="bg-gray-100 px-2 py-1 rounded text-xs flex items-center gap-1">
@@ -369,7 +540,77 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                         if (tagInput.trim()) { setTags(prev => [...prev, tagInput.trim()]); setTagInput(''); }
                                     }
                                 }}
-                                placeholder="Add tag + Enter"
+                                placeholder="Add keyword + Enter"
+                                className="w-full border p-3 rounded-lg text-sm"
+                            />
+                        </div>
+
+                        <div className="space-y-1">
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-bold uppercase text-gray-500">Use Case (e.g. Hiking, Office)</label>
+                                <button
+                                    onClick={handleGenerateUseCaseTags}
+                                    disabled={isGeneratingUseCaseTags || !title.trim()}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
+                                >
+                                    <span className={`material-icons text-[12px] ${isGeneratingUseCaseTags ? 'animate-spin' : ''}`}>
+                                        {isGeneratingUseCaseTags ? 'sync' : 'auto_awesome'}
+                                    </span>
+                                    {isGeneratingUseCaseTags ? 'GENERATING...' : 'AI GENERATE'}
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {useCaseTags.map(t => (
+                                    <span key={t} className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1">
+                                        {t} <button onClick={() => setUseCaseTags(prev => prev.filter(x => x !== t))}>×</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <input
+                                value={useCaseInput}
+                                onChange={e => setUseCaseInput(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (useCaseInput.trim()) { setUseCaseTags(prev => [...prev, useCaseInput.trim()]); setUseCaseInput(''); }
+                                    }
+                                }}
+                                placeholder="Add use case + Enter"
+                                className="w-full border p-3 rounded-lg text-sm"
+                            />
+                        </div>
+
+                        <div className="space-y-1">
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-bold uppercase text-gray-500">Occasion (e.g. Wedding, Summer)</label>
+                                <button
+                                    onClick={handleGenerateOccasionTags}
+                                    disabled={isGeneratingOccasionTags || !title.trim()}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full"
+                                >
+                                    <span className={`material-icons text-[12px] ${isGeneratingOccasionTags ? 'animate-spin' : ''}`}>
+                                        {isGeneratingOccasionTags ? 'sync' : 'auto_awesome'}
+                                    </span>
+                                    {isGeneratingOccasionTags ? 'GENERATING...' : 'AI GENERATE'}
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {occasionTags.map(t => (
+                                    <span key={t} className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs flex items-center gap-1">
+                                        {t} <button onClick={() => setOccasionTags(prev => prev.filter(x => x !== t))}>×</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <input
+                                value={occasionInput}
+                                onChange={e => setOccasionInput(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (occasionInput.trim()) { setOccasionTags(prev => [...prev, occasionInput.trim()]); setOccasionInput(''); }
+                                    }
+                                }}
+                                placeholder="Add occasion + Enter"
                                 className="w-full border p-3 rounded-lg text-sm"
                             />
                         </div>
@@ -504,53 +745,161 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 {currentStep === 3 && (
                     <div className="space-y-6 animate-in slide-in-from-right-8 duration-300">
                         {/* Pricing */}
-                        <div className="space-y-3">
-                            <h3 className="text-sm font-bold uppercase text-gray-500">Pricing & Inventory</h3>
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing & Inventory</h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-800">Base Price *</label>
-                                    <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 rounded-lg" />
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Base Price *</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{SUPPORTED_CURRENCIES.find(c => c.code === currency)?.flag || '$'}</span>
+                                        <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-10 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg" />
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-800">Original Price</label>
-                                    <input type="number" value={compareAtPrice} onChange={e => setCompareAtPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 rounded-lg" />
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Original Price</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{SUPPORTED_CURRENCIES.find(c => c.code === currency)?.flag || '$'}</span>
+                                        <input type="number" value={compareAtPrice} onChange={e => setCompareAtPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-10 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg text-gray-500" />
+                                    </div>
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-bold text-gray-800">Base Stock</label>
-                                <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full border p-3 rounded-lg" />
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Base Stock</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">inventory_2</span></span>
+                                    <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full border p-3 pl-12 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold" />
+                                </div>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-gray-800">Promo Code (Optional)</label>
-                                <input type="text" value={promoCode} onChange={e => setPromoCode(e.target.value)} placeholder="e.g. SUMMER20" className="w-full border p-3 rounded-lg" />
+                            {/* Promotions Info Note */}
+                            <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 mt-2">
+                                <div className="flex gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                        <span className="material-icons text-blue-500 text-sm">info</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-blue-900">Want to add a promotion?</p>
+                                        <p className="text-xs text-blue-700 mt-0.5 leading-relaxed opacity-80">
+                                            Create coupons and campaigns in the <strong>Promotions</strong> dashboard after publishing. This gives you better control over periods, quantities, and tracking.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         {/* Delivery */}
                         <div className="space-y-3 pt-6 border-t">
                             <h3 className="text-sm font-bold uppercase text-gray-500">Delivery</h3>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-gray-800">Scope</label>
-                                <select value={deliveryScope} onChange={e => setDeliveryScope(e.target.value)} className="w-full border p-3 rounded-lg bg-white">
-                                    {DELIVERY_SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
+                            <div className="space-y-3 mt-2">
+                                <label className="text-xs font-bold text-gray-800 uppercase tracking-wider">Delivery Scope</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {DELIVERY_SCOPE_OPTIONS.map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            onClick={() => setDeliveryScope(opt.value)}
+                                            className={cn(
+                                                "flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left",
+                                                deliveryScope === opt.value
+                                                    ? "border-orange-500 bg-orange-50/50 shadow-sm"
+                                                    : "border-gray-100 bg-white hover:border-gray-200"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                                                    deliveryScope === opt.value ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500"
+                                                )}>
+                                                    <span className="material-icons text-xl">
+                                                        {opt.value === 'nationwide' ? 'public' : opt.value === 'regional' ? 'map' : 'location_on'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <div className={cn("font-bold text-sm", deliveryScope === opt.value ? "text-orange-900" : "text-gray-900")}>{opt.label}</div>
+                                                    <div className="text-[10px] text-gray-500 uppercase font-medium">{opt.detail}</div>
+                                                </div>
+                                            </div>
+                                            <div className={cn(
+                                                "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                                                deliveryScope === opt.value ? "border-orange-500" : "border-gray-300"
+                                            )}>
+                                                {deliveryScope === opt.value && <div className="w-2.5 h-2.5 bg-orange-500 rounded-full" />}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
-                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <span className="font-bold text-sm">Free Delivery?</span>
-                                <input type="checkbox" checked={freeDelivery} onChange={e => setFreeDelivery(e.target.checked)} className="w-5 h-5 accent-orange-500" />
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 mt-4">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", freeDelivery ? "bg-green-100 text-green-600" : "bg-gray-200 text-gray-500")}>
+                                        <span className="material-icons text-xl">{freeDelivery ? 'redeem' : 'local_shipping'}</span>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-sm">Free Delivery?</div>
+                                        <div className="text-[10px] text-gray-500 uppercase font-medium">Toggle free shipping for customers</div>
+                                    </div>
+                                </div>
+                                <div
+                                    onClick={() => setFreeDelivery(!freeDelivery)}
+                                    className={cn("w-12 h-6 rounded-full p-1 transition-colors cursor-pointer", freeDelivery ? "bg-green-500" : "bg-gray-300")}
+                                >
+                                    <div className={cn("w-4 h-4 bg-white rounded-full shadow-sm transition-transform", freeDelivery ? "translate-x-6" : "")} />
+                                </div>
                             </div>
 
                             {!freeDelivery && (
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-800">Delivery Cost</label>
-                                    <input type="number" value={deliveryCost} onChange={e => setDeliveryCost(e.target.value)} placeholder="0.00" className="w-full border p-3 rounded-lg" />
+                                <div className="space-y-1 mt-4">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Delivery Cost</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{SUPPORTED_CURRENCIES.find(c => c.code === currency)?.flag || '$'}</span>
+                                        <input type="number" value={deliveryCost} onChange={e => setDeliveryCost(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
+                                    </div>
                                 </div>
                             )}
 
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-gray-800">Time Estimate</label>
-                                <input type="text" value={deliveryTime} onChange={e => setDeliveryTime(e.target.value)} placeholder="e.g. 3-5 days" className="w-full border p-3 rounded-lg" />
+                            <div className="space-y-1 mt-4">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Time Estimate</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">schedule</span></span>
+                                    <input type="text" value={deliveryTime} onChange={e => setDeliveryTime(e.target.value)} placeholder="e.g. 3-5 days" className="w-full border p-3 pl-10 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mt-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Min Order Value</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[10px]">{SUPPORTED_CURRENCIES.find(c => c.code === currency)?.flag || '$'}</span>
+                                        <input type="number" value={minOrderValue} onChange={e => setMinOrderValue(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Min Order for Free Del.</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[10px]">{SUPPORTED_CURRENCIES.find(c => c.code === currency)?.flag || '$'}</span>
+                                        <input type="number" value={minOrderForFreeDelivery} onChange={e => setMinOrderForFreeDelivery(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 mt-6">
+                                <label className="text-xs font-bold text-gray-800 uppercase tracking-wider">Currency Selection</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    <div className="relative">
+                                        <select
+                                            value={currency}
+                                            onChange={e => setCurrency(e.target.value)}
+                                            className="w-full border p-4 pl-12 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 appearance-none border-none font-bold"
+                                        >
+                                            {SUPPORTED_CURRENCIES.map(c => (
+                                                <option key={c.code} value={c.code}>{c.flag} {c.code} - {c.name}</option>
+                                            ))}
+                                        </select>
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">
+                                            {SUPPORTED_CURRENCIES.find(c => c.code === currency)?.flag}
+                                        </span>
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 material-icons text-gray-400 pointer-events-none">expand_more</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -605,6 +954,60 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     <button onClick={() => setUploadedMedia(prev => prev.filter((_, i) => i !== idx))} className="absolute top-1 right-1 bg-black/50 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">×</button>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 5: SEO */}
+                {currentStep === 5 && (
+                    <div className="space-y-6 animate-in slide-in-from-right-8 duration-300">
+                        <div className="pt-2 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold uppercase text-gray-500">SEO & Visibility</h3>
+                                <button
+                                    onClick={handleGenerateSEO}
+                                    disabled={isGeneratingSEO || !title.trim()}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
+                                >
+                                    <span className={`material-icons text-[12px] ${isGeneratingSEO ? 'animate-spin' : ''}`}>
+                                        {isGeneratingSEO ? 'sync' : 'auto_awesome'}
+                                    </span>
+                                    {isGeneratingSEO ? 'GENERATING...' : 'AI GENERATE SEO'}
+                                </button>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">SEO Title</label>
+                                    <input
+                                        value={seoTitle}
+                                        onChange={e => setSeoTitle(e.target.value)}
+                                        placeholder={title || "Best Running Shoes..."}
+                                        className="w-full border p-3 rounded-lg text-sm bg-gray-50"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Meta Description</label>
+                                    <textarea
+                                        value={metaDescriptionState}
+                                        onChange={e => setMetaDescriptionState(e.target.value)}
+                                        placeholder="Max 160 characters..."
+                                        className="w-full border p-3 rounded-lg text-sm bg-gray-50 h-20"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">URL Slug</label>
+                                    <div className="flex items-center bg-gray-100 rounded-lg px-3 py-2">
+                                        <span className="text-gray-400 text-xs mr-1">/product/</span>
+                                        <input
+                                            value={urlSlug}
+                                            onChange={e => setUrlSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                                            placeholder="product-name"
+                                            className="flex-1 bg-transparent border-none p-0 text-sm focus:ring-0"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
