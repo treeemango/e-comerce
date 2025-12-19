@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef, useCallback } from 'react';
-import { Product } from '@/types';
+import { Product, QuantityDiscountTier } from '@/types';
+import { fetchQuantityDiscounts } from '@/lib/api';
 import { ProductCard } from './ProductCard';
 
 interface ProductDetailsProps {
@@ -23,14 +24,15 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [touchStart, setTouchStart] = useState<TouchPosition | null>(null);
     const [touchEnd, setTouchEnd] = useState<TouchPosition | null>(null);
+    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
 
     const imageContainerRef = useRef<HTMLDivElement>(null);
 
     const images = useMemo(() => {
         const gallery = Array.isArray(product.gallery_media)
             ? product.gallery_media
-                  .map((m) => m.image_url || m.thumbnail_url)
-                  .filter((src): src is string => !!src)
+                .map((m) => m.image_url || m.thumbnail_url)
+                .filter((src): src is string => !!src)
             : [];
         const unique = Array.from(new Set([product.image, ...gallery].filter(Boolean)));
         return unique.length ? unique : [''];
@@ -98,6 +100,12 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         // Reset transition state after animation
         setTimeout(() => setIsTransitioning(false), 300);
     }, [images.length, isTransitioning]);
+
+    React.useEffect(() => {
+        if (product.has_quantity_discount) {
+            fetchQuantityDiscounts(product.id.toString()).then(setQuantityDiscounts);
+        }
+    }, [product.id, product.has_quantity_discount]);
 
     const formatPrice = (price: number, currency?: string) => {
         try {
@@ -168,9 +176,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     <img
                         src={images[currentImage % images.length]}
                         alt={product.title}
-                        className={`w-full h-full object-cover transition-opacity duration-300 ${
-                            isTransitioning ? 'opacity-80' : 'opacity-100'
-                        }`}
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${isTransitioning ? 'opacity-80' : 'opacity-100'
+                            }`}
                         style={{
                             userSelect: 'none',
                             WebkitUserSelect: 'none',
@@ -206,9 +213,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             {images.slice(0, 5).map((_, idx) => (
                                 <div
                                     key={idx}
-                                    className={`w-2 h-2 rounded-full transition-colors ${
-                                        idx === currentImage ? 'bg-white' : 'bg-white/50'
-                                    }`}
+                                    className={`w-2 h-2 rounded-full transition-colors ${idx === currentImage ? 'bg-white' : 'bg-white/50'
+                                        }`}
                                 />
                             ))}
                             {images.length > 5 && (
@@ -317,6 +323,56 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         <span className="text-xs text-price-red border border-price-red px-1 py-0.5 rounded mb-1 font-bold">-{product.discountPercent}%</span>
                     )}
                 </div>
+
+                {/* Automatic Promotions (e.g. Buy X Get Y) */}
+                {product.auto_discount_type && (
+                    <div className="mt-4 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/50 flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0 text-indigo-600 dark:text-indigo-400">
+                            <span className="material-icons-round">redeem</span>
+                        </div>
+                        <div className="flex-1">
+                            <div className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                {product.auto_discount_name || 'Promotion'}
+                            </div>
+                            <div className="text-sm font-black text-black dark:text-white leading-tight">
+                                {product.auto_discount_type === 'buy_x_get_y'
+                                    ? `Buy ${product.auto_discount_buy_qty} get ${product.auto_discount_get_qty} free`
+                                    : product.auto_discount_type === 'percentage'
+                                        ? `${product.auto_discount_value}% discount applied at checkout`
+                                        : `${formatPrice(product.auto_discount_value || 0, product.currency)} off applied at checkout`
+                                }
+                            </div>
+                            {product.auto_discount_min_requirement && product.auto_discount_min_requirement > 0 && (
+                                <div className="text-[10px] text-gray-500 mt-1">
+                                    Min. order: {formatPrice(product.auto_discount_min_requirement, product.currency)}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Bulk Pricing Section */}
+                {quantityDiscounts.length > 0 && (
+                    <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="material-icons-outlined text-emerald-600 dark:text-emerald-400">groups</span>
+                            <span className="text-sm font-black text-emerald-900 dark:text-emerald-100 uppercase tracking-wider">Bulk Pricing Discounts</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {quantityDiscounts.map((tier, idx) => (
+                                <div key={idx} className="bg-white dark:bg-emerald-900/40 p-3 rounded-xl shadow-sm border border-emerald-100 dark:border-emerald-800/30">
+                                    <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Buy {tier.min_quantity}+</div>
+                                    <div className="text-lg font-black text-black dark:text-white">
+                                        {formatPrice(tier.unit_price, product.currency)}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                                        Save {Math.round((1 - tier.unit_price / product.price) * 100)}% per item
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Select Option Preview */}

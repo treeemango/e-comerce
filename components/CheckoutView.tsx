@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CouponApplicationResult, Product } from '../types';
 import { applyCoupon, checkout } from '../lib/api';
 import { getCurrencySymbol } from '@/lib/currency';
+import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CheckoutViewProps {
     cartItems: Product[];
@@ -30,6 +31,7 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
 
     const groupedItems = useMemo(() => {
         return cartItems.reduce((acc, item) => {
@@ -43,6 +45,15 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
     }, [cartItems]);
 
     const items = useMemo(() => Object.values(groupedItems) as (Product & { quantity: number })[], [groupedItems]);
+
+    React.useEffect(() => {
+        const calculatePromos = async () => {
+            const result = await applyPromotionsToCart(items.map(i => ({ product: i, quantity: i.quantity })));
+            setPromoResult(result);
+        };
+        calculatePromos();
+    }, [items]);
+
     const subtotal = useMemo(() => {
         if (items.length === 0) return totalAmount;
         return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -50,7 +61,9 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
     const currencySymbol = getCurrencySymbol(items[0]?.currency || cartItems[0]?.currency || 'USD');
     const deliveryFee = 0;
-    const finalTotal = Math.max(0, subtotal + deliveryFee - discountAmount);
+
+    const bulkSavings = promoResult ? promoResult.totalSavings : 0;
+    const finalTotal = Math.max(0, subtotal + deliveryFee - discountAmount - bulkSavings);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -306,9 +319,15 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                 <span className="text-green-600">FREE</span>
                             </div>
                             {discountAmount > 0 && (
-                                <div className="flex justify-between text-sm text-green-700 dark:text-green-400">
-                                    <span>{appliedCoupon?.name || 'Discount'}</span>
+                                <div className="flex justify-between text-sm text-rose-700 dark:text-rose-400 font-medium">
+                                    <span>{appliedCoupon?.name || 'Coupon Discount'}</span>
                                     <span>-{currencySymbol}{discountAmount.toFixed(2)}</span>
+                                </div>
+                            )}
+                            {bulkSavings > 0 && (
+                                <div className="flex justify-between text-sm text-emerald-700 dark:text-emerald-400 font-medium">
+                                    <span>Promotion Savings</span>
+                                    <span>-{currencySymbol}{bulkSavings.toFixed(2)}</span>
                                 </div>
                             )}
                         </div>

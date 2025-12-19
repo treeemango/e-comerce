@@ -20,6 +20,9 @@ import { SellerAddProductView } from './SellerAddProductView';
 import { SellerPromotionsView } from './SellerPromotionsView';
 import { SellerCreateCouponView } from './SellerCreateCouponView';
 import { SellerMessagesView } from './SellerMessagesView';
+import { SellerCreateAutomaticDiscountView } from './SellerCreateAutomaticDiscountView';
+import { SellerManageQuantityDiscountsView } from './SellerManageQuantityDiscountsView';
+import { SellerWalletView } from './SellerWalletView';
 
 interface SellerDashboardProps {
   sellerId: string;
@@ -51,11 +54,13 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'promotions' | 'messages' | 'menu'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'promotions' | 'messages' | 'wallet' | 'menu'>('overview');
 
   // Modal State (Overlays)
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
+  const [showCreateAutomaticDiscount, setShowCreateAutomaticDiscount] = useState(false);
+  const [selectedProductForDiscounts, setSelectedProductForDiscounts] = useState<Product | null>(null);
 
   // Initial Data Load
   useEffect(() => {
@@ -125,6 +130,8 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
     // For now we just close modals
     setShowAddProduct(false);
     setShowCreateCoupon(false);
+    setShowCreateAutomaticDiscount(false);
+    setSelectedProductForDiscounts(null);
   };
 
   // --- Render Content ---
@@ -137,6 +144,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             products={products}
             loading={loading}
             onCreateProduct={() => setShowAddProduct(true)}
+            onEditProduct={(p) => setSelectedProductForDiscounts(p)}
           />
         );
       case 'orders':
@@ -151,6 +159,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
           <SellerPromotionsView
             sellerId={sellerId}
             onCreateCoupon={() => setShowCreateCoupon(true)}
+            onCreateAutomaticDiscount={() => setShowCreateAutomaticDiscount(true)}
           />
         );
       case 'messages':
@@ -158,6 +167,12 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
           <SellerMessagesView
             sellerId={sellerId}
             onBack={() => setActiveTab('overview')}
+          />
+        );
+      case 'wallet':
+        return (
+          <SellerWalletView
+            sellerId={sellerId}
           />
         );
       case 'menu':
@@ -188,7 +203,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
               <button onClick={() => setActiveTab('messages')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
                 <span className="material-icons text-gray-400">mail</span> Messages
               </button>
-              <button onClick={onOpenPayouts} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
+              <button onClick={() => setActiveTab('wallet')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
                 <span className="material-icons text-gray-400">account_balance_wallet</span> Payouts
               </button>
               <button className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
@@ -350,9 +365,37 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
         document.body
       )}
 
+      {showCreateAutomaticDiscount && createPortal(
+        <div className="fixed inset-0 z-50">
+          <SellerCreateAutomaticDiscountView
+            sellerId={sellerId}
+            onClose={() => setShowCreateAutomaticDiscount(false)}
+            onSuccess={() => {
+              setShowCreateAutomaticDiscount(false);
+              handleRefresh();
+            }}
+          />
+        </div>,
+        document.body
+      )}
+
+      {selectedProductForDiscounts && createPortal(
+        <div className="fixed inset-0 z-50">
+          <SellerManageQuantityDiscountsView
+            product={selectedProductForDiscounts}
+            onClose={() => setSelectedProductForDiscounts(null)}
+            onSuccess={() => {
+              setSelectedProductForDiscounts(null);
+              handleRefresh();
+            }}
+          />
+        </div>,
+        document.body
+      )}
+
       {/* Bottom Navigation */}
       <div className="border-t border-gray-100 bg-white/90 backdrop-blur-md px-2 pb-safe pt-2 sticky bottom-0 z-40">
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-6 gap-1">
           <NavButton
             active={activeTab === 'overview'}
             icon="home"
@@ -372,9 +415,15 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             onClick={() => setActiveTab('orders')}
           />
           <NavButton
+            active={activeTab === 'wallet'}
+            icon="account_balance_wallet"
+            label="Wallet"
+            onClick={() => setActiveTab('wallet')}
+          />
+          <NavButton
             active={activeTab === 'messages'}
             icon="chat"
-            label="Messages"
+            label="Msgs"
             onClick={() => setActiveTab('messages')}
           />
           <NavButton

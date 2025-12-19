@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { AdminPermissions, ADMIN_TABS, AdminTabConfig } from '@/types';
-import { hasPermissionLevel } from '@/lib/api';
+import { hasPermissionLevel, supabase } from '@/lib/api';
 import { PermissionBadge } from '@/hooks/useAdminPermissions';
 import AIBackgroundLayer from '../SellerDashboard/AIBackgroundLayer';
 
 // Extended tabs including content and team
-type AdminTabId = 'overview' | 'products' | 'sellers' | 'users' | 'orders' | 'content' | 'activity' | 'team';
+type AdminTabId = 'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'content' | 'activity' | 'team';
 
 interface AdminDashboardLayoutProps {
     children: React.ReactNode;
@@ -34,11 +34,45 @@ const AdminDashboardLayout: React.FC<AdminDashboardLayoutProps> = ({
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [pendingProductsCount, setPendingProductsCount] = useState(0);
     const [pendingSellersCount, setPendingSellersCount] = useState(0);
+    const [pendingDriversCount, setPendingDriversCount] = useState(0);
 
     // Filter tabs based on user's permission level
     const visibleTabs = ADMIN_TABS.filter(tab =>
         hasPermissionLevel(permissions?.permission_level, tab.requiredLevel)
     );
+
+    useEffect(() => {
+        const fetchCounts = async () => {
+            try {
+                // Fetch pending products count
+                const { data: products } = await supabase
+                    .from('products')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('status', 'pending');
+                setPendingProductsCount(products?.length || 0);
+
+                // Fetch pending sellers count
+                const { data: sellers } = await supabase
+                    .from('vendors')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('is_verified', false);
+                setPendingSellersCount(sellers?.length || 0);
+
+                // Fetch pending drivers count
+                const { data: drivers } = await supabase
+                    .from('delivery_partners')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('verification_status', 'pending');
+                setPendingDriversCount(drivers?.length || 0);
+            } catch (err) {
+                console.error('Error fetching pending counts:', err);
+            }
+        };
+
+        fetchCounts();
+        const interval = setInterval(fetchCounts, 30000); // Refresh every 30s
+        return () => clearInterval(interval);
+    }, []);
 
     // Convert ADMIN_TABS to MenuItems with dynamic badges
     const menuItems: MenuItem[] = visibleTabs.map(tab => ({
@@ -47,7 +81,8 @@ const AdminDashboardLayout: React.FC<AdminDashboardLayoutProps> = ({
         icon: tab.icon,
         badge: tab.id === 'products' ? pendingProductsCount
             : tab.id === 'sellers' ? pendingSellersCount
-                : undefined
+                : tab.id === 'drivers' ? pendingDriversCount
+                    : undefined
     }));
 
     const handleMenuClick = (menuId: string) => {

@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem } from '@/types';
+
+export type { NavbarCategory, PersonalizedNavbarCategory };
 
 export interface LightningDealItem {
     id: string;
@@ -28,6 +30,8 @@ export interface LightningDealItem {
     coupon_discount_percent?: number;
     personalization_score?: number;
     in_stock?: boolean;
+    category_id?: string;
+    category_name?: string;
 }
 
 export interface DealCategoryNavItem {
@@ -41,10 +45,93 @@ export interface DealCategoryNavItem {
     dealPriority?: string;
 }
 
-export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<LightningDealItem[]> => {
+export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<LightningDealItem[]> => {
     const { data, error } = await supabase.rpc('get_personalized_suggestions_v2', {
         p_user_param: userId ?? null,
         p_limit: limit,
+        min_rating: 4.5, // Elite filtering for Hero
+        min_stock: 5,
+        include_categories: false, // Efficiency
+        categories_limit: 0,
+        min_deals_per_category: 1
+    });
+
+    if (error) {
+        console.error('Error fetching hero deals', error);
+        return [];
+    }
+
+    const payload = Array.isArray(data) ? data[0] : data;
+    const products = payload?.products ?? [];
+
+    const mapped: LightningDealItem[] = products.map((item: any) => {
+        const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
+        const price = item.current_price ?? item.price ?? originalPrice;
+        const discountPercent = item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
+
+        const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
+            ? item.gallery.map((media: any, idx: number) => ({
+                id: media.id ?? `${item.id}-media-${idx}`,
+                image_url: media.image_url ?? media.url ?? undefined,
+                thumbnail_url: media.thumbnail_url ?? undefined,
+                is_main: media.is_main ?? false,
+                type: media.type ?? 'image',
+                video_url: media.video_url ?? media.video_embed_url ?? media.url ?? undefined,
+                alt_text: media.alt_text ?? undefined,
+            }))
+            : [];
+
+        const mediaItems: MediaItem[] = galleryMedia
+            .map((media, idx) => ({
+                id: (media.id ?? `${item.id}-media-${idx}`).toString(),
+                type: (media.type as MediaItem['type']) ?? 'image',
+                url: (media.video_url ?? media.image_url ?? '').toString(),
+                thumbnail: media.thumbnail_url ?? undefined,
+                isMain: media.is_main ?? undefined,
+            }))
+            .filter(m => !!m.url);
+
+        const primaryImage = item.image_url || mediaItems.find(m => m.type === 'image')?.url || mediaItems[0]?.url || '';
+
+        return {
+            id: item.id,
+            title: item.title,
+            price,
+            originalPrice,
+            discountPercent,
+            rrp: originalPrice,
+            image: primaryImage,
+            image_url: item.image_url || undefined,
+            media: mediaItems,
+            gallery_media: galleryMedia,
+            delivery_time_estimate: item.delivery_time_estimate || undefined,
+            delivery_time_days: item.delivery_time_days || undefined,
+            is_express_delivery: item.is_express_delivery ?? undefined,
+            delivery_scope: item.delivery_scope || undefined,
+            vendor_country: item.vendor_country || undefined,
+            seller_id: item.vendor_id || item.seller_id || undefined,
+            tag: 'OVERALL BEST', // Custom tag for Hero
+            accent: undefined,
+            currency: item.currency || 'USD',
+            // Modern deal fields
+            deal_type: item.deal_type || 'standard',
+            coupon_name: item.coupon_name || undefined,
+            coupon_end: item.coupon_end || undefined,
+            coupon_discount_percent: item.coupon_discount_percent || undefined,
+            personalization_score: item.personalization_score || undefined,
+            in_stock: item.in_stock ?? (item.stock > 0),
+            category_id: item.category_id || item.category_handle || undefined,
+            category_name: item.category_name || undefined
+        };
+    });
+
+    return mapped;
+};
+
+export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0): Promise<LightningDealItem[]> => {
+    const { data, error } = await supabase.rpc('get_personalized_suggestions_v2', {
+        p_user_param: userId ?? null,
+        p_limit: limit + offset,
         min_rating: 3,
         min_stock: 1,
         include_categories: false,
@@ -58,7 +145,7 @@ export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<L
     }
 
     const payload = Array.isArray(data) ? data[0] : data;
-    const products = payload?.products ?? [];
+    const products = (payload?.products ?? []).slice(offset);
 
     const mapped: LightningDealItem[] = products.map((item: any) => {
         const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
@@ -115,7 +202,16 @@ export const fetchLightningDeals = async (userId?: string, limit = 8): Promise<L
             coupon_end: item.coupon_end || undefined,
             coupon_discount_percent: item.coupon_discount_percent || undefined,
             personalization_score: item.personalization_score || undefined,
-            in_stock: item.in_stock ?? (item.stock > 0)
+            in_stock: item.in_stock ?? (item.stock > 0),
+            category_id: item.category_id || item.category_handle || undefined,
+            category_name: item.category_name || undefined,
+            has_quantity_discount: item.has_quantity_discount ?? false,
+            auto_discount_type: item.auto_discount_type,
+            auto_discount_value: item.auto_discount_value,
+            auto_discount_buy_qty: item.auto_discount_buy_qty,
+            auto_discount_get_qty: item.auto_discount_get_qty,
+            auto_discount_min_requirement: item.auto_discount_min_requirement,
+            auto_discount_name: item.auto_discount_name
         };
     });
 
@@ -212,7 +308,14 @@ export const fetchDealsProducts = async (
                 coupon_discount_percent: item.coupon_discount_percent || undefined,
                 score: item.score || undefined,
                 personalization_score: item.personalization_score || undefined,
-                in_stock: item.in_stock ?? (item.stock > 0)
+                in_stock: item.in_stock ?? (item.stock > 0),
+                has_quantity_discount: item.has_quantity_discount ?? false,
+                auto_discount_type: item.auto_discount_type,
+                auto_discount_value: item.auto_discount_value,
+                auto_discount_buy_qty: item.auto_discount_buy_qty,
+                auto_discount_get_qty: item.auto_discount_get_qty,
+                auto_discount_min_requirement: item.auto_discount_min_requirement,
+                auto_discount_name: item.auto_discount_name
             };
         });
 
@@ -379,6 +482,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
             free_delivery: item.free_delivery || false,
             delivery_time_estimate: item.delivery_time_estimate || undefined,
             seller_rating: item.seller_rating || undefined,
+            has_quantity_discount: item.has_quantity_discount ?? false,
             vendor: item.business_name
                 ? {
                     vendor_id: item.seller_id?.toString?.() || '',
@@ -386,7 +490,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
                     vendor_rating: item.seller_rating,
                     review_count: item.review_count,
                     is_verified: item.vendor_active,
-                  }
+                }
                 : undefined,
         } as Product;
     });
@@ -702,7 +806,8 @@ export const fetchFilteredProducts = async (
         coupon_discount_percent: item.activeCoupon?.percent || undefined,
         score: item.score || undefined,
         personalization_score: item.personalization_score || undefined,
-        in_stock: typeof item.in_stock === 'boolean' ? item.in_stock : (item.stock ?? 0) > 0
+        in_stock: typeof item.in_stock === 'boolean' ? item.in_stock : (item.stock ?? 0) > 0,
+        has_quantity_discount: item.has_quantity_discount ?? false
     }));
 
     // Fetch vendor information for filtered products
@@ -931,22 +1036,6 @@ export const fetchProductVariants = async (productId: string): Promise<{ variant
     }
 };
 
-export interface NavbarCategory {
-    department_id: string;
-    department_name: string;
-    department_handle: string;
-    category_id: string;
-    category_name: string;
-    category_handle: string;
-    trend_score: number;
-    is_hot: boolean;
-    product_count: number;
-    department_sort_order: number;
-    trending_product_id?: string | null;
-    trending_product_name?: string | null;
-    trending_product_image_url?: string | null;
-    activeDeals?: number;
-}
 
 export const fetchNavbarCategories = async (): Promise<NavbarCategory[]> => {
     console.log('Fetching navbar categories...');
@@ -983,14 +1072,6 @@ export const fetchNavbarCategories = async (): Promise<NavbarCategory[]> => {
     }));
 };
 
-export interface PersonalizedNavbarCategory {
-    department_id: string;
-    department_name: string;
-    category_id: string;
-    category_name: string;
-    relevance_score: number;
-    is_trending: boolean;
-}
 
 export const fetchPersonalizedNavbarCategories = async (
     sessionId: string,
@@ -1632,6 +1713,101 @@ export const fetchActiveCoupons = async (limit = 30): Promise<PromoCoupon[]> => 
     return (data || []).filter(c => !c.total_quantity || (c.claimed_quantity ?? 0) < c.total_quantity);
 };
 
+// --- Automatic Discounts ---
+
+export const fetchAutomaticDiscounts = async (sellerId: string): Promise<AutomaticDiscount[]> => {
+    const { data, error } = await supabase
+        .from('automatic_discounts')
+        .select('*')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching automatic discounts:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const createAutomaticDiscount = async (payload: Omit<AutomaticDiscount, 'id' | 'created_at'>): Promise<AutomaticDiscount | null> => {
+    const { data, error } = await supabase
+        .from('automatic_discounts')
+        .insert(payload)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating automatic discount:', error);
+        return null;
+    }
+    return data;
+};
+
+export const updateAutomaticDiscount = async (id: string, payload: Partial<AutomaticDiscount>): Promise<boolean> => {
+    const { error } = await supabase
+        .from('automatic_discounts')
+        .update(payload)
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error updating automatic discount:', error);
+        return false;
+    }
+    return true;
+};
+
+// --- Quantity Discounts ---
+
+export const fetchQuantityDiscounts = async (productId: string): Promise<QuantityDiscountTier[]> => {
+    const { data, error } = await supabase
+        .from('quantity_discounts')
+        .select('*')
+        .eq('product_id', productId)
+        .order('min_quantity', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching quantity discounts:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const updateQuantityDiscounts = async (productId: string, tiers: QuantityDiscountTier[]): Promise<boolean> => {
+    // We replace all existing tiers for simplicity
+    const { error: deleteError } = await supabase
+        .from('quantity_discounts')
+        .delete()
+        .eq('product_id', productId);
+
+    if (deleteError) {
+        console.error('Error deleting old quantity discounts:', deleteError);
+        return false;
+    }
+
+    if (tiers.length === 0) {
+        // Also update the flag on product
+        await supabase.from('products').update({ has_quantity_discount: false }).eq('id', productId);
+        return true;
+    }
+
+    const { error: insertError } = await supabase
+        .from('quantity_discounts')
+        .insert(tiers.map(t => ({
+            ...t,
+            product_id: productId
+        })));
+
+    if (insertError) {
+        console.error('Error inserting quantity discounts:', insertError);
+        return false;
+    }
+
+    // Update flag on product
+    await supabase.from('products').update({ has_quantity_discount: true }).eq('id', productId);
+
+    return true;
+};
+
 export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> => {
     if (!userId) return [];
 
@@ -1962,6 +2138,123 @@ export const registerSeller = async (email: string, password: string, fullName: 
     }
 
     return { user: authData.user, error: null };
+};
+
+// Driver Registration
+export const registerDriver = async (email: string, password: string, fullName: string, phone?: string): Promise<{ user: any, error: any }> => {
+    console.log('Registering driver:', email);
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+            data: {
+                full_name: fullName,
+                role: 'driver',
+                is_driver: true,
+                phone: phone
+            }
+        }
+    });
+
+    if (authError) return { user: null, error: authError };
+
+    if (authData.user) {
+        await supabase
+            .from('users')
+            .update({
+                role: 'driver',
+                full_name: fullName
+            })
+            .eq('id', authData.user.id);
+    }
+
+    return { user: authData.user, error: null };
+};
+
+// Create Driver Profile
+export const createDriverProfile = async (payload: {
+    user_id: string;
+    company_name: string;
+    company_description?: string;
+    contact_email: string;
+    contact_phone: string;
+    license_number: string;
+    license_expiry_date?: string;
+    insurance_policy_number?: string;
+    insurance_expiry_date?: string;
+    delivery_radius_km?: number;
+    base_delivery_fee?: number;
+    per_km_fee?: number;
+    service_areas?: string[];
+}) => {
+    const { data, error } = await supabase
+        .from('delivery_partners')
+        .insert([payload])
+        .select()
+        .single();
+    return { data, error };
+};
+
+// Create Driver Vehicle
+export const createDriverVehicle = async (payload: {
+    partner_id: string;
+    vehicle_type: string;
+    license_plate: string;
+    make?: string;
+    model?: string;
+    year?: number;
+    color?: string;
+    capacity_kg?: number;
+    max_package_size?: 'small' | 'medium' | 'large' | 'extra_large';
+    insurance_number?: string;
+    registration_expiry?: string;
+}) => {
+    const { data, error } = await supabase
+        .from('delivery_partner_vehicles')
+        .insert([payload])
+        .select()
+        .single();
+    return { data, error };
+};
+
+// Fetch Driver Profile
+export const fetchDriverProfile = async (userId: string) => {
+    const { data, error } = await supabase
+        .from('delivery_partners')
+        .select(`
+            *,
+            vehicles:delivery_partner_vehicles(*)
+        `)
+        .eq('user_id', userId)
+        .single();
+    return data;
+};
+
+// Fetch Pending Driver Applications (Admin)
+export const fetchPendingDriverApplications = async () => {
+    const { data, error } = await supabase
+        .from('delivery_partners')
+        .select(`
+            *,
+            vehicles:delivery_partner_vehicles(*)
+        `)
+        .eq('verification_status', 'pending')
+        .order('created_at', { ascending: false });
+    return { data, error };
+};
+
+// Update Driver Verification Status (Admin)
+export const updateDriverVerificationStatus = async (partnerId: string, status: 'verified' | 'rejected', notes?: string) => {
+    const { data, error } = await supabase
+        .from('delivery_partners')
+        .update({
+            verification_status: status,
+            is_verified: status === 'verified',
+            // company_description is used for notes if provided
+            ...(notes && { company_description: notes })
+        })
+        .eq('id', partnerId);
+    return { data, error };
 };
 
 // Step 2: Business Profile
@@ -2881,7 +3174,9 @@ export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats | 
         const [
             { count: totalUsers },
             { count: totalSellers },
+            { count: totalDrivers },
             { count: pendingVerifications },
+            { count: pendingDriverVerifications },
             { count: pendingApprovals },
             { count: totalOrders },
             { data: revenueData }
@@ -2892,8 +3187,14 @@ export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats | 
             // Total Sellers (approved vendors)
             supabase.from('vendors').select('*', { count: 'exact', head: true }).eq('verification_status', 'approved'),
 
+            // Total Drivers
+            supabase.from('delivery_partners').select('*', { count: 'exact', head: true }).eq('verification_status', 'verified'),
+
             // Pending Seller Verifications
             supabase.from('vendors').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
+
+            // Pending Driver Verifications
+            supabase.from('delivery_partners').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending'),
 
             // Pending Product Approvals
             supabase.from('products').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
@@ -2911,7 +3212,9 @@ export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats | 
         const stats: AdminDashboardStats = {
             total_users: totalUsers || 0,
             total_sellers: totalSellers || 0,
+            total_drivers: totalDrivers || 0,
             pending_seller_verifications: pendingVerifications || 0,
+            pending_driver_verifications: pendingDriverVerifications || 0,
             pending_product_approvals: pendingApprovals || 0,
             total_orders: totalOrders || 0,
             total_revenue: totalRevenue,
@@ -4029,13 +4332,8 @@ export const fetchProductCompliance = async (sellerId: string): Promise<ProductC
 
 
 // Order Reports & Files
-export const fetchOrderReports = async (sellerId: string) => {
-    return [];
-};
-
-export const fetchOrderFileUploads = async (sellerId: string) => {
-    return [];
-};
+// Order Reports & Files
+// (Moved to end of file)
 
 export const fetchPromotionalCampaigns = async (sellerId: string) => {
     return [];
@@ -4210,4 +4508,294 @@ export const updateProductDetails = async (productId: string | number, updates: 
     }
 
     return { success: true };
+};
+
+// ==========================================
+// PAYOUTS & COMMISSIONS API
+// ==========================================
+
+
+
+export const fetchAffiliateCommissions = async (affiliateId: string): Promise<AffiliateCommission[]> => {
+    const { data, error } = await supabase
+        .from('affiliate_commissions')
+        .select('*')
+        .eq('affiliate_id', affiliateId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching affiliate commissions:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const fetchAffiliatePayouts = async (affiliateId: string): Promise<any[]> => {
+    const { data, error } = await supabase
+        .from('affiliate_payouts')
+        .select('*')
+        .eq('affiliate_id', affiliateId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching affiliate payouts:', error);
+        return [];
+    }
+    return data || [];
+};
+
+// ==========================================
+// ORDER TRACKING & ISSUES API
+// ==========================================
+
+export const fetchOrderTrackingEvents = async (orderId: string): Promise<OrderTrackingEvent[]> => {
+    const { data, error } = await supabase
+        .from('order_tracking_events')
+        .select('*')
+        .eq('order_id', orderId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching order tracking events:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const fetchOrderIssues = async (orderId: string): Promise<OrderIssue[]> => {
+    const { data, error } = await supabase
+        .from('order_issues')
+        .select('*')
+        .eq('order_id', orderId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching order issues:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const createOrderIssue = async (issueData: Omit<OrderIssue, 'id' | 'created_at' | 'updated_at'>): Promise<OrderIssue | null> => {
+    const { data, error } = await supabase
+        .from('order_issues')
+        .insert(issueData)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating order issue:', error);
+        return null;
+    }
+    return data;
+};
+
+// ==========================================
+// DELIVERY & REPORTS API
+// ==========================================
+
+export const fetchOrderDeliverySchedule = async (orderId: string): Promise<OrderDeliverySchedule | null> => {
+    const { data, error } = await supabase
+        .from('order_delivery_schedules')
+        .select('*')
+        .eq('order_id', orderId)
+        .single();
+
+    if (error && error.code !== 'PGRST116') { // Ignore not found error
+        console.error('Error fetching delivery schedule:', error);
+        return null; // Return null if not found or error
+    }
+    return data || null;
+};
+
+export const upsertOrderDeliverySchedule = async (scheduleData: Partial<OrderDeliverySchedule>): Promise<OrderDeliverySchedule | null> => {
+    const { data, error } = await supabase
+        .from('order_delivery_schedules')
+        .upsert(scheduleData)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error upserting delivery schedule:', error);
+        return null;
+    }
+    return data;
+};
+
+export const fetchOrderReports = async (sellerId: string): Promise<OrderReport[]> => {
+    const { data, error } = await supabase
+        .from('order_reports')
+        .select('*')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching order reports:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const fetchOrderFileUploads = async (sellerId: string): Promise<OrderFileUpload[]> => {
+    const { data, error } = await supabase
+        .from('order_file_uploads')
+        .select('*')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching file uploads:', error);
+        return [];
+    }
+    return data || [];
+};
+
+// ==========================================
+// Financial & Delivery Dashboard APIs
+// ==========================================
+
+export const fetchSellerBalance = async (sellerId: string): Promise<SellerBalanceSummary | null> => {
+    const { data, error } = await supabase
+        .from('seller_balance_summary')
+        .select('*')
+        .eq('seller_id', sellerId)
+        .single();
+
+    if (error) {
+        console.error('Error fetching seller balance:', error);
+        return null;
+    }
+    return data;
+};
+
+export const fetchSellerPayouts = async (sellerId: string): Promise<SellerPayout[]> => {
+    const { data, error } = await supabase
+        .from('seller_payouts')
+        .select('*, orders(order_number)')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching seller payouts:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const requestPayout = async (sellerId: string, amount: number, method: 'bank_transfer' | 'mobile_money'): Promise<{ success: boolean; message: string }> => {
+    const { error } = await supabase
+        .from('payout_requests')
+        .insert({
+            seller_id: sellerId,
+            amount: amount,
+            payment_method: method,
+            status: 'pending'
+        });
+
+    if (error) {
+        console.error('Error requesting payout:', error);
+        return { success: false, message: error.message };
+    }
+    return { success: true, message: 'Payout request submitted successfully' };
+};
+
+export const fetchActiveDeliveryJobs = async (partnerId: string): Promise<DeliveryAssignment[]> => {
+    const { data, error } = await supabase
+        .from('delivery_assignments')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .in('status', ['assigned', 'picked_up', 'in_transit'])
+        .order('assigned_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching active delivery jobs:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const markOrderDelivered = async (orderId: string, location?: { lat: number; lng: number }): Promise<boolean> => {
+    const { error } = await supabase
+        .from('order_tracking_events')
+        .insert({
+            order_id: orderId,
+            event_type: 'delivered',
+            event_description: 'Order delivered by driver',
+            location: location ? `SRID=4326;POINT(${location.lng} ${location.lat})` : null,
+            created_at: new Date().toISOString()
+        });
+
+    if (error) {
+        console.error('Error marking order as delivered:', error);
+        return false;
+    }
+    return true;
+};
+
+export const fetchPlatformRevenue = async (): Promise<PlatformRevenueAnalytics[]> => {
+    const { data, error } = await supabase
+        .from('platform_revenue_analytics')
+        .select('*')
+        .order('transaction_date', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching platform revenue:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const fetchVerificationQueue = async (): Promise<VerificationQueueItem[]> => {
+    // Combined queue for vendors and drivers
+    const [vendorsResponse, driversResponse] = await Promise.all([
+        supabase.from('vendors').select('id, business_name, created_at, verification_status').eq('verification_status', 'pending'),
+        supabase.from('delivery_partners').select('id, company_name, created_at, verification_status').eq('verification_status', 'pending')
+    ]);
+
+    const queue: VerificationQueueItem[] = [];
+
+    if (vendorsResponse.data) {
+        vendorsResponse.data.forEach(v => {
+            queue.push({
+                id: v.id,
+                type: 'vendor',
+                name: v.business_name,
+                submitted_at: v.created_at,
+                status: 'pending',
+                documents: []
+            });
+        });
+    }
+
+    if (driversResponse.data) {
+        driversResponse.data.forEach(d => {
+            queue.push({
+                id: d.id,
+                type: 'driver',
+                name: d.company_name,
+                submitted_at: d.created_at,
+                status: 'pending',
+                documents: []
+            });
+        });
+    }
+
+    return queue.sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+};
+
+export const approvePayoutRequest = async (requestId: string, adminNotes?: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('payout_requests')
+        .update({
+            status: 'approved',
+            admin_notes: adminNotes,
+            processed_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+    if (error) {
+        console.error('Error approving payout request:', error);
+        return false;
+    }
+    return true;
 };

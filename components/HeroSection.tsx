@@ -1,221 +1,282 @@
-import React, { useState, useEffect } from 'react';
-import { fetchHeroSlides } from '@/lib/api';
-import type { HeroSlide } from '@/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
+import { getCurrencySymbol } from '@/lib/currency';
 
-// Fallback slides if database is empty or fails
-const FALLBACK_SLIDES = [
-  {
-    id: '1',
-    image_url: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
-    title: "Black Friday Deals",
-    subtitle: "UP TO 80% OFF",
-    cta_text: "Shop Now",
-    cta_link: "/deals",
-    theme: "red" as const,
-    display_order: 0,
-    is_active: true
+const formatPrice = (value: number, currency?: string) => `${getCurrencySymbol(currency || 'USD')}${value.toFixed(2)}`;
+
+// Thematic Mapping for Categories
+const CATEGORY_THEMES: Record<string, { gradient: string; accent: string; text: string }> = {
+  'electronics': {
+    gradient: 'from-slate-950 via-blue-950 to-slate-900',
+    accent: 'text-blue-400',
+    text: 'text-white'
   },
-  {
-    id: '2',
-    image_url: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
-    title: "Next Gen Electronics",
-    subtitle: "The Future is Here",
-    cta_text: "Explore Tech",
-    cta_link: "/electronics",
-    theme: "blue" as const,
-    display_order: 1,
-    is_active: true
+  'women-clothing': {
+    gradient: 'from-rose-950 via-pink-900/40 to-slate-900',
+    accent: 'text-pink-300',
+    text: 'text-white'
   },
-  {
-    id: '3',
-    image_url: "https://images.unsplash.com/photo-1483985988355-763728e1935b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
-    title: "Fashion Trends",
-    subtitle: "New Collection 2025",
-    cta_text: "View Lookbook",
-    cta_link: "/fashion",
-    theme: "purple" as const,
-    display_order: 2,
-    is_active: true
+  'men-clothing': {
+    gradient: 'from-gray-950 via-slate-900 to-black',
+    accent: 'text-amber-400',
+    text: 'text-white'
+  },
+  'beauty': {
+    gradient: 'from-purple-950 via-fuchsia-900/30 to-slate-900',
+    accent: 'text-fuchsia-300',
+    text: 'text-white'
+  },
+  'home': {
+    gradient: 'from-emerald-950 via-teal-900/30 to-slate-900',
+    accent: 'text-teal-300',
+    text: 'text-white'
+  },
+  'sports': {
+    gradient: 'from-orange-950 via-red-900/30 to-slate-900',
+    accent: 'text-orange-300',
+    text: 'text-white'
+  },
+  'default': {
+    gradient: 'from-gray-900 via-gray-800 to-black',
+    accent: 'text-yellow-400',
+    text: 'text-white'
   }
-];
+};
 
-const THEME_GRADIENTS: Record<HeroSlide['theme'], string> = {
-  red: 'from-red-900/70 via-red-800/50 to-transparent',
-  blue: 'from-blue-900/70 via-blue-800/50 to-transparent',
-  purple: 'from-purple-900/70 via-purple-800/50 to-transparent',
-  orange: 'from-orange-900/70 via-orange-800/50 to-transparent',
-  green: 'from-green-900/70 via-green-800/50 to-transparent',
-  black: 'from-gray-900/70 via-gray-800/50 to-transparent',
-  gold: 'from-amber-900/70 via-amber-800/50 to-transparent'
+const THEME_LIST = Object.values(CATEGORY_THEMES).filter(t => t !== CATEGORY_THEMES.default);
+
+const getTheme = (categoryId?: string, index: number = 0) => {
+  if (!categoryId) {
+    // Variety based on index if no category
+    return THEME_LIST[index % THEME_LIST.length] || CATEGORY_THEMES.default;
+  }
+
+  const key = categoryId.toLowerCase();
+  for (const themeKey in CATEGORY_THEMES) {
+    if (themeKey !== 'default' && key.includes(themeKey)) return CATEGORY_THEMES[themeKey];
+  }
+
+  return THEME_LIST[index % THEME_LIST.length] || CATEGORY_THEMES.default;
 };
 
 const HeroSection: React.FC = () => {
-  const [slides, setSlides] = useState<HeroSlide[]>([]);
+  const [deals, setDeals] = useState<LightningDealItem[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadSlides();
+    loadDeals();
   }, []);
 
-  const loadSlides = async () => {
-    // 1. Try to load from LocalStorage first for instant render
-    const cached = localStorage.getItem('hero_slides');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        setSlides(parsed);
-        setIsLoading(false); // Show cached content immediately
-      } catch (e) {
-        console.error('Error parsing cached slides', e);
-      }
-    }
-
-    // 2. Fetch fresh data in the background (stale-while-revalidate)
+  const loadDeals = async () => {
     try {
-      const data = await fetchHeroSlides();
+      const data = await fetchHeroDeals();
       if (data && data.length > 0) {
-        // Only update if different
-        if (JSON.stringify(data) !== cached) {
-          setSlides(data);
-          localStorage.setItem('hero_slides', JSON.stringify(data));
-        }
-      } else if (!cached) {
-        // Only fallback if nothing in cache AND api failed/empty
-        setSlides(FALLBACK_SLIDES);
+        setDeals(data);
       }
     } catch (error) {
-      console.error('Error loading hero slides:', error);
-      if (!cached) setSlides(FALLBACK_SLIDES);
+      console.error('Error loading hero deals:', error);
+    } finally {
+      setIsLoading(false);
     }
-
-    // Ensure loading state is off
-    setIsLoading(false);
   };
 
   useEffect(() => {
-    if (slides.length === 0) return;
+    if (deals.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 5000);
+      setCurrentSlide((prev) => (prev + 1) % deals.length);
+    }, 8000); // Slower rotation for premium feel
     return () => clearInterval(timer);
-  }, [slides.length]);
+  }, [deals.length]);
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length);
+    setCurrentSlide((prev) => (prev + 1) % deals.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
+    setCurrentSlide((prev) => (prev - 1 + deals.length) % deals.length);
   };
 
-  // Skeleton loader - instant shimmer effect
   if (isLoading) {
     return (
       <section className="mb-8 lg:mb-12 relative">
-        <div className="relative h-64 md:h-96 rounded-2xl overflow-hidden shadow-2xl bg-gray-200">
-          {/* Shimmer effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer"
+        <div className="relative h-[450px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl bg-slate-900">
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 animate-shimmer"
             style={{ backgroundSize: '200% 100%' }} />
-          {/* Content skeleton */}
-          <div className="absolute inset-0 flex items-center px-8 md:px-16">
-            <div className="max-w-xl space-y-4">
-              <div className="h-12 md:h-16 bg-gray-300/50 rounded-lg w-80 animate-pulse"></div>
-              <div className="h-8 md:h-10 bg-gray-300/50 rounded-lg w-60 animate-pulse"></div>
-              <div className="h-12 bg-gray-300/50 rounded-full w-40 mt-6 animate-pulse"></div>
+          <div className="absolute inset-0 flex flex-col md:flex-row items-center px-8 md:px-20 gap-12">
+            <div className="flex-1 space-y-6">
+              <div className="h-6 bg-slate-800 rounded w-32 animate-pulse" />
+              <div className="h-16 bg-slate-800 rounded w-full animate-pulse" />
+              <div className="h-24 bg-slate-800 rounded w-3/4 animate-pulse" />
+              <div className="h-14 bg-slate-800 rounded-full w-48 animate-pulse" />
             </div>
-          </div>
-          {/* Indicator skeleton */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="w-2 h-2 rounded-full bg-gray-300/50 animate-pulse"></div>
-            ))}
+            <div className="flex-1 w-full flex justify-center">
+              <div className="w-64 h-64 md:w-80 md:h-80 bg-slate-800 rounded-2xl animate-pulse" />
+            </div>
           </div>
         </div>
       </section>
     );
   }
 
-  if (slides.length === 0) return null;
+  if (deals.length === 0) return null;
 
   return (
     <section className="mb-8 lg:mb-12 relative group">
-      <div className="relative h-64 md:h-96 rounded-2xl overflow-hidden shadow-2xl">
-        {slides.map((slide, index) => (
-          <div
-            key={slide.id}
-            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0'
-              }`}
-          >
-            {/* Background Image */}
-            {/* Optimization: Use standard img tag for better control over loading priority for LCP */}
-            <img
-              src={slide.image_url}
-              alt={slide.title}
-              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-[5000ms] ease-linear overflow-hidden ${index === currentSlide ? 'scale-105' : 'scale-100'}`}
-              // @ts-ignore - fetchPriority is a valid newer attribute
-              fetchPriority={index === 0 ? "high" : "auto"}
-              loading={index === 0 ? "eager" : "lazy"}
-              draggable="false"
-            />
+      <div className="relative h-[500px] md:h-[550px] rounded-3xl overflow-hidden shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] bg-black">
+        {deals.map((deal, index) => {
+          const theme = getTheme(deal.category_id || deal.category_name, index);
+          const isActive = index === currentSlide;
+          const youtubeVideo = deal.media?.find(m => m.type === 'youtube');
 
-            {/* Overlay */}
-            <div className={`absolute inset-0 bg-gradient-to-r ${THEME_GRADIENTS[slide.theme] || THEME_GRADIENTS.purple}`} />
-            <div className="absolute inset-0 bg-black/30" />
+          return (
+            <div
+              key={deal.id || `hero-deal-${index}`}
+              className={`absolute inset-0 transition-all duration-1000 ease-in-out ${isActive ? 'opacity-100 z-10 scale-100' : 'opacity-0 z-0 scale-105'
+                }`}
+            >
+              {/* Background with Immersive Gradient */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} transition-colors duration-1000`} />
 
-            {/* Content */}
-            <div className="absolute inset-0 flex items-center px-8 md:px-16">
-              <div className="max-w-xl text-white space-y-4">
-                <h2 className={`text-4xl md:text-6xl font-black uppercase tracking-tight drop-shadow-lg transition-all duration-700 delay-300 ${index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
-                  }`}>
-                  {slide.title}
-                </h2>
-                <p
-                  className={`text-2xl md:text-4xl font-bold drop-shadow-md transition-all duration-700 delay-500 ${index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
-                    }`}
-                  style={{ color: slide.subtitle_color || '#FACC15' }}
-                >
-                  {slide.subtitle}
-                </p>
-                <a
-                  href={slide.cta_link || '#'}
-                  className={`mt-6 px-8 py-3 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 shadow-lg flex items-center gap-2 group/btn w-fit ${index === currentSlide ? 'translate-y-0 opacity-100 delay-700' : 'translate-y-10 opacity-0'
-                    }`}
-                >
-                  {slide.cta_text}
-                  <span className="material-icons group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-                </a>
+              {/* Animated Glow/Orbs */}
+              <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full animate-pulse" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-fuchsia-500/10 blur-[120px] rounded-full animate-pulse delay-1000" />
+
+              {/* Optional Video Background Layer */}
+              {youtubeVideo && isActive && (
+                <div className="absolute inset-0 opacity-20 mix-blend-overlay pointer-events-none overflow-hidden">
+                  <iframe
+                    src={`${youtubeVideo.url}${youtubeVideo.url.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=0&loop=1&playlist=${youtubeVideo.url.split('/').pop()}`}
+                    className="w-full h-full scale-[1.5] object-cover"
+                    allow="autoplay; encrypted-media"
+                    title="Background Video"
+                  />
+                </div>
+              )}
+
+              {/* Split Content Layout */}
+              <div className="absolute inset-0 flex flex-col md:flex-row items-center justify-between px-8 md:px-20 py-12 gap-10">
+
+                {/* Left Side: Product Info */}
+                <div className="flex-1 text-left space-y-6 max-w-2xl">
+                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 transition-all duration-700 delay-300 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+                    <span className="flex h-2 w-2 rounded-full bg-green-400 animate-ping" />
+                    <span className="text-[10px] font-bold tracking-widest uppercase text-white/80">{deal.tag || 'TOP RATED'}</span>
+                  </div>
+
+                  <h2 className={`text-4xl md:text-6xl font-black leading-none tracking-tight text-white transition-all duration-700 delay-500 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-[-40px] opacity-0'}`}>
+                    {deal.title}
+                  </h2>
+
+                  <div className={`flex items-baseline gap-4 transition-all duration-700 delay-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                    <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tighter">
+                      {formatPrice(deal.price, deal.currency)}
+                    </span>
+                    {deal.originalPrice > deal.price && (
+                      <span className="text-xl md:text-2xl text-white/40 line-through font-medium">
+                        {formatPrice(deal.originalPrice, deal.currency)}
+                      </span>
+                    )}
+                    {(deal.discountPercent || 0) > 0 && (
+                      <span className={`text-sm font-bold px-3 py-1 rounded-lg bg-red-500 text-white ml-2 animate-bounce flex items-center gap-1`}>
+                        <span className="material-icons text-xs">trending_down</span>
+                        -{deal.discountPercent}%
+                      </span>
+                    )}
+                  </div>
+
+                  <p className={`text-lg md:text-xl text-white/70 max-w-md line-clamp-2 transition-all duration-700 delay-900 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                    Premium selection with elite ratings. Experience performance and value in one package.
+                  </p>
+
+                  <div className={`pt-6 transition-all duration-700 delay-1000 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                    <a
+                      href={`/product/${deal.id}`}
+                      className="group/btn relative px-10 py-4 bg-white text-black font-black rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_20px_40px_-10px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3 w-full md:w-fit"
+                    >
+                      SHOP THIS DEAL
+                      <span className="material-icons transition-transform group-hover/btn:translate-x-2">arrow_forward</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Right Side: Floating Product Image - Enhanced for white bg images */}
+                <div className={`flex-1 relative w-full h-[300px] md:h-full flex items-center justify-center transition-all duration-1000 delay-500 ${isActive ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-20 opacity-0 scale-90'}`}>
+                  {/* Image Shadow/Glow */}
+                  <div className="absolute inset-x-0 bottom-10 h-10 bg-black/40 blur-2xl rounded-[100%] scale-x-50" />
+
+                  <div className="relative group/img cursor-pointer max-w-[90%] md:max-w-none">
+                    {/* Glass Container for images with solid backgrounds */}
+                    <div className="relative p-2 md:p-4 rounded-[40px] bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] overflow-hidden">
+                      <img
+                        src={deal.image}
+                        alt={deal.title}
+                        className="w-full h-[220px] md:w-[420px] md:h-[420px] object-contain rounded-[30px] drop-shadow-2xl animate-float transition-transform duration-700 group-hover/img:scale-110"
+                        loading="eager"
+                      />
+                    </div>
+
+                    {/* Floating Product Badge */}
+                    <div className="absolute -top-6 -right-6 md:-top-10 md:-right-10 bg-white shadow-2xl rotate-12 group-hover:rotate-0 transition-all duration-500 p-4 md:p-6 rounded-[30px] border border-white">
+                      <div className="text-[10px] text-black/40 font-black uppercase tracking-widest mb-1">Elite Rank</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-icons text-yellow-500 text-xl md:text-2xl">star</span>
+                        <span className="text-xl md:text-3xl font-black text-black">4.9</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Navigation Buttons */}
-      <button
-        onClick={prevSlide}
-        className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-white/10 hover:bg-white/30 backdrop-blur-md text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-      >
-        <span className="material-icons">chevron_left</span>
-      </button>
-      <button
-        onClick={nextSlide}
-        className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-white/10 hover:bg-white/30 backdrop-blur-md text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-      >
-        <span className="material-icons">chevron_right</span>
-      </button>
-
-      {/* Indicators */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-3">
-        {slides.map((_, index) => (
+      {/* Navigation Controls */}
+      <div className="absolute bottom-10 right-10 z-30 flex items-center gap-4">
+        <div className="flex gap-2">
+          {deals.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentSlide(i)}
+              className={`h-1.5 transition-all duration-500 rounded-full ${i === currentSlide ? 'w-10 bg-white' : 'w-2 bg-white/30 hover:bg-white/50'}`}
+            />
+          ))}
+        </div>
+        <div className="flex gap-2 ml-4">
           <button
-            key={index}
-            onClick={() => setCurrentSlide(index)}
-            className={`h-2 rounded-full transition-all duration-300 ${index === currentSlide ? 'w-8 bg-white' : 'w-2 bg-white/50 hover:bg-white/80'
-              }`}
-          />
-        ))}
+            onClick={prevSlide}
+            className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white backdrop-blur-md transition-all hover:scale-110 active:scale-90"
+          >
+            <span className="material-icons">chevron_left</span>
+          </button>
+          <button
+            onClick={nextSlide}
+            className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white backdrop-blur-md transition-all hover:scale-110 active:scale-90"
+          >
+            <span className="material-icons">chevron_right</span>
+          </button>
+        </div>
       </div>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-30px) rotate(2deg); }
+        }
+        .animate-float {
+          animation: float 10s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .animate-shimmer {
+          animation: shimmer 3s linear infinite;
+        }
+      `}} />
     </section>
   );
 };

@@ -355,7 +355,7 @@ const LightningDealsRow: React.FC<LightningDealsRowProps> = ({ userId, onViewAll
   const fetchDeals = useCallback(async () => {
     setLoading(true);
     try {
-      const liveDeals = await fetchLightningDeals(userId || undefined, 8);
+      const liveDeals = await fetchLightningDeals(userId || undefined, 8, 5);
 
       // Deduplicate deals
       const uniqueDeals = Array.from(new Map((liveDeals || []).map(d => [d.id, d])).values());

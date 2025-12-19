@@ -152,6 +152,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
                             ⭐ FEATURED
                         </div>
                     )}
+                    {/* Bulk Deal Badge */}
+                    {product.has_quantity_discount && (
+                        <div className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
+                            <span className="material-icons-round text-[10px]">groups</span>
+                            BULK DEAL
+                        </div>
+                    )}
+                    {/* Buy X Get Y Badge */}
+                    {product.auto_discount_type === 'buy_x_get_y' && (
+                        <div className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
+                            <span className="material-icons-round text-[10px]">redeem</span>
+                            {`BUY ${product.auto_discount_buy_qty} GET ${product.auto_discount_get_qty}`}
+                        </div>
+                    )}
                 </div>
 
                 {/* Top Right Badges - Show only on press/hover */}

@@ -75,7 +75,21 @@ export interface Product {
     free_delivery?: boolean;
     delivery_time_estimate?: string;
     seller_rating?: number;
+    has_quantity_discount?: boolean; // Flag indicating bulk pricing tiers are available
+    auto_discount_type?: 'percentage' | 'fixed_amount' | 'buy_x_get_y';
+    auto_discount_value?: number;
+    auto_discount_buy_qty?: number;
+    auto_discount_get_qty?: number;
+    auto_discount_min_requirement?: number;
+    auto_discount_name?: string;
+
+    // Mobile UI specific (migrated from legacy)
+    soldCount?: number;
+    features?: string[];
+    bestSellingText?: string;
+    cartOverlay?: boolean;
 }
+
 
 // Product interface that includes similarity score
 export interface RelatedProduct extends Product {
@@ -726,6 +740,30 @@ export interface PromoCoupon {
     products?: any[]; // Simplified for list view, full details fetched separately
 }
 
+export interface AutomaticDiscount {
+    id: string;
+    seller_id: string;
+    name: string;
+    discount_type: 'percentage' | 'fixed_amount' | 'buy_x_get_y';
+    discount_value?: number;
+    buy_qty?: number;
+    get_qty?: number;
+    min_requirement_value: number;
+    starts_at: string;
+    ends_at: string;
+    status: 'active' | 'scheduled' | 'expired' | 'deactivated';
+    created_at: string;
+}
+
+export interface QuantityDiscountTier {
+    id?: string;
+    product_id: string;
+    variant_id?: string;
+    min_quantity: number;
+    unit_price: number;
+    created_at?: string;
+}
+
 export interface UserCoupon {
     coupon: PromoCoupon;
     claimed_at?: string;
@@ -733,6 +771,7 @@ export interface UserCoupon {
     status: 'active' | 'upcoming' | 'expired' | 'used' | 'out_of_stock';
     remaining_quantity?: number;
 }
+
 
 export interface CouponValidationResult {
     is_valid: boolean;
@@ -962,6 +1001,7 @@ export const ADMIN_TABS: AdminTabConfig[] = [
     { id: 'overview', label: 'Dashboard', icon: 'fas fa-chart-line', requiredLevel: 'content_manager' },
     { id: 'products', label: 'Product Approval', icon: 'fas fa-check-circle', requiredLevel: 'junior_admin' },
     { id: 'sellers', label: 'Seller Verification', icon: 'fas fa-store', requiredLevel: 'senior_admin' },
+    { id: 'drivers', label: 'Driver Verification', icon: 'fas fa-truck', requiredLevel: 'senior_admin' },
     { id: 'users', label: 'User Management', icon: 'fas fa-users', requiredLevel: 'senior_admin' },
     { id: 'orders', label: 'Order Management', icon: 'fas fa-shopping-cart', requiredLevel: 'junior_admin' },
     { id: 'content', label: 'Content Management', icon: 'fas fa-folder', requiredLevel: 'content_manager' },
@@ -973,7 +1013,9 @@ export const ADMIN_TABS: AdminTabConfig[] = [
 export interface AdminDashboardStats {
     total_users: number;
     total_sellers: number;
+    total_drivers: number;
     pending_seller_verifications: number;
+    pending_driver_verifications: number;
     pending_product_approvals: number;
     total_orders: number;
     total_revenue: number;
@@ -1087,4 +1129,294 @@ export interface SellerStats {
     total_products: number;
     low_stock_count: number;
     last_updated: string;
+}
+
+// ==========================================
+// NEW TYPES FROM FINAL ORDER.SQL
+// ==========================================
+
+export interface NavbarCategory {
+    department_id: string;
+    department_name: string;
+    department_handle: string;
+    category_id: string;
+    category_name: string;
+    category_handle: string;
+    trend_score: number;
+    is_hot: boolean;
+    product_count: number;
+    department_sort_order: number;
+    trending_product_id?: string | null;
+    trending_product_name?: string | null;
+    trending_product_image_url?: string | null;
+    activeDeals?: number;
+}
+
+export interface PersonalizedNavbarCategory {
+    department_id: string;
+    department_name: string;
+    category_id: string;
+    category_name: string;
+    relevance_score: number;
+    is_trending: boolean;
+}
+
+
+export interface AffiliateCommission {
+    id: string;
+    affiliate_id: string;
+    order_id: string;
+    amount: number;
+    status: 'pending' | 'available' | 'paid' | 'cancelled';
+    available_at?: string;
+    created_at: string;
+}
+
+export interface OrderTrackingEvent {
+    id: string;
+    order_id?: string;
+    event_type: 'order_placed' | 'payment_confirmed' | 'order_confirmed' | 'preparing' | 'ready_for_pickup' | 'picked_up' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'failed_delivery' | 'returned' | 'cancelled' | 'refunded';
+    event_description: string;
+    location?: any; // geometry
+    location_name?: string;
+    estimated_delivery_time?: string;
+    actual_delivery_time?: string;
+    carrier_name?: string;
+    tracking_number?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    driver_photo_url?: string;
+    vehicle_info?: string;
+    weather_conditions?: string;
+    traffic_conditions?: string;
+    delay_reason?: string;
+    delay_duration?: any; // interval
+    customer_notified?: boolean;
+    internal_notes?: string;
+    event_data?: any; // jsonb
+    created_by?: string;
+    created_at: string;
+}
+
+export interface OrderIssue {
+    id: string;
+    order_id?: string;
+    issue_type: 'wrong_item' | 'damaged_item' | 'missing_item' | 'late_delivery' | 'wrong_address' | 'payment_issue' | 'other';
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    description: string;
+    reported_by?: string;
+    assigned_to?: string;
+    status: 'open' | 'investigating' | 'resolved' | 'closed';
+    resolution?: string;
+    resolution_date?: string;
+    refund_amount?: number;
+    replacement_order_id?: string;
+    priority?: number;
+    tags?: string[];
+    internal_notes?: string;
+    customer_visible?: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface OrderDeliverySchedule {
+    id: string;
+    order_id?: string;
+    scheduled_date: string;
+    scheduled_time_slot: string; // e.g., "09:00-11:00"
+    delivery_window_start?: string;
+    delivery_window_end?: string;
+    is_flexible?: boolean;
+    alternative_dates?: string[];
+    customer_instructions?: string;
+    delivery_address?: any; // jsonb
+    contact_person?: string;
+    contact_phone?: string;
+    requires_signature?: boolean;
+    special_handling?: string[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface OrderDeliveryPreferences {
+    id: string;
+    user_id?: string;
+    preferred_delivery_times?: string[];
+    preferred_days?: string[];
+    avoid_dates?: string[];
+    delivery_instructions?: string;
+    contactless_delivery?: boolean;
+    signature_required?: boolean;
+    allow_substitutions?: boolean;
+    notification_preferences?: { sms: boolean; push: boolean; email: boolean };
+    saved_addresses?: any; // jsonb
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SellerPaymentMethod {
+    id: string;
+    seller_id: string;
+    type: string;
+    last4?: string;
+    details?: any; // jsonb
+    is_default?: boolean;
+    created_at: string;
+}
+
+export interface PaymentTransaction {
+    id: string;
+    order_id: string;
+    stripe_payment_intent_id?: string;
+    amount: number;
+    status: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface DeliveryPartnerPayment {
+    id: string;
+    partner_id?: string;
+    assignment_id?: string;
+    amount: number;
+    currency?: string;
+    payment_date?: string;
+    payment_method?: 'bank_transfer' | 'mobile_money' | 'cash';
+    reference_number?: string;
+    status?: 'pending' | 'processed' | 'failed';
+    processed_at?: string;
+    notes?: string;
+}
+
+export interface AffiliatePayout {
+    id: string;
+    affiliate_id?: string;
+    amount: number;
+    currency?: string;
+    payment_method: 'bank_transfer' | 'mobile_money' | 'paypal';
+    payment_details?: any; // jsonb
+    status?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled';
+    requested_at?: string;
+    processed_at?: string;
+    paid_at?: string;
+    transaction_id?: string;
+    failure_reason?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AffiliatePayoutItem {
+    id: string;
+    payout_id?: string;
+    commission_id?: string;
+    amount: number;
+    created_at: string;
+}
+
+// Financial & Delivery Dashboard Types
+
+export interface SellerBalanceSummary {
+    seller_id: string;
+    total_available: number;
+    total_escrow: number;
+    pending_clearance: number;
+    last_updated: string;
+}
+
+export interface SellerPayout {
+    id: string;
+    seller_id: string;
+    order_id: string;
+    amount: number;
+    status: 'escrow' | 'available' | 'processing' | 'paid' | 'cancelled';
+    available_at: string;
+    order_number?: string;
+    created_at: string;
+    updated_at?: string;
+}
+
+export interface PayoutRequest {
+    id: string;
+    seller_id: string;
+    amount: number;
+    payment_method: 'bank_transfer' | 'mobile_money';
+    status: 'pending' | 'approved' | 'rejected' | 'processed';
+    requested_at: string;
+    processed_at?: string;
+    admin_notes?: string;
+}
+
+export interface DeliveryAssignment {
+    id: string;
+    order_id: string;
+    partner_id: string;
+    driver_name?: string;
+    driver_phone?: string;
+    status: 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'failed' | 'cancelled';
+    assigned_at: string;
+    delivered_at?: string;
+    delivery_fee: number;
+    tracking_number: string;
+}
+
+export interface DeliveryZone {
+    id: string;
+    partner_id: string;
+    zone_name: string;
+    zone_boundary: any; // GeoJSON or similar
+    is_active: boolean;
+}
+
+export interface PlatformRevenueAnalytics {
+    id: string;
+    total_revenue: number;
+    platform_commission: number;
+    seller_payouts: number;
+    transaction_date: string;
+}
+
+export interface VerificationQueueItem {
+    id: string;
+    type: 'vendor' | 'driver';
+    name: string;
+    submitted_at: string;
+    status: 'pending' | 'in_review' | 'approved' | 'rejected';
+    documents: string[];
+}
+
+export interface DeliveryPartnerVehicle {
+    id: string;
+    partner_id: string;
+    vehicle_type: string;
+    license_plate: string;
+    make?: string;
+    model?: string;
+    year?: number;
+    color?: string;
+    capacity_kg?: number;
+    max_package_size?: 'small' | 'medium' | 'large' | 'extra_large';
+    insurance_number?: string;
+    registration_expiry?: string;
+    created_at: string;
+}
+
+export interface DeliveryPartner {
+    id: string;
+    user_id: string;
+    company_name: string;
+    company_description?: string;
+    contact_email: string;
+    contact_phone: string;
+    license_number: string;
+    license_expiry_date?: string;
+    insurance_policy_number?: string;
+    insurance_expiry_date?: string;
+    delivery_radius_km?: number;
+    base_delivery_fee?: number;
+    per_km_fee?: number;
+    service_areas?: string[];
+    verification_status: 'pending' | 'verified' | 'rejected';
+    is_verified: boolean;
+    created_at: string;
+    vehicles?: DeliveryPartnerVehicle[];
 }

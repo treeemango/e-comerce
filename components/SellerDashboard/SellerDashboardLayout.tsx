@@ -5,8 +5,8 @@ import { getSellerUnreadCount } from '@/lib/api';
 
 interface SellerDashboardLayoutProps {
     children: React.ReactNode;
-    activeTab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages';
-    onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages') => void;
+    activeTab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount';
+    onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount') => void;
     user: any;
     onSignOut: () => void;
 }
@@ -84,6 +84,7 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
             label: 'Finances',
             icon: 'account_balance_wallet',
             submenu: [
+                { id: 'finance-wallet', label: 'Wallet & Payouts' },
                 { id: 'finance-payments', label: 'Payments' },
                 { id: 'finance-charge-method', label: 'Charge method' },
             ]

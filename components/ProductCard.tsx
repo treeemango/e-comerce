@@ -211,6 +211,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                 {product.badge}
               </span>
             )}
+            {product.has_quantity_discount && (
+              <span className="bg-emerald-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-md uppercase flex items-center gap-0.5">
+                <span className="material-icons text-[10px]">inventory_2</span> Bulk Deal
+              </span>
+            )}
+            {product.auto_discount_type === 'buy_x_get_y' && (
+              <span className="bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-md uppercase flex items-center gap-0.5">
+                <span className="material-icons text-[10px]">redeem</span> {`Buy ${product.auto_discount_buy_qty} get ${product.auto_discount_get_qty}`}
+              </span>
+            )}
           </div>
 
           {/* Deal Type Specific Badges - Top Right */}

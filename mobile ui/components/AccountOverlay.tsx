@@ -8,7 +8,7 @@ interface AccountOverlayProps {
     couponCount?: number;
     onSignOut?: () => void;
     onSignIn?: () => void;
-    onNavigate?: (section: 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages') => void;
+    onNavigate?: (section: 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access') => void;
 }
 
 export const AccountOverlay: React.FC<AccountOverlayProps> = ({ onClose, userName = 'Guest', avatarUrl, messageCount, couponCount, onSignOut, onSignIn, onNavigate }) => {
@@ -87,6 +87,7 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({ onClose, userNam
                         { icon: 'location_on', label: 'Addresses', key: 'addresses' as const },
                         { icon: 'headset_mic', label: 'Customer support', key: 'support' as const },
                         { icon: 'settings', label: 'Settings', key: 'settings' as const },
+                        { icon: 'local_shipping', label: 'Become a Driver', key: 'driver_access' as const, highlight: true },
                         { icon: 'switch_account', label: 'Switch accounts', key: 'switch' as const },
                         { icon: 'logout', label: isAuthed ? 'Sign out' : 'Sign in', action: isAuthed ? onSignOut : onSignIn, key: isAuthed ? 'logout' : 'switch' },
                     ].map((item, idx) => (
@@ -100,8 +101,8 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({ onClose, userNam
                             }}
                             className="w-full text-left px-5 py-3 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-50 dark:border-gray-800 last:border-none"
                         >
-                            <span className="material-icons-outlined text-gray-800 dark:text-gray-200 text-xl">{item.icon}</span>
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.label}</span>
+                            <span className={`material-icons-outlined ${item.highlight ? 'text-emerald-500' : 'text-gray-800 dark:text-gray-200'} text-xl`}>{item.icon}</span>
+                            <span className={`text-sm font-medium ${item.highlight ? 'text-emerald-600 font-bold' : 'text-gray-700 dark:text-gray-300'}`}>{item.label}</span>
                         </button>
                     ))}
                 </div>

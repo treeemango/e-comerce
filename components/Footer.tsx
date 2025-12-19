@@ -2,9 +2,11 @@ import React from 'react';
 
 interface FooterProps {
     onAdminClick?: () => void;
+    onDriverClick?: () => void;
+    onSellerClick?: () => void;
 }
 
-const Footer: React.FC<FooterProps> = ({ onAdminClick }) => {
+const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerClick }) => {
     return (
         <footer className="bg-[#222] text-white pt-12 pb-8 mt-12 font-display">
             <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -25,6 +27,15 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick }) => {
                                 <li><a href="#" className="hover:text-white hover:underline transition-colors">Press</a></li>
                                 <li><a href="#" className="hover:text-white hover:underline transition-colors">Sustainability at JuaExpress</a></li>
                                 <li><a href="#" className="hover:text-white hover:underline transition-colors">Corporate Responsibility</a></li>
+                                <li className="pt-2">
+                                    <button
+                                        onClick={onDriverClick}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg hover:bg-emerald-500/20 transition-all font-bold text-[10px] uppercase tracking-widest border border-emerald-500/20 w-fit"
+                                    >
+                                        <span className="material-icons text-sm">local_shipping</span>
+                                        Become a Driver
+                                    </button>
+                                </li>
                             </ul>
                         </div>
 
@@ -55,14 +66,15 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick }) => {
 
                     {/* Seller Banner */}
                     <div className="lg:w-80">
-                        <div className="bg-gray-800 rounded-lg overflow-hidden relative group cursor-pointer border border-gray-600">
+                        <div className="bg-gray-800 rounded-lg overflow-hidden relative group cursor-pointer border border-gray-600"
+                            onClick={onSellerClick}>
                             <img
                                 src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80"
                                 alt="Team collaboration"
                                 className="w-full h-32 object-cover object-center opacity-75 group-hover:opacity-90 transition-opacity"
                             />
                             <div className="absolute inset-0 p-5 flex flex-col justify-center bg-gradient-to-r from-black/85 via-black/60 to-transparent">
-                                <h3 className="font-bold text-sm mb-3 leading-tight">Start Selling to Millions of Buyers on JuaExpress</h3>
+                                <h3 className="font-bold text-sm mb-3 leading-tight text-white">Start Selling to Millions of Buyers on JuaExpress</h3>
                                 <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-2 px-4 rounded w-fit transition-colors shadow-lg shadow-orange-500/30">
                                     Start a Selling Account
                                 </button>
@@ -134,7 +146,7 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick }) => {
                 </div>
 
                 {/* Security & Payments */}
-                <div className="border-t border-gray-700 pt-8 mb-8">
+                <div className="border-t border-gray-700 pt-8 mb-8 mt-8">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
                         {/* Security */}
                         <div>

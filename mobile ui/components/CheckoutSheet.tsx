@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Product } from '@/types';
+import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CartItem {
   product: Product;
@@ -28,17 +29,28 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
   const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
   const [payment, setPayment] = useState<'card' | 'cod' | 'wallet'>('card');
   const [selectedAddress, setSelectedAddress] = useState<'home' | 'new'>('home');
+  const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
+
+  React.useEffect(() => {
+    const applyPromos = async () => {
+      const result = await applyPromotionsToCart(items);
+      setPromoResult(result);
+    };
+    applyPromos();
+  }, [items]);
 
   const currency = items[0]?.product.currency;
 
   const subtotal = useMemo(
-    () => items.reduce((sum, line) => sum + (line.product.price || 0) * line.quantity, 0),
-    [items]
+    () => promoResult?.subtotal || items.reduce((sum, line) => sum + (line.product.price || 0) * line.quantity, 0),
+    [items, promoResult]
   );
+
+  const totalSavings = promoResult?.totalSavings || 0;
 
   const shippingCost = shipping === 'express' ? 6.99 : 0;
   const fees = 0; // placeholder for taxes/fees if needed
-  const total = subtotal + shippingCost + fees;
+  const total = (promoResult?.finalTotal || subtotal) + shippingCost + fees;
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex flex-col justify-end">
@@ -102,8 +114,22 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
                     <div className="text-xs font-semibold text-black dark:text-white line-clamp-2">{line.product.title}</div>
                     <div className="text-[11px] text-gray-500 mt-0.5">Qty {line.quantity}</div>
                   </div>
-                  <div className="text-xs font-bold text-black dark:text-white whitespace-nowrap">
-                    {formatPrice((line.product.price || 0) * line.quantity, currency)}
+                  <div className="text-xs font-bold text-black dark:text-white whitespace-nowrap flex flex-col items-end">
+                    {(() => {
+                      const resultInfo = promoResult?.items.find(pi => pi.product.id === line.product.id);
+                      return (
+                        <>
+                          <div className={resultInfo && resultInfo.total < (line.product.price || 0) * line.quantity ? 'text-emerald-600' : ''}>
+                            {formatPrice(resultInfo ? resultInfo.total : (line.product.price || 0) * line.quantity, currency)}
+                          </div>
+                          {resultInfo && resultInfo.total < (line.product.price || 0) * line.quantity && (
+                            <div className="text-[9px] text-gray-400 line-through">
+                              {formatPrice((resultInfo.originalPrice || line.product.price || 0) * line.quantity, currency)}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -148,10 +174,15 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
 
           {/* Totals */}
           <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800 space-y-2">
-            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
-              <span>Items</span>
-              <span>{formatPrice(subtotal, currency)}</span>
+            <div className="flex items-center justify-between text-lg font-black text-black dark:text-white">
+              <span>Total</span>
+              <span>{formatPrice(total, currency)}</span>
             </div>
+            {totalSavings > 0 && (
+              <div className="text-right text-[10px] text-indigo-600 font-bold mt-0.5">
+                Total savings: {formatPrice(totalSavings, currency)}
+              </div>
+            )}
             <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
               <span>Shipping</span>
               <span>{shippingCost === 0 ? 'Free' : formatPrice(shippingCost, currency)}</span>

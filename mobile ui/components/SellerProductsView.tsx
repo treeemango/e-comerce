@@ -159,10 +159,22 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
                                         <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Price</div>
                                         <div className="font-black text-gray-900">{formatCurrency(item.price || 0, item.currency)}</div>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Stock</div>
-                                        <div className={cn("font-black", (item.stock || 0) > 0 ? 'text-emerald-600' : 'text-red-600')}>
-                                            {item.stock ?? 0}
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEditProduct?.(item);
+                                            }}
+                                            className="px-3 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-[10px] font-black uppercase tracking-tight flex items-center gap-1"
+                                        >
+                                            <span className="material-icons text-xs">sell</span>
+                                            Bulk Pricing
+                                        </button>
+                                        <div className="text-right flex flex-col items-end">
+                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Stock</div>
+                                            <div className={cn("font-black", (item.stock || 0) > 0 ? 'text-emerald-600' : 'text-red-600')}>
+                                                {item.stock ?? 0}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

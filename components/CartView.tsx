@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../types';
 import { getCurrencySymbol } from '@/lib/currency';
 import { applyCoupon } from '@/lib/api';
+import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CartViewProps {
     cartItems: Product[];
@@ -16,6 +17,7 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
     const [discount, setDiscount] = useState(0);
     const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [isApplying, setIsApplying] = useState(false);
+    const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
 
     // Group items to track quantities
     const groupedItems = cartItems.reduce((acc, item) => {
@@ -27,9 +29,23 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
     }, {} as Record<number, Product & { quantity: number }>);
 
     const items = Object.values(groupedItems) as (Product & { quantity: number })[];
+
+    React.useEffect(() => {
+        const calculatePromos = async () => {
+            const result = await applyPromotionsToCart(items.map(i => ({ product: i, quantity: i.quantity })));
+            setPromoResult(result);
+        };
+        calculatePromos();
+    }, [cartItems]);
+
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const shipping = subtotal > 120 ? 0 : 12;
-    const total = Math.max(0, subtotal + shipping - discount);
+    const initialTotal = Math.max(0, subtotal + shipping - discount);
+
+    // If we have promoResult, use its finalTotal
+    const finalTotal = promoResult ? Math.max(0, promoResult.finalTotal + shipping - discount) : initialTotal;
+    const bulkSavings = promoResult ? promoResult.totalSavings : 0;
+    const totalSavings = bulkSavings + discount;
     const uniqueCount = items.length;
 
     const handleApplyCoupon = async () => {
@@ -133,8 +149,30 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-lg text-gray-900">{getCurrencySymbol(item.currency)}{item.price.toFixed(2)}</p>
-                                                <p className="text-xs text-gray-500">per item</p>
+                                                {(() => {
+                                                    const resultsInfo = promoResult?.items.find(pi => pi.product.id === item.id);
+                                                    return (
+                                                        <>
+                                                            <p className="font-bold text-lg text-gray-900">
+                                                                {getCurrencySymbol(item.currency)}
+                                                                {(resultsInfo?.discountedPrice || item.price).toFixed(2)}
+                                                            </p>
+                                                            {resultsInfo?.appliedPromotions.map((promo, idx) => (
+                                                                <p key={idx} className={`text-[10px] font-bold uppercase tracking-wider ${promo.type === 'quantity_discount' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                                                                    {promo.description}
+                                                                </p>
+                                                            ))}
+                                                            <p className="text-xs text-gray-500">per item</p>
+                                                            {resultsInfo && resultsInfo.appliedPromotions.some(p => p.description.toLowerCase().includes('buy')) && (
+                                                                <div className="mt-2">
+                                                                    <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
+                                                                        Item total: {getCurrencySymbol(item.currency)}{resultsInfo.total.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
 
@@ -213,14 +251,20 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                     <span>{cartItems.length}</span>
                                 </div>
                                 {discount > 0 && (
-                                    <div className="flex justify-between text-green-600 font-medium">
-                                        <span>Discount</span>
+                                    <div className="flex justify-between text-rose-600 font-medium">
+                                        <span>Coupon Discount</span>
                                         <span>-{getCurrencySymbol(items[0]?.currency)}{discount.toFixed(2)}</span>
+                                    </div>
+                                )}
+                                {bulkSavings > 0 && (
+                                    <div className="flex justify-between text-emerald-600 font-medium">
+                                        <span>Bulk Savings</span>
+                                        <span>-{getCurrencySymbol(items[0]?.currency)}{bulkSavings.toFixed(2)}</span>
                                     </div>
                                 )}
                                 <div className="border-t pt-3 flex justify-between text-base font-bold text-gray-900">
                                     <span>Total</span>
-                                    <span>{getCurrencySymbol(items[0]?.currency)}{total.toFixed(2)}</span>
+                                    <span>{getCurrencySymbol(items[0]?.currency)}{finalTotal.toFixed(2)}</span>
                                 </div>
                             </div>
 

@@ -31,7 +31,9 @@ import OrderReportsView from './components/SellerDashboard/OrderManager/OrderRep
 import PromotionsCouponsView from './components/SellerDashboard/Promotions/PromotionsCouponsView';
 import CreateCouponView from './components/SellerDashboard/Promotions/CreateCouponView';
 import PromotionalCampaignsView from './components/SellerDashboard/Promotions/PromotionalCampaignsView';
+import CreateAutomaticDiscountView from './components/SellerDashboard/Promotions/CreateAutomaticDiscountView';
 import PaymentsView from './components/SellerDashboard/Finances/PaymentsView';
+import WalletView from './components/SellerDashboard/Finances/WalletView';
 import ShippingSettingsView from './components/SellerDashboard/Account/ShippingSettingsView';
 import EditShippingTemplateView from './components/SellerDashboard/Account/EditShippingTemplateView';
 import SellerProfileView from './components/SellerDashboard/Account/SellerProfileView';
@@ -52,16 +54,23 @@ import AdminDashboardLayout from './components/AdminDashboard/AdminDashboardLayo
 import { default as AdminDashboardOverview } from './components/AdminDashboard/DashboardOverview';
 import ProductApprovalView from './components/AdminDashboard/ProductApproval/ProductApprovalView';
 import SellerVerificationView from './components/AdminDashboard/SellerVerification/SellerVerificationView';
+import DriverVerificationView from './components/AdminDashboard/SellerVerification/DriverVerificationView';
 import UserManagementView from './components/AdminDashboard/UserManagement/UserManagementView';
 import OrderManagementView from './components/AdminDashboard/OrderManagement/OrderManagementView';
 import ContentManagementView from './components/AdminDashboard/ContentManagement/ContentManagementView';
 import ActivityLogView from './components/AdminDashboard/ActivityLog/ActivityLogView';
+
+import DriverDashboardLayout from './components/DriverDashboard/DriverDashboardLayout';
+import { default as WebDriverDashboard } from './components/DriverDashboard/WebDriverDashboard';
+import DriverLoginView from './components/DriverDashboard/DriverLoginView';
+import DriverOnboardingView from './components/DriverDashboard/DriverOnboardingView';
 import AdminLoginView from './components/AdminDashboard/AdminLoginView';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart'>('home');
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages'>('manage-products');
+  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart'>('home');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
   const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'users' | 'orders' | 'content' | 'activity'>('overview');
+  const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVendorId, setSelectedVendorId] = useState<string | undefined>(undefined);
@@ -87,6 +96,9 @@ const App: React.FC = () => {
     'seller-login',
     'seller-onboarding',
     'seller-dashboard',
+    'driver-login',
+    'driver-onboarding',
+    'driver-dashboard',
     'admin-dashboard',
     'admin-login'
   ].includes(view);
@@ -171,6 +183,11 @@ const App: React.FC = () => {
   }, [dedupeProducts]);
 
   // Auth state listener
+  const handleDriverDashboardClick = useCallback(() => {
+    setCurrentView('driver-login');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   useEffect(() => {
     // Check current session on mount
     const checkAuth = async () => {
@@ -195,25 +212,18 @@ const App: React.FC = () => {
         });
 
         // Redirect logic on initial load
-        // Check for stored auth context (from before OAuth redirect)
         const storedContextStr = sessionStorage.getItem('auth_context');
         if (storedContextStr) {
           try {
             const storedContext = JSON.parse(storedContextStr);
-            sessionStorage.removeItem('auth_context'); // Clear it
+            sessionStorage.removeItem('auth_context');
 
             if (storedContext.view === 'seller-login' || storedContext.view === 'seller-onboarding') {
-              // User intended to login as seller
               if (role === 'seller') {
                 setCurrentView('seller-dashboard');
               } else {
-                // They logged in via seller portal but don't have a seller role yet -> Onboarding
-                // UNLESS they actually have a profile that we missed? (Checked above)
-                // If check above passed/failed, we trust 'role' variable now.
-                // If role is still buyer, but they came from seller login -> Onboarding
                 setCurrentView('seller-onboarding');
               }
-              // Skip other checks
             }
 
             if (storedContext.view === 'admin-login') {
@@ -230,7 +240,6 @@ const App: React.FC = () => {
                   return;
                 }
               }
-
               setAdminAccessMessage('This is an admin-only area. Please sign in with an admin-approved account.');
               setCurrentView('home');
               return;
@@ -240,17 +249,10 @@ const App: React.FC = () => {
           }
         }
 
-        // Load loyalty profile for logged-in user if not redirected to dashboard immediately (or always)
         const loyalty = await fetchUserLoyaltyProfile(currentUser.id);
         setLoyaltyProfile(loyalty);
-
-        // Check for admin permissions (This block was redundant/confusing in previous code if we handle role above, removing redundancy)
-        // Kept loyalty
       }
       setAuthLoading(false);
-      if (!currentUser && isBuyerSurface(currentView)) {
-        setShowBuyerAuthModal(true);
-      }
     };
 
     checkAuth();
@@ -285,6 +287,11 @@ const App: React.FC = () => {
           avatar_url: session.user.user_metadata?.avatar_url,
           role: role,
         });
+
+        // Redirect drivers to their dashboard if logging in from driver context
+        if (role === 'driver' || role === 'delivery_partner') {
+          setCurrentView('driver-dashboard');
+        }
 
         if (isBuyerSurface(currentView)) {
           setShowBuyerAuthModal(false);
@@ -939,9 +946,17 @@ const App: React.FC = () => {
               />
             )}  {/* Can be linked from internal button */}
             {dashboardTab === 'promotions' && <PromotionalCampaignsView sellerId={user?.id || ''} />} {/* Default promo view */}
+            {dashboardTab === 'create-auto-discount' && (
+              <CreateAutomaticDiscountView
+                sellerId={user?.id || ''}
+                onSuccess={() => setDashboardTab('promotions-coupons')}
+                onCancel={() => setDashboardTab('promotions-coupons')}
+              />
+            )}
             {dashboardTab === 'finance-payments' && <PaymentsView sellerId={user?.id || ''} />}
+            {dashboardTab === 'finance-wallet' && <WalletView sellerId={user?.id || ''} />}
             {dashboardTab === 'finance-charge-method' && <ChargeMethodView sellerId={user?.id || ''} />}
-            {dashboardTab === 'finances' && <PaymentsView sellerId={user?.id || ''} />}
+            {dashboardTab === 'finances' && <WalletView sellerId={user?.id || ''} />}
             {dashboardTab === 'performance' && <SellerPerformanceView />}
             {dashboardTab === 'apps' && <AppsServiceView />}
             {dashboardTab === 'account-shipping' && <ShippingSettingsView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} />}
@@ -985,11 +1000,55 @@ const App: React.FC = () => {
             {adminTab === 'overview' && <AdminDashboardOverview permissions={adminPermissions!} />}
             {adminTab === 'products' && <ProductApprovalView permissions={adminPermissions!} />}
             {adminTab === 'sellers' && <SellerVerificationView permissions={adminPermissions!} />}
+            {adminTab === 'drivers' && <DriverVerificationView permissions={adminPermissions!} />}
             {adminTab === 'users' && <UserManagementView permissions={adminPermissions!} />}
             {adminTab === 'orders' && <OrderManagementView />}
             {adminTab === 'content' && <ContentManagementView permissions={adminPermissions!} />}
             {adminTab === 'activity' && <ActivityLogView />}
           </AdminDashboardLayout>
+        )}
+        {currentView === 'driver-dashboard' && (
+          <DriverDashboardLayout
+            activeTab={driverTab}
+            onTabChange={setDriverTab}
+            user={user}
+            onSignOut={handleSignOutClick}
+          >
+            {driverTab === 'jobs' && <WebDriverDashboard partnerId={user?.id || ''} />}
+            {driverTab === 'earnings' && (
+              <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
+                <span className="material-icons text-4xl text-slate-300">analytics</span>
+                <p className="mt-4 text-slate-500 font-bold">Detailed earnings charts coming soon.</p>
+              </div>
+            )}
+            {driverTab === 'vehicles' && (
+              <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
+                <span className="material-icons text-4xl text-slate-300">minor_crash</span>
+                <p className="mt-4 text-slate-500 font-bold">Vehicle management coming soon.</p>
+              </div>
+            )}
+            {driverTab === 'profile' && (
+              <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
+                <span className="material-icons text-4xl text-slate-300">badge</span>
+                <p className="mt-4 text-slate-500 font-bold">Driver profile settings coming soon.</p>
+              </div>
+            )}
+          </DriverDashboardLayout>
+        )}
+        {currentView === 'driver-login' && (
+          <DriverLoginView
+            onSignUpClick={() => setCurrentView('driver-onboarding')}
+            onSignInClick={() => {
+              sessionStorage.setItem('auth_context', JSON.stringify({ view: 'driver-dashboard' }));
+              setCurrentView('buyer-auth');
+            }}
+          />
+        )}
+        {currentView === 'driver-onboarding' && (
+          <DriverOnboardingView
+            onComplete={() => setCurrentView('driver-dashboard')}
+            onCancel={() => setCurrentView('home')}
+          />
         )}
       </main>
       {showBuyerAuthModal && isBuyerSurface(currentView) && (
@@ -1004,43 +1063,50 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' && (
-        <Footer onAdminClick={async () => {
-          sessionStorage.setItem('auth_context', JSON.stringify({ view: 'admin-login' }));
+      {currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' && currentView !== 'driver-login' && currentView !== 'driver-onboarding' && currentView !== 'driver-dashboard' && (
+        <Footer
+          onAdminClick={async () => {
+            sessionStorage.setItem('auth_context', JSON.stringify({ view: 'admin-login' }));
 
-          // If user is already validated as admin, take them straight in
-          if (user && adminPermissions?.is_active) {
-            setAdminTab('overview');
-            setAdminAccessMessage(null);
-            setCurrentView('admin-dashboard');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-          }
-
-          // If logged in, validate admin permissions immediately
-          if (user) {
-            const perms = await checkAdminPermission(user.id);
-            if (perms?.is_active) {
-              setAdminPermissions(perms);
+            // If user is already validated as admin, take them straight in
+            if (user && adminPermissions?.is_active) {
               setAdminTab('overview');
               setAdminAccessMessage(null);
               setCurrentView('admin-dashboard');
-              import('@/lib/embedding').then(({ EmbeddingService }) => {
-                EmbeddingService.getInstance().preloadModel();
-              });
               window.scrollTo({ top: 0, behavior: 'smooth' });
               return;
             }
 
-            setAdminAccessMessage('This is an admin-only area. Please sign in with an admin-approved account.');
-            setCurrentView('home');
-            return;
-          }
+            // If logged in, validate admin permissions immediately
+            if (user) {
+              const perms = await checkAdminPermission(user.id);
+              if (perms?.is_active) {
+                setAdminPermissions(perms);
+                setAdminTab('overview');
+                setAdminAccessMessage(null);
+                setCurrentView('admin-dashboard');
+                import('@/lib/embedding').then(({ EmbeddingService }) => {
+                  EmbeddingService.getInstance().preloadModel();
+                });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+              }
 
-          // Otherwise, send to admin login to authenticate
-          setCurrentView('admin-login');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }} />
+              setAdminAccessMessage('This is an admin-only area. Please sign in with an admin-approved account.');
+              setCurrentView('home');
+              return;
+            }
+
+            // Otherwise, send to admin login to authenticate
+            setCurrentView('admin-login');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onDriverClick={handleDriverDashboardClick}
+          onSellerClick={() => {
+            setCurrentView('seller-login');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
       )}
       {isBuyerSurface(currentView) && (
         <FloatingWidget

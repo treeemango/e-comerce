@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon } from '../types';
+import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo } from '../lib/api';
+import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts } from '../lib/api';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
 import { playFollowSound, playUnfollowSound } from '../lib/sounds';
@@ -74,6 +74,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    // Coupon State
    const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
    const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
+   const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
 
    useEffect(() => {
       const loadCoupons = async () => {
@@ -90,6 +91,16 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       };
       loadCoupons();
    }, [product.id]);
+
+   useEffect(() => {
+      const loadQuantityDiscounts = async () => {
+         if (product.id && product.has_quantity_discount) {
+            const tiers = await fetchQuantityDiscounts(product.id.toString());
+            setQuantityDiscounts(tiers);
+         }
+      };
+      loadQuantityDiscounts();
+   }, [product.id, product.has_quantity_discount]);
 
    const handleClaimCoupon = async (couponId: string) => {
       if (!user) {
@@ -746,6 +757,62 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      </div>
                   )}
 
+                  {/* Automatic Promotions (e.g. Buy X Get Y) */}
+                  {product.auto_discount_type && (
+                     <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
+                        <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 flex items-center gap-4">
+                           <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-800 flex items-center justify-center flex-shrink-0">
+                              <span className="material-icons text-indigo-600 dark:text-indigo-400">redeem</span>
+                           </div>
+                           <div>
+                              <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase">
+                                 {product.auto_discount_name || 'Limited Time Promotion'}
+                              </div>
+                              <div className="text-sm font-black text-slate-800 dark:text-white">
+                                 {product.auto_discount_type === 'buy_x_get_y'
+                                    ? `Buy ${product.auto_discount_buy_qty} get ${product.auto_discount_get_qty} free`
+                                    : product.auto_discount_type === 'percentage'
+                                       ? `${product.auto_discount_value}% discount applied automatically`
+                                       : `$${product.auto_discount_value} off applied automatically`
+                                 }
+                                 {product.auto_discount_min_requirement && product.auto_discount_min_requirement > 0 && (
+                                    <span className="text-[10px] font-normal text-slate-500 ml-2">
+                                       (Min. order: ${product.auto_discount_min_requirement})
+                                    </span>
+                                 )}
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  )}
+
+                  {/* Quantity Discounts Section */}
+                  {quantityDiscounts.length > 0 && (
+                     <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
+                        <div className="flex items-center gap-2 mb-3">
+                           <span className="material-icons text-emerald-500 text-sm">inventory_2</span>
+                           <span className="text-sm font-bold text-slate-900 dark:text-white">Bulk Pricing Discounts</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                           {quantityDiscounts.sort((a, b) => a.min_quantity - b.min_quantity).map((tier) => (
+                              <div key={tier.id} className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center transition-all hover:shadow-md">
+                                 <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Buy {tier.min_quantity}+</div>
+                                 <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">
+                                    {formatPrice(tier.unit_price, currencyCode)}
+                                 </div>
+                                 <div className="text-[10px] text-slate-500 font-medium">Per item</div>
+                                 {displayPrice > tier.unit_price && (
+                                    <div className="text-[9px] text-white bg-emerald-500 rounded-full px-1.5 py-0.5 mt-2 inline-block">
+                                       Save {Math.round((1 - tier.unit_price / displayPrice) * 100)}%
+                                    </div>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2 italic">*Discount will be automatically applied in your cart based on quantity.</p>
+                     </div>
+                  )}
+
                   {/* Variants Selection */}
                   <div className="space-y-5 mb-6">
                      {colorOptionName && colorCards.length > 0 && (
@@ -973,7 +1040,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      {
                         vendor?.badges && vendor.badges.length > 0 && (
                            <div className="flex flex-wrap gap-2 mb-4">
-                           {vendor.badges.map((badge, idx) => {
+                              {vendor.badges.map((badge, idx) => {
                                  const getBadgeStyle = (category: string) => {
                                     switch (category) {
                                        case 'trust': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800';

@@ -111,6 +111,23 @@ BEGIN
                c.discount_amount DESC NULLS LAST,
                c.end_time DESC
   ),
+
+  active_automatic_discounts AS (
+      SELECT DISTINCT ON (seller_id)
+          id,
+          seller_id,
+          name,
+          discount_type,
+          discount_value,
+          min_requirement_value,
+          buy_qty,
+          get_qty
+      FROM automatic_discounts
+      WHERE status = 'active'
+        AND starts_at <= NOW()
+        AND ends_at > NOW()
+      ORDER BY seller_id, created_at DESC
+  ),
   
   user_behavior AS (
       SELECT 
@@ -153,8 +170,7 @@ BEGIN
       FROM user_behavior
       GROUP BY category_id, vendor_id
   ),
-  
-  base_products AS (
+      base_products AS (
       SELECT
           p.id,
           p.title,
@@ -176,19 +192,27 @@ BEGIN
                   v.price * (1 - ac.discount_percentage / 100.0)
               WHEN ac.discount_amount IS NOT NULL THEN
                   GREATEST(v.price - ac.discount_amount, 0)
+              WHEN ad.discount_type = 'percentage' AND ad.min_requirement_value <= v.price THEN
+                  v.price * (1 - ad.discount_value / 100.0)
+              WHEN ad.discount_type = 'fixed_amount' AND ad.min_requirement_value <= v.price THEN
+                  GREATEST(v.price - ad.discount_value, 0)
               ELSE v.price
           END as final_price,
-          ac.coupon_name,
-          ac.discount_percentage as coupon_discount_percent,
-          ac.discount_amount as coupon_discount_amount,
+          COALESCE(ac.coupon_name, ad.name) as coupon_name,
+          COALESCE(ac.discount_percentage, CASE WHEN ad.discount_type = 'percentage' THEN ad.discount_value ELSE NULL END) as coupon_discount_percent,
+          COALESCE(ac.discount_amount, CASE WHEN ad.discount_type = 'fixed_amount' THEN ad.discount_value ELSE NULL END) as coupon_discount_amount,
           ac.end_time as coupon_end,
           CASE 
               WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > 0 AND ac.discount_percentage IS NOT NULL THEN
                   ((v.compare_at_price - (v.price * (1 - ac.discount_percentage / 100.0))) / NULLIF(v.compare_at_price, 0)) * 100
+              WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > 0 AND ad.discount_type = 'percentage' THEN
+                  ((v.compare_at_price - (v.price * (1 - ad.discount_value / 100.0))) / NULLIF(v.compare_at_price, 0)) * 100
               WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > 0 THEN
                   ((v.compare_at_price - v.price) / NULLIF(v.compare_at_price, 0)) * 100
               WHEN v.discount_percent IS NOT NULL AND ac.discount_percentage IS NOT NULL THEN
                   (1 - ((1 - v.discount_percent / 100.0) * (1 - ac.discount_percentage / 100.0))) * 100
+              WHEN v.discount_percent IS NOT NULL AND ad.discount_type = 'percentage' THEN
+                  (1 - ((1 - v.discount_percent / 100.0) * (1 - ad.discount_value / 100.0))) * 100
               WHEN v.discount_percent IS NOT NULL THEN
                   v.discount_percent
               ELSE 0
@@ -200,6 +224,8 @@ BEGIN
                           CASE 
                               WHEN ac.discount_percentage IS NOT NULL THEN
                                   (v.compare_at_price - (v.price * (1 - ac.discount_percentage / 100.0))) / NULLIF(v.compare_at_price, 0)
+                              WHEN ad.discount_type = 'percentage' THEN
+                                  (v.compare_at_price - (v.price * (1 - ad.discount_value / 100.0))) / NULLIF(v.compare_at_price, 0)
                               ELSE
                                   (v.compare_at_price - v.price) / NULLIF(v.compare_at_price, 0)
                           END
@@ -207,11 +233,15 @@ BEGIN
                           CASE 
                               WHEN ac.discount_percentage IS NOT NULL THEN
                                   1 - ((1 - v.discount_percent / 100.0) * (1 - ac.discount_percentage / 100.0))
+                              WHEN ad.discount_type = 'percentage' THEN
+                                  1 - ((1 - v.discount_percent / 100.0) * (1 - ad.discount_value / 100.0))
                               ELSE
                                   v.discount_percent / 100.0
                           END
                       WHEN ac.discount_percentage IS NOT NULL THEN
                           ac.discount_percentage / 100.0
+                      WHEN ad.discount_type = 'percentage' THEN
+                          ad.discount_value / 100.0
                       ELSE 0
                   END,
                   0
@@ -235,6 +265,7 @@ BEGIN
           vd.address_country AS vendor_country,
           CASE 
               WHEN ac.product_id IS NOT NULL THEN 'coupon'
+              WHEN ad.id IS NOT NULL THEN 'hot_discount'
               WHEN p.is_flash_sale = true AND p.flash_sale_end > NOW() THEN 'flash_sale'
               WHEN p.is_lightning_deal = true AND p.lightning_ends_at > NOW() THEN 'lightning_deal'
               WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > v.price 
@@ -243,10 +274,17 @@ BEGIN
               WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > v.price THEN 'discount'
               WHEN v.discount_percent IS NOT NULL AND v.discount_percent >= 10 THEN 'discount'
               ELSE 'standard'
-          END AS deal_type
+          END AS deal_type,
+          p.has_quantity_discount,
+          ad.discount_type as auto_discount_type,
+          ad.discount_value as auto_discount_value,
+          ad.buy_qty as auto_discount_buy_qty,
+          ad.get_qty as auto_discount_get_qty,
+          ad.min_requirement_value as auto_discount_min_requirement
       FROM products p
       JOIN product_variants v ON p.id = v.product_id AND v.is_default = true
       LEFT JOIN active_coupons ac ON p.id = ac.product_id
+      LEFT JOIN active_automatic_discounts ad ON p.seller_id = ad.seller_id
     LEFT JOIN vendors vd ON p.seller_id = vd.user_id
       LEFT JOIN media_gallery mg ON p.id = mg.product_id
       WHERE p.status = 'approved' 
@@ -344,7 +382,13 @@ BEGIN
                   (fp.log_sales_score * 8)                   
           END as calculated_score,
           fp.stock > 0 as is_in_stock,
-          fp.stock as stock_quantity
+          fp.stock as stock_quantity,
+          fp.has_quantity_discount,
+          fp.auto_discount_type,
+          fp.auto_discount_value,
+          fp.auto_discount_buy_qty,
+          fp.auto_discount_get_qty,
+          fp.auto_discount_min_requirement
       FROM filtered_products fp
       WHERE fp.stock >= min_stock
         AND (fp.rating IS NULL OR fp.rating >= min_rating)
@@ -374,7 +418,13 @@ BEGIN
           ps.category_id,
           40 + (ps.calculated_score * 0.5) as final_score,
           ps.is_in_stock,
-          ps.stock_quantity
+          ps.stock_quantity,
+          ps.has_quantity_discount,
+          ps.auto_discount_type,
+          ps.auto_discount_value,
+          ps.auto_discount_buy_qty,
+          ps.auto_discount_get_qty,
+          ps.auto_discount_min_requirement
       FROM product_scores ps
       ORDER BY ps.product_id, ps.calculated_score DESC
   ),
@@ -391,7 +441,7 @@ BEGIN
           'id', rp.product_id,
           'title', rp.product_title,
           'image_url', rp.product_image_url,
-          'gallery', rp.gallery,  -- ✅ YouTube + additional images
+          'gallery', rp.gallery,
           'media', rp.gallery,
           'gallery_media', rp.gallery,
           'currency', rp.currency,
@@ -400,9 +450,9 @@ BEGIN
           'is_express_delivery', rp.is_express_delivery,
           'delivery_scope', rp.delivery_scope,
           'vendor_country', rp.vendor_country,
-          'current_price', rp.current_price,
-          'original_price', rp.original_price,
-          'discount_percent', rp.total_discount_percent,
+          'price', rp.current_price,
+          'originalPrice', rp.original_price,
+          'discountPercent', rp.total_discount_percent,
           'rating', rp.rating,
           'deal_type', rp.deal_type,
           'coupon_name', rp.coupon_name,
@@ -412,10 +462,17 @@ BEGIN
           'in_stock', rp.is_in_stock,
           'stock', rp.stock_quantity,
           'personalization_score', ROUND(rp.preference_score_normalized::NUMERIC, 2),
-          'category_id', rp.category_id
+          'category_id', rp.category_id,
+          'has_quantity_discount', rp.has_quantity_discount,
+          'auto_discount_type', rp.auto_discount_type,
+          'auto_discount_value', rp.auto_discount_value,
+          'auto_discount_buy_qty', rp.auto_discount_buy_qty,
+          'auto_discount_get_qty', rp.auto_discount_get_qty,
+          'auto_discount_min_requirement', rp.auto_discount_min_requirement
       )
   ) INTO product_results
   FROM ranked_products rp;
+
   
   -- 2. GET DEPARTMENTS WITH DEALS FOR NAVBAR (only if not already filtering by category)
   IF include_categories AND filtered_category_id IS NULL THEN

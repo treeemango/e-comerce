@@ -12,18 +12,22 @@ import { SearchOverlay } from './components/SearchOverlay';
 import { SearchResults } from './components/SearchResults';
 import { AccountOverlay } from './components/AccountOverlay';
 import { CartView } from './components/CartView';
+import { MobileDealsPage } from './components/MobileDealsPage'; // Import new page
 import { CheckoutSheet } from './components/CheckoutSheet';
 import { ProductDetails } from './components/ProductDetails';
 import { AccountSection } from './components/AccountSection';
 import { SellerAccess } from './components/SellerAccess';
 import { SellerDashboard } from './components/SellerDashboard';
+import { DriverAccess } from './components/DriverAccess';
+import { DriverDashboard } from './components/DriverDashboard';
+import { DriverOnboardingView } from './components/DriverOnboardingView';
 import { BuyerMessagesView } from './components/BuyerMessagesView';
 import { SellerOnboardingView } from './components/SellerOnboardingView';
 import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount } from '@/lib/api';
 import { Product } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 
-type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages';
+type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access';
 
 type CartItem = {
     product: Product;
@@ -44,13 +48,14 @@ const App: React.FC = () => {
     const [userProfile, setUserProfile] = useState<AuthUser | null>(null);
     const [activeAccountSection, setActiveAccountSection] = useState<AccountSectionKey | null>(null);
     const [sellerView, setSellerView] = useState<'guest' | 'dashboard'>('guest');
+    const [driverView, setDriverView] = useState<'guest' | 'dashboard'>('guest');
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedCategoryForSubs, setSelectedCategoryForSubs] = useState<{ id: string; name: string } | null>(null);
     const [activeSubcategoryId, setActiveSubcategoryId] = useState<string>('all');
     const [categoryViewOpen, setCategoryViewOpen] = useState<{ departmentId: string; departmentName: string } | null>(null);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [buyerMessageCount, setBuyerMessageCount] = useState(0);
-    const [isOnboarding, setIsOnboarding] = useState(false);
+    const [onboardingType, setOnboardingType] = useState<'seller' | 'driver' | null>(null);
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -94,8 +99,14 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const role = userProfile?.role?.toString?.().toLowerCase?.();
+
+        // Handle seller roles
         const sellerRoles = ['seller', 'vendor', 'admin', 'staff'];
         setSellerView(role && sellerRoles.includes(role) ? 'dashboard' : 'guest');
+
+        // Handle driver roles
+        const driverRoles = ['driver', 'delivery_partner'];
+        setDriverView(role && driverRoles.includes(role) ? 'dashboard' : 'guest');
 
         if (userProfile?.id) {
             getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
@@ -295,13 +306,27 @@ const App: React.FC = () => {
                     </AccountSection>
                 );
             }
+            case 'driver_access': {
+                return (
+                    <DriverAccess
+                        onLogin={handleDriverAuth}
+                        onSignup={() => setOnboardingType('driver')}
+                        onBackToShop={() => setActiveAccountSection(null)}
+                    />
+                );
+            }
             case 'messages': {
                 if (!userProfile?.id) return null;
-                return <BuyerMessagesView userId={userProfile.id} onBack={() => {
-                    setActiveAccountSection(null);
-                    // Refresh count when coming back
-                    getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
-                }} />;
+                return (
+                    <BuyerMessagesView
+                        userId={userProfile.id}
+                        onBack={() => {
+                            setActiveAccountSection(null);
+                            // Refresh count when coming back
+                            getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
+                        }}
+                    />
+                );
             }
             default:
                 return null;
@@ -401,6 +426,19 @@ const App: React.FC = () => {
         setActiveTab('home');
     };
 
+    const handleDriverAuth = async () => {
+        await signInWithGoogle({ view: 'driver-auth' });
+        await refreshUserProfile();
+        setDriverView('dashboard');
+    };
+
+    const handleDriverSignOut = async () => {
+        await signOut();
+        setUserProfile(null);
+        setDriverView('guest');
+        setActiveTab('home');
+    };
+
     const renderContent = () => {
         if (activeAccountSection) {
             return renderAccountSection(activeAccountSection);
@@ -430,6 +468,14 @@ const App: React.FC = () => {
                         onCheckout={openCheckout}
                     />
                 );
+            case 'deals':
+                return (
+                    <MobileDealsPage
+                        onBack={() => setActiveTab('home')}
+                        onProductClick={handleProductClick}
+                        onAddToCart={addToCart}
+                    />
+                );
             case 'categories':
                 return (
                     <CategoriesPage
@@ -443,7 +489,26 @@ const App: React.FC = () => {
                     />
                 );
             case 'you': {
+                const role = userProfile?.role?.toString?.().toLowerCase?.();
                 const storeName = (userProfile as any)?.user_metadata?.business_name || (userProfile as any)?.business_name;
+
+                // Check if user is a driver
+                if (role === 'driver' || role === 'delivery_partner') {
+                    return driverView === 'dashboard' ? (
+                        <DriverDashboard
+                            partnerId={userProfile?.id || ''}
+                            driverName={userProfile?.name || userProfile?.email || 'Driver'}
+                            onSignOut={handleDriverSignOut}
+                        />
+                    ) : (
+                        <DriverAccess
+                            onLogin={handleDriverAuth}
+                            onBackToShop={() => setActiveTab('home')}
+                        />
+                    );
+                }
+
+                // Otherwise, show seller dashboard
                 return sellerView === 'dashboard' ? (
                     <SellerDashboard
                         sellerId={userProfile?.id}
@@ -459,7 +524,7 @@ const App: React.FC = () => {
                 ) : (
                     <SellerAccess
                         onLogin={handleSellerAuth}
-                        onSignup={() => setIsOnboarding(true)}
+                        onSignup={() => setOnboardingType('seller')}
                         onBackToShop={() => setActiveTab('home')}
                     />
                 );
@@ -512,6 +577,7 @@ const App: React.FC = () => {
                                     onProductClick={handleProductClick}
                                     onAddToCart={addToCart}
                                     showPromotions={activeCategoryId === 'all' && (!selectedCategoryForSubs || activeSubcategoryId === 'all')}
+                                    onViewAllDeals={() => setActiveTab('deals')}
                                 />
                             )}
                         </main>
@@ -669,16 +735,26 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Seller Onboarding Overlay */}
-            {isOnboarding && (
+            {/* Onboarding Overlays */}
+            {onboardingType === 'seller' && (
                 <SellerOnboardingView
                     userId={userProfile?.id}
                     onComplete={async () => {
-                        setIsOnboarding(false);
+                        setOnboardingType(null);
                         await refreshUserProfile();
                         setSellerView('dashboard');
                     }}
-                    onCancel={() => setIsOnboarding(false)}
+                    onCancel={() => setOnboardingType(null)}
+                />
+            )}
+            {onboardingType === 'driver' && (
+                <DriverOnboardingView
+                    onComplete={async () => {
+                        setOnboardingType(null);
+                        await refreshUserProfile();
+                        setDriverView('dashboard');
+                    }}
+                    onCancel={() => setOnboardingType(null)}
                 />
             )}
         </div>
