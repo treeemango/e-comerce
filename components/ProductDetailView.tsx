@@ -644,10 +644,19 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
             <div className="flex-1">
                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                     <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
-                        <span className="material-icons text-[12px]">local_shipping</span> Free shipping
-                     </span>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                     {product.free_delivery && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
+                           <span className="material-icons text-[12px]">local_shipping</span> Free shipping
+                        </span>
+                     )}
+                     {(product.deliveryTimeEstimate || product.deliveryTimeDays) && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">
+                           <span className="material-icons text-[12px]">{product.isExpressDelivery ? 'bolt' : 'schedule'}</span>
+                           {product.isExpressDelivery ? 'Express: ' : 'Delivery: '}
+                           {product.deliveryTimeEstimate || (product.deliveryTimeDays ? `${product.deliveryTimeDays} day${product.deliveryTimeDays === 1 ? '' : 's'}` : '')}
+                        </span>
+                     )}
                      <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
                         <span className="material-icons text-[12px]">account_balance_wallet</span> {formatPrice(4, currencyCode)} Credit for delay
                      </span>
@@ -973,9 +982,17 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                {vendor ? (
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-xl uppercase">
-                           {vendor.business_name.charAt(0)}
-                        </div>
+                        {vendor.logo_url ? (
+                           <img
+                              src={vendor.logo_url}
+                              alt={vendor.business_name}
+                              className="w-12 h-12 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                           />
+                        ) : (
+                           <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-xl uppercase">
+                              {vendor.business_name.charAt(0)}
+                           </div>
+                        )}
                         <div className="flex-1">
                            <div className="flex items-center gap-1">
                               <h3 className="font-bold text-slate-900 dark:text-white">{vendor.business_name}</h3>
@@ -1100,6 +1117,145 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             </div >
          </div >
 
+         {/* New Product Details & Tags Section */}
+         <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-12 mb-16">
+            <div className="lg:col-span-2 space-y-8">
+               {/* Description */}
+               {(product.description) && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                     <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">About this product</h2>
+                     <div className="prose dark:prose-invert max-w-none text-slate-600 dark:text-slate-300">
+                        <p style={{ whiteSpace: 'pre-line' }}>{product.description}</p>
+                     </div>
+                  </div>
+               )}
+
+               {/* Tags & Discovery */}
+               {(product.tags?.length || product.use_case_tags?.length || product.occasion_tags?.length) && (
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-700">
+                     <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="material-icons text-purple-500">auto_awesome</span>
+                        Discovery
+                     </h3>
+
+                     <div className="space-y-4">
+                        {/* Occasions */}
+                        {product.occasion_tags && product.occasion_tags.length > 0 && (
+                           <div>
+                              <span className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Perfect For</span>
+                              <div className="flex flex-wrap gap-2">
+                                 {product.occasion_tags.map(tag => (
+                                    <span key={tag} className="px-3 py-1 bg-white dark:bg-slate-700 border border-purple-100 dark:border-purple-900/30 text-purple-600 dark:text-purple-400 text-xs font-bold rounded-full shadow-sm">
+                                       {tag}
+                                    </span>
+                                 ))}
+                              </div>
+                           </div>
+                        )}
+
+                        {/* Use Cases */}
+                        {product.use_case_tags && product.use_case_tags.length > 0 && (
+                           <div>
+                              <span className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Best Used In</span>
+                              <div className="flex flex-wrap gap-2">
+                                 {product.use_case_tags.map(tag => (
+                                    <span key={tag} className="px-3 py-1 bg-white dark:bg-slate-700 border border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full shadow-sm">
+                                       {tag}
+                                    </span>
+                                 ))}
+                              </div>
+                           </div>
+                        )}
+
+                        {/* General Tags */}
+                        {product.tags && product.tags.length > 0 && (
+                           <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                              {product.tags.map(tag => (
+                                 <span key={tag} className="text-xs text-slate-500 hover:text-orange-500 cursor-pointer transition-colors bg-white dark:bg-slate-800 px-2 py-1 rounded border border-slate-100 dark:border-slate-600">
+                                    #{tag}
+                                 </span>
+                              ))}
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               )}
+            </div>
+
+            {/* Enhanced Delivery & Returns Box */}
+            <div className="space-y-6">
+               <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm sticky top-24">
+                  <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-4">
+                     <span className="material-icons text-orange-500">local_shipping</span>
+                     Delivery & Returns
+                  </h3>
+
+                  <div className="space-y-6">
+                     {/* Scope */}
+                     <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center flex-shrink-0">
+                           <span className="material-icons text-orange-500">public</span>
+                        </div>
+                        <div>
+                           <div className="text-sm font-bold text-slate-900 dark:text-white">
+                              {product.deliveryScope === 'nationwide' ? 'Nationwide Delivery' :
+                                 product.deliveryScope === 'regional' ? 'Regional Delivery' : 'Local Delivery Only'}
+                           </div>
+                           <div className="text-xs text-slate-500 mt-1 leading-relaxed">
+                              {product.delivery_locations && product.delivery_locations.length > 0
+                                 ? `Available in: ${product.delivery_locations.join(', ')}`
+                                 : 'This item ships to most locations. Check with seller for specifics.'}
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Cost */}
+                     <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center flex-shrink-0">
+                           <span className="material-icons text-green-600">payments</span>
+                        </div>
+                        <div>
+                           <div className="text-sm font-bold text-slate-900 dark:text-white">
+                              {product.free_delivery ? 'Free Delivery' : `Shipping: ${formatPrice(product.delivery_cost || 0, currencyCode)}`}
+                           </div>
+                           {product.min_order_for_free_delivery && product.min_order_for_free_delivery > 0 ? (
+                              <div className="text-xs text-green-600 mt-1 font-bold">
+                                 Spend {formatPrice(product.min_order_for_free_delivery, currencyCode)} for Free Shipping
+                              </div>
+                           ) : product.min_order_value && product.min_order_value > 0 ? (
+                              <div className="text-xs text-slate-500 mt-1">
+                                 Min. Order: {formatPrice(product.min_order_value, currencyCode)}
+                              </div>
+                           ) : null}
+                        </div>
+                     </div>
+
+                     {/* Speed */}
+                     <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                           <span className="material-icons text-blue-500">{product.isExpressDelivery ? 'bolt' : 'schedule'}</span>
+                        </div>
+                        <div>
+                           <div className="text-sm font-bold text-slate-900 dark:text-white">
+                              {product.isExpressDelivery ? 'Express Delivery' : 'Standard Shipping'}
+                           </div>
+                           <div className="text-xs text-slate-500 mt-1">
+                              Estimated arrival: <span className="font-bold text-slate-700 dark:text-slate-300">{product.deliveryTimeEstimate || (product.deliveryTimeDays ? `${product.deliveryTimeDays} Business Days` : '3-5 Days')}</span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700">
+                     <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span className="material-icons text-slate-400 text-sm">verified_user</span>
+                        <span>JuaExpress Buyer Protection</span>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+
          {/* AI Search Results: Same Items */}
          {
             sameItems.length > 0 && (
@@ -1109,18 +1265,15 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">Exact matches for you</h2>
                      <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Looks just like yours</span>
                   </div>
-                  <div className="relative">
-                     <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
-                        {sameItems.map(p => (
-                           <div key={p.id} className="w-[160px] sm:w-[200px] flex-shrink-0 snap-start">
-                              <ProductCard
-                                 product={p}
-                                 onProductClick={onRelatedProductClick || onProductClick}
-                                 onAddToCart={onAddToCart}
-                              />
-                           </div>
-                        ))}
-                     </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                     {sameItems.map(p => (
+                        <ProductCard
+                           key={p.id}
+                           product={p}
+                           onProductClick={onRelatedProductClick || onProductClick}
+                           onAddToCart={onAddToCart}
+                        />
+                     ))}
                   </div>
                </div>
             )

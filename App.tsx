@@ -867,6 +867,7 @@ const App: React.FC = () => {
             onUpdateQuantity={handleUpdateQuantity}
             onCheckoutClick={handleCheckoutClick}
             onHomeClick={handleHomeClick}
+            userId={user?.id}
           />
         )}
         {currentView === 'account-page' && (

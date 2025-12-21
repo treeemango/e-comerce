@@ -86,7 +86,7 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
          setRecentViews(data);
 
          if (data.length > 0) {
-            const related = await fetchRelatedProducts(data[0].id);
+            const related = await fetchRelatedProducts(String(data[0].id));
             const combined = [...related.same, ...related.similar].slice(0, 8);
             setInspiredProducts(combined);
          } else {
@@ -226,35 +226,13 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                      </div>
                   ) : recentViews.length > 0 ? (
                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {recentViews.map(product => {
-                           const mapped: Product = {
-                              id: product.id,
-                              title: product.name,
-                              price: product.price,
-                                 currency: product.currency || 'USD',
-                              rating: product.vendor?.rating || 0,
-                              reviews: product.vendor?.review_count || 0,
-                              image: product.image_url,
-                              vendor: product.vendor
-                                 ? {
-                                    vendor_id: product.vendor.id || product.seller_id || '',
-                                    business_name: product.vendor.name || 'Store',
-                                    business_country: 'Kenya',
-                                    vendor_rating: product.vendor.rating || 0,
-                                    review_count: product.vendor.review_count || 0,
-                                    completed_orders: product.vendor.review_count || 0,
-                                    user_id: product.vendor.id,
-                                 }
-                                 : undefined,
-                           };
-                           return (
-                              <ProductCard
-                                 key={product.id}
-                                 product={mapped}
-                                 onProductClick={onProductClick}
-                              />
-                           );
-                        })}
+                        {recentViews.map(product => (
+                           <ProductCard
+                              key={product.id}
+                              product={product}
+                              onProductClick={onProductClick}
+                           />
+                        ))}
                      </div>
                   ) : (
                      <div className="text-center py-12 text-gray-500">
@@ -274,11 +252,7 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                         {inspiredProducts.map((item) => (
                            <ProductCard
                               key={`${item.id}-${item.relation_type}`}
-                              product={{
-                                 ...(item as Product),
-                                 image: (item as any).image || (item as any).featured_image_url || (item as any).image_url || '',
-                                 currency: (item as any).currency || 'USD',
-                              }}
+                              product={item as Product}
                               onProductClick={onProductClick}
                            />
                         ))}

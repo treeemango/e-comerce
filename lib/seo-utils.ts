@@ -282,18 +282,37 @@ export function removeStructuredData(id = 'structured-data') {
  */
 export function getProductPageSEO(product: Product, vendor?: VendorInfo) {
     const price = product.price.toLocaleString('en-KE', { style: 'currency', currency: SITE_CONFIG.currency });
-    const title = `${product.title} - ${price}`;
-    const description = product.description
-        ? `${product.description.substring(0, 150)}... Price: ${price}. ${product.rating ? `Rated ${product.rating}/5 from ${product.reviews} reviews.` : ''}`
-        : `Buy ${product.title} at ${price}. ${vendor?.business_name ? `Sold by ${vendor.business_name}.` : ''} Fast delivery on JuaExpress.`;
+
+    // Priority: Product SEO Title > Derived Title
+    const title = product.seo_title || `${product.title} - ${price}`;
+
+    // Priority: Product Meta Description > Derived Description
+    let description = product.meta_description;
+    if (!description) {
+        description = product.description
+            ? `${product.description.substring(0, 150)}... Price: ${price}. ${product.rating ? `Rated ${product.rating}/5 from ${product.reviews} reviews.` : ''}`
+            : `Buy ${product.title} at ${price}. ${vendor?.business_name ? `Sold by ${vendor.business_name}.` : ''} Fast delivery on JuaExpress.`;
+    }
+
+    // Append keywords
+    const keywords = [
+        ...(product.seo_keywords || []),
+        ...(product.tags || []),
+        product.title,
+        product.categoryName || 'products',
+        'online shopping',
+        'Kenya',
+        vendor?.business_name || 'JuaExpress'
+    ].filter(Boolean).join(', ');
 
     return {
         title,
         description,
-        keywords: `${product.title}, ${product.categoryName || 'products'}, online shopping, Kenya, ${vendor?.business_name || 'JuaExpress'}`,
+        keywords,
         image: product.image,
-        url: `${SITE_CONFIG.url}/product/${product.id}`,
+        url: product.canonical_url || `${SITE_CONFIG.url}/product/${product.id}`,
         type: 'product',
+        noindex: !product.title // Example safety, though usually we want to index
     };
 }
 

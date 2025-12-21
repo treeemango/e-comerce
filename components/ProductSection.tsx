@@ -43,7 +43,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     brand_ids: [],
     price_min: null,
     price_max: null,
-    attributes: {}
+    attributes: {},
+    delivery_locations: []
   });
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -68,6 +69,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     appliedFilters.category_ids.length +
     appliedFilters.brand_ids.length +
     (appliedFilters.price_min !== null || appliedFilters.price_max !== null ? 1 : 0) +
+    appliedFilters.delivery_locations.length +
     Object.values(appliedFilters.attributes).reduce((acc: number, curr) => acc + (curr as string[]).length, 0);
 
 
@@ -98,7 +100,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       brand_ids: [],
       price_min: null,
       price_max: null,
-      attributes: {}
+      attributes: {},
+      delivery_locations: []
     });
     setActiveFilter(null);
     setShowVerticalFilters(false);
@@ -151,7 +154,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
           brand_ids: [],
           price_min: null,
           price_max: null,
-          attributes: {}
+          attributes: {},
+          delivery_locations: []
         });
       }
     }
@@ -229,13 +233,23 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     }));
   };
 
+  const toggleDeliveryLocation = (location: string) => {
+    setAppliedFilters(prev => ({
+      ...prev,
+      delivery_locations: prev.delivery_locations.includes(location)
+        ? prev.delivery_locations.filter(l => l !== location)
+        : [...prev.delivery_locations, location]
+    }));
+  };
+
   const clearAllFilters = () => {
     setAppliedFilters({
       category_ids: [],
       brand_ids: [],
       price_min: null,
       price_max: null,
-      attributes: {}
+      attributes: {},
+      delivery_locations: []
     });
   };
 
@@ -286,7 +300,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
         brand_ids: [],
         price_min: null,
         price_max: null,
-        attributes: {}
+        attributes: {},
+        delivery_locations: []
       });
     }
   };
@@ -295,7 +310,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     return appliedFilters.category_ids.length > 0 ||
       appliedFilters.brand_ids.length > 0 ||
       appliedFilters.price_min !== null ||
-      appliedFilters.price_max !== null;
+      appliedFilters.price_max !== null ||
+      appliedFilters.delivery_locations.length > 0;
   };
 
   // Filter logic for non-search views
@@ -592,6 +608,25 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                   </button>
                 )}
 
+                {/* Delivery Location Filter Pill */}
+                {searchFilters && searchFilters.delivery_locations && searchFilters.delivery_locations.length > 0 && (
+                  <button
+                    onClick={() => setActiveFilter(activeFilter === 'delivery' ? null : 'delivery')}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'delivery' || appliedFilters.delivery_locations.length > 0
+                      ? 'bg-black text-white border-black shadow-sm'
+                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                      }`}
+                  >
+                    Delivery
+                    {appliedFilters.delivery_locations.length > 0 && (
+                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                        {appliedFilters.delivery_locations.length}
+                      </span>
+                    )}
+                    <span className="material-icons text-base">expand_more</span>
+                  </button>
+                )}
+
                 {/* Dynamic Attribute Filter Pills */}
                 {searchFilters && Object.keys(searchFilters.attributes).length > 0 &&
                   Object.entries(searchFilters.attributes).map(([attributeName, attributeValues]: [string, AttributeValue[]]) => {
@@ -701,6 +736,27 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                       </div>
                     )}
 
+                    {/* Delivery Content */}
+                    {activeFilter === 'delivery' && searchFilters && searchFilters.delivery_locations && (
+                      <div className="flex flex-wrap gap-2">
+                        {searchFilters.delivery_locations.map((loc) => {
+                          const isSelected = appliedFilters.delivery_locations.includes(loc.location);
+                          return (
+                            <button
+                              key={loc.location}
+                              onClick={() => toggleDeliveryLocation(loc.location)}
+                              className={`px-4 py-2 rounded-full text-sm border transition-all ${isSelected
+                                ? 'bg-black border-black text-white'
+                                : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-gray-400'
+                                }`}
+                            >
+                              {loc.location} <span className="opacity-60 text-xs ml-1">({loc.product_count})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Attribute Content */}
                     {activeFilter && searchFilters?.attributes[activeFilter] && (
                       <div className="flex flex-wrap gap-3">
@@ -771,6 +827,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                         if (activeFilter === 'category') setAppliedFilters(prev => ({ ...prev, category_ids: [] }));
                         else if (activeFilter === 'brand') setAppliedFilters(prev => ({ ...prev, brand_ids: [] }));
                         else if (activeFilter === 'price') setPriceRange(null, null);
+                        else if (activeFilter === 'delivery') setAppliedFilters(prev => ({ ...prev, delivery_locations: [] }));
                         else if (activeFilter) setAppliedFilters(prev => {
                           const newAttrs = { ...prev.attributes };
                           delete newAttrs[activeFilter];

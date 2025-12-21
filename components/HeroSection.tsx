@@ -63,7 +63,19 @@ const HeroSection: React.FC = () => {
   const [deals, setDeals] = useState<LightningDealItem[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [videoPlayCounts, setVideoPlayCounts] = useState<Record<string, number>>({});
+  const [playedVideos, setPlayedVideos] = useState<string[]>([]);
+
+  // Load played videos from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('hero_videos_played');
+      if (stored) {
+        setPlayedVideos(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error('Error reading sessionStorage:', e);
+    }
+  }, []);
 
   useEffect(() => {
     loadDeals();
@@ -90,15 +102,27 @@ const HeroSection: React.FC = () => {
     return () => clearInterval(timer);
   }, [deals.length]);
 
-  // Wise action: Track playback counts to limit auto-play and avoid bot detection
+  // Wise action: Track playback to play only once per product per session
   useEffect(() => {
-    if (deals.length > 0) {
-      const dealId = deals[currentSlide].id.toString();
-      setVideoPlayCounts(prev => ({
-        ...prev,
-        [dealId]: (prev[dealId] || 0) + 1
-      }));
-    }
+    if (deals.length === 0) return;
+
+    const dealId = deals[currentSlide].id.toString();
+
+    // Only mark as played when we leave this slide or unmount
+    return () => {
+      setPlayedVideos(prev => {
+        if (!prev.includes(dealId)) {
+          const nextPlayed = [...prev, dealId];
+          try {
+            sessionStorage.setItem('hero_videos_played', JSON.stringify(nextPlayed));
+          } catch (e) {
+            console.error('Error writing to sessionStorage:', e);
+          }
+          return nextPlayed;
+        }
+        return prev;
+      });
+    };
   }, [currentSlide, deals]);
 
   const nextSlide = () => {
@@ -154,8 +178,8 @@ const HeroSection: React.FC = () => {
               <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full animate-pulse" />
               <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-fuchsia-500/10 blur-[120px] rounded-full animate-pulse delay-1000" />
 
-              {/* Optional Video Background Layer - limited to 3 plays per session */}
-              {youtubeVideo && isActive && (videoPlayCounts[deal.id.toString()] || 0) <= 3 && (
+              {/* Optional Video Background Layer - limited to 1 play per session/navigation */}
+              {youtubeVideo && isActive && !playedVideos.includes(deal.id.toString()) && (
                 <div className="absolute inset-0 opacity-20 mix-blend-overlay pointer-events-none overflow-hidden">
                   <iframe
                     src={`${youtubeVideo.url}${youtubeVideo.url.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=0&loop=1&playlist=${youtubeVideo.url.split('/').pop()}`}

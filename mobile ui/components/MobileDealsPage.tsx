@@ -43,8 +43,14 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
         reviews: 0,
         deal_type: deal.deal_type,
         coupon_end: deal.coupon_end,
-        stock: 50, // Mock stock as it's not always in deal item
-        in_stock: true
+        coupon_name: deal.coupon_name,
+        coupon_discount_percent: deal.coupon_discount_percent,
+        is_express_delivery: deal.is_express_delivery,
+        delivery_time_estimate: deal.delivery_time_estimate,
+        delivery_time_days: deal.delivery_time_days,
+        delivery_scope: deal.delivery_scope,
+        stock: 50,
+        in_stock: deal.in_stock ?? true
     } as Product);
 
     return (

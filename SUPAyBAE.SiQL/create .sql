@@ -19,8 +19,17 @@ DECLARE
     v_is_video boolean;
     v_is_first_variant boolean := true;
 BEGIN
-    -- 1. Generate Slug
-    v_slug := LOWER(REGEXP_REPLACE(p_product_data->>'title', '[^a-zA-Z0-9]+', '-', 'g'));
+    -- 1. Generate & Ensure Unique Slug
+    v_slug := COALESCE(
+        p_product_data->>'url_slug', 
+        LOWER(REGEXP_REPLACE(p_product_data->>'title', '[^a-zA-Z0-9]+', '-', 'g'))
+    );
+    v_slug := TRIM(BOTH '-' FROM v_slug);
+
+    -- If slug exists, append random suffix
+    IF EXISTS (SELECT 1 FROM products WHERE slug = v_slug OR url_slug = v_slug) THEN
+        v_slug := v_slug || '-' || SUBSTR(MD5(RANDOM()::TEXT), 1, 4);
+    END IF;
 
     -- 2. INSERT into products (Removed Sales/Promo and Eco-Friendly fields)
     INSERT INTO products (
@@ -79,7 +88,7 @@ BEGIN
         -- MAPPING SEO FIELDS
         p_product_data->>'seo_title',
         p_product_data->>'meta_description',
-        COALESCE(p_product_data->>'url_slug', v_slug),
+        v_slug,
         p_product_data->>'seo_keywords',
         p_product_data->>'canonical_url',
         

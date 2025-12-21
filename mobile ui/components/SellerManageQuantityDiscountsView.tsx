@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchQuantityDiscounts, updateQuantityDiscounts } from '../../lib/api';
 import { Product, QuantityDiscountTier } from '../../types';
 import { cn, formatCurrency } from '../../lib/utils';
+import { getCurrencySymbol } from '../../lib/currency';
 
 interface SellerManageQuantityDiscountsViewProps {
     product: Product;
@@ -146,7 +147,7 @@ export const SellerManageQuantityDiscountsView: React.FC<SellerManageQuantityDis
                                         />
                                     </div>
                                     <div className="flex-1 space-y-2">
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Unit Price ($)</label>
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Unit Price ({getCurrencySymbol(product.currency)})</label>
                                         <input
                                             type="number"
                                             value={tier.unit_price}

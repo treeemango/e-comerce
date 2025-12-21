@@ -23,7 +23,8 @@ import { DriverDashboard } from './components/DriverDashboard';
 import { DriverOnboardingView } from './components/DriverOnboardingView';
 import { BuyerMessagesView } from './components/BuyerMessagesView';
 import { SellerOnboardingView } from './components/SellerOnboardingView';
-import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount } from '@/lib/api';
+import { ProductCard } from './components/ProductCard';
+import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews } from '@/lib/api';
 import { Product } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 
@@ -37,6 +38,7 @@ type CartItem = {
 const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('home');
     const [products, setProducts] = useState<Product[]>([]);
+    const [recentViews, setRecentViews] = useState<Product[]>([]);
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
     const [categories, setCategories] = useState<NavbarCategory[]>([]);
     const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
@@ -94,6 +96,16 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        const loadRecentViews = async () => {
+            if (userProfile?.id) {
+                const data = await fetchRecentViews(userProfile.id);
+                setRecentViews(data);
+            }
+        };
+        loadRecentViews();
+    }, [userProfile?.id]);
+
+    useEffect(() => {
         refreshUserProfile();
     }, [refreshUserProfile]);
 
@@ -129,8 +141,8 @@ const App: React.FC = () => {
                 setIsAccountOpen(false);
                 return;
             }
-            if (isOnboarding) {
-                setIsOnboarding(false);
+            if (onboardingType) {
+                setOnboardingType(null);
                 return;
             }
             if (typeof view === 'string') {
@@ -141,7 +153,7 @@ const App: React.FC = () => {
         window.addEventListener('popstate', onPopState);
         window.history.replaceState({ view: activeTab }, '', window.location.href);
         return () => window.removeEventListener('popstate', onPopState);
-    }, [activeTab, isAccountOpen, isSearchOpen, selectedProduct]);
+    }, [activeTab, isAccountOpen, isSearchOpen, onboardingType, selectedProduct]);
 
 
 
@@ -241,16 +253,22 @@ const App: React.FC = () => {
             case 'history': {
                 return (
                     <AccountSection title="Browsing history" description="Recently viewed items" onBack={() => setActiveAccountSection(null)}>
-                        <div className="grid grid-cols-2 gap-2">
-                            {products.slice(0, 6).map((p, idx) => (
-                                <div key={p.id ?? idx} className="bg-white dark:bg-surface-dark rounded-lg p-2 shadow-sm border border-gray-100 dark:border-gray-800">
-                                    <div className="aspect-square rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
-                                        <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="text-[11px] text-gray-700 dark:text-gray-300 line-clamp-2 mt-1">{p.title}</div>
-                                </div>
-                            ))}
-                        </div>
+                        {recentViews.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-2">
+                                {recentViews.map((p, idx) => (
+                                    <ProductCard
+                                        key={p.id ?? idx}
+                                        product={p}
+                                        onClick={() => handleProductClick(p)}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800">
+                                <span className="material-icons-outlined text-4xl text-gray-300 mb-2">history</span>
+                                <div className="text-sm text-gray-500">Your browsing history is empty. Start shopping to see items here!</div>
+                            </div>
+                        )}
                     </AccountSection>
                 );
             }
@@ -412,6 +430,14 @@ const App: React.FC = () => {
         setActiveTab('home'); // Go back to home with filtered products
         window.history.pushState({ view: 'home', category: categoryId }, '', window.location.href);
     };
+
+    const handlePlaceOrder = () => {
+        setCartItems([]);
+        closeCheckout();
+        setActiveTab('home');
+        // Optional: show success toast
+    };
+
 
     const handleSellerAuth = async () => {
         await signInWithGoogle({ view: 'seller-auth' });
@@ -726,11 +752,10 @@ const App: React.FC = () => {
             {isCheckoutOpen && (
                 <CheckoutSheet
                     items={cartItems}
+                    userId={userProfile?.id}
                     onClose={closeCheckout}
                     onPlaceOrder={() => {
-                        setCartItems([]);
-                        closeCheckout();
-                        setActiveTab('home');
+                        handlePlaceOrder();
                     }}
                 />
             )}

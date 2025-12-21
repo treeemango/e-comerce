@@ -32,6 +32,22 @@ active_coupons AS (
         COALESCE(c.discount_amount, 0) DESC NULLS LAST,
         COALESCE(c.discount_percentage, 0) DESC NULLS LAST
 ),
+active_automatic_discounts AS (
+    SELECT DISTINCT ON (seller_id)
+        id,
+        seller_id,
+        name,
+        discount_type,
+        discount_value,
+        min_requirement_value,
+        buy_qty,
+        get_qty
+    FROM public.automatic_discounts
+    WHERE status = 'active'
+      AND starts_at <= CURRENT_TIMESTAMP
+      AND ends_at > CURRENT_TIMESTAMP
+    ORDER BY seller_id, created_at DESC
+),
 -- Aggregate all variants into a JSON array for each product
 variant_agg AS (
     SELECT 
@@ -97,22 +113,38 @@ SELECT
     p.currency,                            -- currency (e.g., USD, KES)
     v.compare_at_price AS original_price,
     v.compare_at_price AS "originalPrice",
-    v.discount_percent,
-    v.discount_percent AS "discountPercent",
+    ROUND(CASE 
+        WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > v.price 
+        THEN ((v.compare_at_price - v.price) / v.compare_at_price) * 100 
+        ELSE 0 
+    END) AS discount_percent,
+    ROUND(CASE 
+        WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > v.price 
+        THEN ((v.compare_at_price - v.price) / v.compare_at_price) * 100 
+        ELSE 0 
+    END) AS "discountPercent",
     p.promo_text AS "promoText",
     p.promo_code AS "promoCode",
 
+    -- Automatic Discounts
+    ad.discount_type AS auto_discount_type,
+    ad.discount_value AS auto_discount_value,
+    ad.buy_qty AS auto_discount_buy_qty,
+    ad.get_qty AS auto_discount_get_qty,
+    ad.min_requirement_value AS auto_discount_min_requirement,
+    ad.name AS auto_discount_name,
+
     -- 🔥 NEW: Deal Type Differentiation
-    CASE 
+    CASE
         WHEN ac.coupon_id IS NOT NULL THEN 'coupon'
+        WHEN ad.id IS NOT NULL THEN 'hot_discount'
         WHEN p.is_flash_sale = true AND p.flash_sale_end > CURRENT_TIMESTAMP THEN 'flash_sale'
         WHEN p.is_lightning_deal = true AND p.lightning_ends_at > CURRENT_TIMESTAMP THEN 'lightning_deal'
-        WHEN v.compare_at_price IS NOT NULL 
-             AND v.compare_at_price > v.price 
+        WHEN v.compare_at_price IS NOT NULL
+             AND v.compare_at_price > v.price
              AND ((v.compare_at_price - v.price) / NULLIF(v.compare_at_price, 0)) >= 0.3 THEN 'hot_discount'
-        WHEN v.discount_percent IS NOT NULL AND v.discount_percent >= 30 THEN 'hot_discount'
-        WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > v.price THEN 'discount'
-        WHEN v.discount_percent IS NOT NULL AND v.discount_percent >= 10 THEN 'discount'
+        WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > v.price
+             AND ((v.compare_at_price - v.price) / NULLIF(v.compare_at_price, 0)) >= 0.1 THEN 'discount'
         ELSE 'standard'
     END AS deal_type,
 
@@ -254,7 +286,8 @@ LEFT JOIN public.admin_2025_shopify_brands b ON p.brand_id = b.id
 LEFT JOIN public.vendors vd ON p.seller_id = vd.user_id
 LEFT JOIN variant_agg va ON p.id = va.product_id
 LEFT JOIN media_agg ma ON p.id = ma.product_id
-LEFT JOIN active_coupons ac ON p.id = ac.product_id;
+LEFT JOIN active_coupons ac ON p.id = ac.product_id
+LEFT JOIN active_automatic_discounts ad ON p.seller_id = ad.seller_id;
 
 -- 3. RECREATE CHILD VIEWS (they inherit new fields automatically)
 CREATE VIEW public.product_card_metrics_view AS 
@@ -306,6 +339,8 @@ SELECT
     delivery_time_days,
     min_order_value,
     min_order_for_free_delivery,
+    is_express_delivery,
+    delivery_scope,
     seller_rating,
     seller_total_orders,
     seller_experience_years,
@@ -314,12 +349,19 @@ SELECT
     featured_thumbnail_url,
     gallery_media,
     "galleryMedia" AS gallery_images,
+    discount_percent,          -- Added for compatibility
     "discountPercent",
     "promoText",
     "promoCode",
     "activeCoupon",
     deal_type,                 -- ✅ Now included
     coupon_expires_at,         -- ✅ Now included
+    auto_discount_type,
+    auto_discount_value,
+    auto_discount_buy_qty,
+    auto_discount_get_qty,
+    auto_discount_min_requirement,
+    auto_discount_name,
     stock_state,
     variants
 FROM public.product_unified_view;

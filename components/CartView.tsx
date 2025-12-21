@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
 import { getCurrencySymbol } from '@/lib/currency';
-import { applyCoupon } from '@/lib/api';
+import { applyCoupon, fetchUserCoupons } from '@/lib/api';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CartViewProps {
@@ -10,14 +10,17 @@ interface CartViewProps {
     onUpdateQuantity: (productId: number, delta: number) => void;
     onCheckoutClick: () => void;
     onHomeClick: () => void;
+    userId?: string;
 }
 
-const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpdateQuantity, onCheckoutClick, onHomeClick }) => {
+const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpdateQuantity, onCheckoutClick, onHomeClick, userId }) => {
     const [couponCode, setCouponCode] = useState('');
     const [discount, setDiscount] = useState(0);
     const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [isApplying, setIsApplying] = useState(false);
     const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
+    const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+    const [hasAttemptedAutoApply, setHasAttemptedAutoApply] = useState(false);
 
     // Group items to track quantities
     const groupedItems = cartItems.reduce((acc, item) => {
@@ -30,14 +33,6 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
 
     const items = Object.values(groupedItems) as (Product & { quantity: number })[];
 
-    React.useEffect(() => {
-        const calculatePromos = async () => {
-            const result = await applyPromotionsToCart(items.map(i => ({ product: i, quantity: i.quantity })));
-            setPromoResult(result);
-        };
-        calculatePromos();
-    }, [cartItems]);
-
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const shipping = subtotal > 120 ? 0 : 12;
     const initialTotal = Math.max(0, subtotal + shipping - discount);
@@ -48,15 +43,67 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
     const totalSavings = bulkSavings + discount;
     const uniqueCount = items.length;
 
-    const handleApplyCoupon = async () => {
-        if (!couponCode.trim()) return;
+    React.useEffect(() => {
+        const calculatePromos = async () => {
+            const result = await applyPromotionsToCart(items.map(i => ({ product: i, quantity: i.quantity })));
+            setPromoResult(result);
+        };
+        calculatePromos();
+    }, [cartItems]);
+
+    // ✨ Auto-apply best coupon
+    React.useEffect(() => {
+        const autoApplyBestCoupon = async () => {
+            if (!userId || items.length === 0 || hasAttemptedAutoApply || appliedCoupon) return;
+
+            try {
+                const userCoupons = await fetchUserCoupons(userId);
+                const activeUnused = userCoupons.filter(uc => !uc.used_at && uc.coupon.status === 'Ongoing');
+
+                if (activeUnused.length === 0) {
+                    setHasAttemptedAutoApply(true);
+                    return;
+                }
+
+                let bestCoupon = null;
+                let maxDiscount = 0;
+
+                for (const uc of activeUnused) {
+                    let calcDiscount = 0;
+                    if (uc.coupon.discount_amount) {
+                        calcDiscount = uc.coupon.discount_amount;
+                    } else if (uc.coupon.discount_percentage) {
+                        calcDiscount = (subtotal * uc.coupon.discount_percentage) / 100;
+                    }
+
+                    if (calcDiscount > maxDiscount) {
+                        maxDiscount = calcDiscount;
+                        bestCoupon = uc.coupon;
+                    }
+                }
+
+                if (bestCoupon) {
+                    setCouponCode(bestCoupon.code);
+                    handleApplyCouponByCode(bestCoupon.code);
+                }
+            } catch (err) {
+                console.error('Error auto-applying coupon in Cart:', err);
+            } finally {
+                setHasAttemptedAutoApply(true);
+            }
+        };
+
+        if (subtotal > 0) {
+            autoApplyBestCoupon();
+        }
+    }, [userId, items, subtotal, hasAttemptedAutoApply, appliedCoupon]);
+
+    const handleApplyCouponByCode = async (code: string) => {
         setIsApplying(true);
         setCouponMessage(null);
-        setDiscount(0);
-
         try {
             const productIds = cartItems.map(p => p.id.toString());
-            const result = await applyCoupon(couponCode, productIds);
+            const result = await applyCoupon(code, productIds, userId);
 
             if (result.success && result.coupon) {
                 let disc = 0;
@@ -66,16 +113,16 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                     disc = (subtotal * (result.coupon.discount_percentage || 0)) / 100;
                 }
                 setDiscount(disc);
-                setCouponMessage({ type: 'success', text: `Coupon applied: -${getCurrencySymbol(items[0]?.currency)}${disc.toFixed(2)}` });
-            } else {
-                setCouponMessage({ type: 'error', text: result.message });
+                setAppliedCoupon(result.coupon);
+                setCouponMessage({ type: 'success', text: `Best coupon applied!` });
             }
         } catch (error) {
-            setCouponMessage({ type: 'error', text: "Failed to apply coupon" });
+            console.error(error);
         } finally {
             setIsApplying(false);
         }
     };
+
 
     if (items.length === 0) {
         return (
@@ -269,25 +316,16 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                             </div>
 
                             <div className="mt-4">
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Promo code"
-                                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black uppercase"
-                                        value={couponCode}
-                                        onChange={(e) => setCouponCode(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && handleApplyCoupon()}
-                                    />
-                                    <button
-                                        onClick={handleApplyCoupon}
-                                        disabled={isApplying || !couponCode}
-                                        className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-black disabled:opacity-50 transition-colors"
-                                    >
-                                        {isApplying ? '...' : 'Apply'}
-                                    </button>
-                                </div>
-                                {couponMessage && (
-                                    <p className={`text-xs mt-2 ${couponMessage.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+                                {discount > 0 && (
+                                    <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center gap-2">
+                                        <span className="material-icons text-emerald-600 text-sm">confirmation_number</span>
+                                        <p className="text-xs font-bold text-emerald-700">
+                                            Best coupon "{appliedCoupon?.code}" automatically applied!
+                                        </p>
+                                    </div>
+                                )}
+                                {couponMessage && couponMessage.type === 'error' && (
+                                    <p className="text-xs mt-2 text-red-500">
                                         {couponMessage.text}
                                     </p>
                                 )}

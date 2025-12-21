@@ -78,7 +78,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
   const hasStrikePrice = product.originalPrice && product.originalPrice > product.price;
   const computedDiscountPercent = hasStrikePrice
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
-    : product.discount_percent || product.discountPercent;
+    : (product.discountPercent ?? product.discount_percent ?? 0);
   const locationLabel = product.vendor?.business_country;
 
   const couponValue = product.activeCoupon
@@ -313,6 +313,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
             <div className="flex items-baseline text-shop-red dark:text-red-400">
               <span className="text-xl font-bold">{getCurrencySymbol(product.currency)}{Math.floor(product.price || 0)}</span>
               <span className="text-sm ml-0.5">.{(product.price || 0).toFixed(2).split('.')[1]}</span>
+              {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">/{product.sale_unit}</span>}
             </div>
             <button
               className={`h-8 w-8 flex items-center justify-center rounded-full border transition-all shadow-sm ${product.deal_type === 'coupon'
@@ -407,7 +408,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                       {product.isExpressDelivery ? 'bolt' : 'local_shipping'}
                     </span>
                     <span className="leading-none">
-                      {product.isExpressDelivery ? 'Express' : 'Delivery'} {product.deliveryTimeEstimate || (product.deliveryTimeDays ? `${product.deliveryTimeDays} day${product.deliveryTimeDays === 1 ? '' : 's'}` : product.deliveryDate)}
+                      {product.isExpressDelivery ? 'Express' : 'Delivery'} {(() => {
+                        const est = product.deliveryTimeEstimate;
+                        if (!est) return product.deliveryTimeDays ? `${product.deliveryTimeDays} day${product.deliveryTimeDays === 1 ? '' : 's'}` : product.deliveryDate;
+                        // If it's just a number string (e.g. "5"), append "days"
+                        if (typeof est === 'string' && /^\d+$/.test(est)) return `${est} days`;
+                        return est;
+                      })()}
                     </span>
                   </span>
                 )}
@@ -415,7 +422,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                 {product.deliveryScope && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
                     <span className="material-icons !text-[13px] leading-none">travel_explore</span>
-                    <span className="leading-none">{product.deliveryScope.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}</span>
+                    <span className="leading-none">
+                      {product.delivery_locations && product.delivery_locations.length > 0
+                        ? product.delivery_locations.join(', ')
+                        : product.deliveryScope.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
+                      }
+                    </span>
                   </span>
                 )}
                 {locationLabel && (

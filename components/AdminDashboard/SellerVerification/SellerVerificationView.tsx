@@ -23,20 +23,27 @@ const MediaGrid: React.FC<MediaGridProps> = ({ items }) => {
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-500 transition-all"
+                    className="group relative aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-500 transition-all flex flex-col"
                 >
-                    {item.type === 'image' ? (
-                        <img src={item.url} alt="Document" className="w-full h-full object-cover" />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-50 text-gray-400">
-                            <i className={`fas fa-${item.type === 'video' ? 'video' : 'file-alt'} text-2xl`}></i>
+                    <div className="flex-1 relative overflow-hidden">
+                        {item.type === 'image' ? (
+                            <img src={item.url} alt={item.name || "Document"} className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-50 text-gray-400">
+                                <i className={`fas fa-${item.type === 'video' ? 'video' : 'file-alt'} text-2xl`}></i>
+                            </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                            <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-sm transform translate-y-2 group-hover:translate-y-0 transition-all">
+                                View
+                            </span>
+                        </div>
+                    </div>
+                    {item.name && (
+                        <div className="bg-white px-2 py-1.5 border-t border-gray-100 text-xs font-medium text-gray-700 truncate text-center">
+                            {item.name}
                         </div>
                     )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                        <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-sm transform translate-y-2 group-hover:translate-y-0 transition-all">
-                            View
-                        </span>
-                    </div>
                 </a>
             ))}
         </div>
@@ -109,8 +116,8 @@ const VerificationDetailsModal: React.FC<VerificationDetailsModalProps> = ({
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`flex items-center gap-2 px-4 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                                    ? 'border-blue-600 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                ? 'border-blue-600 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                 }`}
                         >
                             <i className="material-icons text-lg">{tab.icon}</i>

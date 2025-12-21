@@ -142,7 +142,9 @@ const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ onComplete,
                     account_holder: state.accountHolder,
                     account_number: state.accountNumber,
                     routing_number: state.routingNumber
-                }
+                },
+                logo_url: logoUrl || undefined,
+                banner_url: bannerUrl || undefined
             };
             const { business, error: bizError } = await createBusinessProfile(payload);
             if (bizError) {
@@ -174,12 +176,11 @@ const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ onComplete,
             }
 
             // 5. Add Bank Account
-            const { error: bankError } = await addVendorBankAccount(vendorId, {
+            const { error: bankError } = await addVendorBankAccount(userId, {
                 bank_name: state.bankName,
                 account_holder_name: state.accountHolder,
                 account_number: state.accountNumber,
-                routing_number: state.routingNumber,
-                currency: 'KES'
+                routing_number: state.routingNumber
             });
             if (bankError) console.error('Bank account warning:', bankError);
 

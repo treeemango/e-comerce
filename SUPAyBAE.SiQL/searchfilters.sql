@@ -1,25 +1,4 @@
--- =============================================================================
--- FINAL FIXED GET_UNIFIED_SEARCH_FILTERS FUNCTION 
--- Fixes: 
--- 1. Resolved 'missing FROM-clause entry for table "sa"' (42P01) by introducing 
---    an explicit CTE (attribute_counts_cte) to isolate attribute counting logic 
---    and ensure clear alias scope.
--- 2. All previous column and aggregate fixes are preserved.
--- =============================================================================
 
-DROP FUNCTION IF EXISTS get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC);
-
-CREATE OR REPLACE FUNCTION get_unified_search_filters(
-  search_query TEXT DEFAULT NULL,
-  visual_search_image_id UUID DEFAULT NULL,
-  category_ids UUID[] DEFAULT NULL,
-  brand_ids UUID[] DEFAULT NULL,
-  price_min NUMERIC DEFAULT NULL,
-  price_max NUMERIC DEFAULT NULL,
-  attribute_filters JSONB DEFAULT '{}'::jsonb,
-  similarity_threshold NUMERIC DEFAULT 0.65
-)
-RETURNS JSON AS $$
 DECLARE
   result JSON;
   visual_embedding vector;
@@ -39,20 +18,32 @@ BEGIN
   END IF;
 
   WITH search_results AS (
-    SELECT DISTINCT p.id, p.category_id, p.brand_id, 
-      p.unit_price, 
+    SELECT DISTINCT 
+      p.id, 
+      p.category_id, 
+      p.brand_id, 
+      pv.price AS product_price, 
+      -- The vendors' user ID is explicitly named seller_user_id
+      v2.user_id AS seller_user_id,
       CASE
         WHEN visual_embedding IS NOT NULL AND p.embedding IS NOT NULL THEN 
           1 - (p.embedding <=> visual_embedding)
         ELSE NULL
       END AS visual_similarity
     FROM products p 
+    LEFT JOIN product_variants pv 
+      ON pv.product_id = p.id AND pv.is_default = TRUE
+    -- JOIN to vendors, aliased as v2, to get the vendor's user ID
+    LEFT JOIN vendors v2
+      ON v2.id = p.seller_id
     
-    WHERE p.status = 'approved'
-      AND COALESCE(p.stock, 0) > 0 
+    WHERE p.status IN ('published', 'approved') 
+      -- FIX 2: Check stock on the product_variants table (pv)
+      AND pv.stock > 0
+      
       AND (
         search_query IS NULL OR search_query = ''
-        OR p.search_vector @@ plainto_tsquery('english', search_query)
+        OR to_tsvector('english', p.title) @@ plainto_tsquery('english', search_query)
         OR p.title ILIKE '%' || search_query || '%'
         OR p.description ILIKE '%' || search_query || '%'
         OR p.brand ILIKE '%' || search_query || '%'
@@ -69,8 +60,11 @@ BEGIN
       )
       AND (category_ids IS NULL OR p.category_id = ANY(category_ids))
       AND (brand_ids IS NULL OR p.brand_id = ANY(brand_ids))
-      AND (price_min IS NULL OR p.unit_price >= price_min)
-      AND (price_max IS NULL OR p.unit_price <= price_max)
+      -- Price filtering must check if pv.price exists before comparison (or handle NULL gracefully)
+      AND (
+          (price_min IS NULL OR pv.price IS NULL OR pv.price >= price_min) 
+          AND (price_max IS NULL OR pv.price IS NULL OR pv.price <= price_max)
+      )
       AND (
         attribute_filters IS NULL
         OR attribute_filters = '{}'::jsonb
@@ -92,7 +86,7 @@ BEGIN
                   )
                 )
                 OR (jsonb_typeof(filters.attr_values) <> 'array'
-                    AND pav2.value_text = trim(both '"' FROM filters.attr_values::text)
+                    AND pav2.value_text = trim(both '\"' FROM filters.attr_values::text)
                 )
               )
           )
@@ -138,10 +132,10 @@ BEGIN
       ) AS brands,
       (
         SELECT json_build_object(
-          'min', COALESCE(MIN(sr.unit_price), 0), 
-          'max', COALESCE(MAX(sr.unit_price), 0), 
-          'avg', COALESCE(AVG(sr.unit_price), 0), 
-          'product_count', COUNT(*)
+          'min', COALESCE(MIN(sr.product_price), 0), 
+          'max', COALESCE(MAX(sr.product_price), 0), 
+          'avg', COALESCE(AVG(sr.product_price), 0), 
+          'product_count', COUNT(sr.id) 
         )
         FROM search_results sr
       ) AS price_range,
@@ -157,7 +151,6 @@ BEGIN
               )
               ORDER BY product_count DESC, attribute_value
             ) AS attribute_values
-          -- Reference the new CTE here!
           FROM attribute_counts_cte
           GROUP BY attribute_name 
         ) attr_data
@@ -187,9 +180,3 @@ BEGIN
     'visual_similarity_threshold', similarity_threshold
   ));
 END;
-$$ LANGUAGE plpgsql;
-
-GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC) TO anon;
-
-COMMENT ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC) IS 'Return search filter metadata for current combined text and visual search context.';

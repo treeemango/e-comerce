@@ -279,8 +279,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
                                 • {product.delivery_time_estimate}
                             </span>
                         )}
+                        {(product.deliveryScope || (product.delivery_locations && product.delivery_locations.length > 0)) && (
+                            <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 flex items-center gap-0.5">
+                                <span className="material-icons-round text-[10px]">public</span>
+                                <span className="max-w-[80px] truncate">
+                                    {product.delivery_locations && product.delivery_locations.length > 0
+                                        ? product.delivery_locations.join(', ')
+                                        : product.deliveryScope === 'nationwide' ? 'Nationwide' : 'Local'}
+                                </span>
+                            </span>
+                        )}
                     </div>
                 )}
+
 
                 {/* Price Section */}
                 <div className="mb-2 pr-10">
@@ -288,6 +299,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
                         <span className="text-lg font-bold text-gray-900 dark:text-white">
                             {formatPrice(product.price || 0, product.currency)}
                         </span>
+                        {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400">/{product.sale_unit}</span>}
                         {product.originalPrice && (
                             <span className="text-sm line-through text-gray-500">
                                 {formatPrice(product.originalPrice, product.currency)}

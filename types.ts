@@ -38,7 +38,20 @@ export interface Product {
     isExpressDelivery?: boolean;
     deliveryScope?: string;
     deliveryText?: string;
+    delivery_locations?: string[]; // New: Listing specific locations 
+    delivery_cost?: number;        // New: Explicit cost
+    min_order_value?: number;      // New: Min order for delivery/checkout
+    min_order_for_free_delivery?: number; // New: Threshold for free delivery
+    sale_unit?: string;            // New: Unit of measurement (e.g., "piece", "kg", "L")
     shippingInfo?: string;
+    tags?: string[];              // New: Discovery tags
+    use_case_tags?: string[];     // New: AI use case tags
+    occasion_tags?: string[];     // New: AI occasion tags
+    seo_title?: string;           // New: SEO Title override
+    meta_description?: string;    // New: Meta description override
+    url_slug?: string;            // New: Custom URL slug
+    canonical_url?: string;       // New: Canonical URL
+    seo_keywords?: string[];      // New: SEO Keywords
     description?: string;
     vendor?: VendorInfo;
     categoryId?: string;
@@ -64,6 +77,8 @@ export interface Product {
     coupon_name?: string;
     coupon_end?: string; // ISO date string for countdown
     coupon_discount_percent?: number;
+    is_lightning_deal?: boolean;
+    lightning_ends_at?: string;
     score?: number; // Overall product score
     personalization_score?: number; // 0.0-1.0 personalization match
     in_stock?: boolean; // Inventory availability flag
@@ -119,6 +134,7 @@ export interface MediaItem {
     url: string;
     thumbnail?: string;
     isMain?: boolean;
+    name?: string; // For document names
 }
 
 export interface GalleryMediaItem {
@@ -205,11 +221,17 @@ export interface AttributeValue {
     product_count: number;
 }
 
+export interface DeliveryLocationFilter {
+    location: string;
+    product_count: number;
+}
+
 export interface SearchFilters {
     categories: CategoryFilter[];
     brands: BrandFilter[];
     price_range: PriceRange;
     attributes: Record<string, AttributeValue[]>;
+    delivery_locations: DeliveryLocationFilter[];
     visual_match_count: number;
     total_products: number;
     has_visual_search: boolean;
@@ -223,6 +245,7 @@ export interface AppliedFilters {
     price_min: number | null;
     price_max: number | null;
     attributes: Record<string, string[]>;
+    delivery_locations: string[]; // ✅ Added
 }
 
 // Review System Types
@@ -556,6 +579,20 @@ export interface VendorBankAccount {
     is_verified?: boolean;
 }
 
+export interface PayoutMethod {
+    id: string;
+    user_id: string;
+    user_role: 'vendor' | 'driver' | 'affiliate';
+    method_type: 'mpesa' | 'bank_transfer' | 'paypal';
+    account_name: string;
+    account_number: string;
+    bank_name?: string;
+    bank_branch_code?: string;
+    is_default?: boolean;
+    is_verified?: boolean;
+    created_at?: string;
+}
+
 export interface BusinessContent {
     id: string;
     business_id: string;
@@ -789,17 +826,19 @@ export interface CouponValidationResult {
     };
 }
 
+export interface AppliedCoupon {
+    id: string;
+    code: string;
+    name: string;
+    discount_amount?: number;
+    discount_percentage?: number;
+    type: 'fixed' | 'percentage' | 'none';
+}
+
 export interface CouponApplicationResult {
     success: boolean;
     message: string;
-    coupon?: {
-        id: string;
-        code: string;
-        name: string;
-        discount_amount?: number;
-        discount_percentage?: number;
-        type: 'fixed' | 'percentage' | 'none';
-    };
+    coupon?: AppliedCoupon;
 }
 
 export interface ReturnRequest {

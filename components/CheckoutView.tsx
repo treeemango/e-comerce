@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { CouponApplicationResult, Product } from '../types';
-import { applyCoupon, checkout } from '../lib/api';
+import { applyCoupon, checkout, fetchUserCoupons, fetchCartDeliveryFee, syncCart } from '../lib/api';
 import { getCurrencySymbol } from '@/lib/currency';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
@@ -8,7 +8,7 @@ interface CheckoutViewProps {
     cartItems: Product[];
     totalAmount: number;
     onCheckoutComplete: () => void;
-    userId?: string | number;
+    userId?: string;
 }
 
 const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onCheckoutComplete, userId }) => {
@@ -23,6 +23,11 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         country: 'United Kingdom',
     });
 
+    const [paymentMethod, setPaymentMethod] = useState<'Card' | 'M-Pesa' | 'PayPal' | 'Apple Pay' | 'Google Pay'>('Card');
+    const [mpesaPhone, setMpesaPhone] = useState('');
+    const [isExpress, setIsExpress] = useState(false);
+    const [deliveryFee, setDeliveryFee] = useState(0);
+
     const [couponCode, setCouponCode] = useState('');
     const [appliedCoupon, setAppliedCoupon] = useState<CouponApplicationResult['coupon'] | null>(null);
     const [discountAmount, setDiscountAmount] = useState(0);
@@ -32,6 +37,7 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
+    const [hasAttemptedAutoApply, setHasAttemptedAutoApply] = useState(false);
 
     const groupedItems = useMemo(() => {
         return cartItems.reduce((acc, item) => {
@@ -46,7 +52,12 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
     const items = useMemo(() => Object.values(groupedItems) as (Product & { quantity: number })[], [groupedItems]);
 
-    React.useEffect(() => {
+    const subtotal = useMemo(() => {
+        if (items.length === 0) return totalAmount;
+        return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    }, [items, totalAmount]);
+
+    useEffect(() => {
         const calculatePromos = async () => {
             const result = await applyPromotionsToCart(items.map(i => ({ product: i, quantity: i.quantity })));
             setPromoResult(result);
@@ -54,13 +65,65 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         calculatePromos();
     }, [items]);
 
-    const subtotal = useMemo(() => {
-        if (items.length === 0) return totalAmount;
-        return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    }, [items, totalAmount]);
+    useEffect(() => {
+        const getDeliveryFee = async () => {
+            if (userId) {
+                const fee = await fetchCartDeliveryFee(userId, isExpress);
+                setDeliveryFee(fee);
+            }
+        };
+        getDeliveryFee();
+    }, [userId, isExpress, cartItems]);
+
+    // ✨ Auto-apply best coupon
+    useEffect(() => {
+        const autoApplyBestCoupon = async () => {
+            if (!userId || items.length === 0 || hasAttemptedAutoApply || appliedCoupon) return;
+
+            try {
+                const userCoupons = await fetchUserCoupons(userId);
+                const activeUnused = userCoupons.filter(uc => !uc.used_at && uc.coupon.status === 'Ongoing');
+
+                if (activeUnused.length === 0) {
+                    setHasAttemptedAutoApply(true);
+                    return;
+                }
+
+                // Find the best coupon
+                let bestCoupon = null;
+                let maxDiscount = 0;
+
+                for (const uc of activeUnused) {
+                    let calcDiscount = 0;
+                    if (uc.coupon.discount_amount) {
+                        calcDiscount = uc.coupon.discount_amount;
+                    } else if (uc.coupon.discount_percentage) {
+                        calcDiscount = (subtotal * uc.coupon.discount_percentage) / 100;
+                    }
+
+                    if (calcDiscount > maxDiscount) {
+                        maxDiscount = calcDiscount;
+                        bestCoupon = uc.coupon;
+                    }
+                }
+
+                if (bestCoupon) {
+                    setCouponCode(bestCoupon.code);
+                    await handleApplyCoupon(bestCoupon.code);
+                }
+            } catch (err) {
+                console.error('Error auto-applying coupon:', err);
+            } finally {
+                setHasAttemptedAutoApply(true);
+            }
+        };
+
+        if (subtotal > 0) {
+            autoApplyBestCoupon();
+        }
+    }, [userId, items, subtotal, hasAttemptedAutoApply, appliedCoupon]);
 
     const currencySymbol = getCurrencySymbol(items[0]?.currency || cartItems[0]?.currency || 'USD');
-    const deliveryFee = 0;
 
     const bulkSavings = promoResult ? promoResult.totalSavings : 0;
     const finalTotal = Math.max(0, subtotal + deliveryFee - discountAmount - bulkSavings);
@@ -70,14 +133,16 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleApplyCoupon = async () => {
-        if (!couponCode.trim()) return;
+    const handleApplyCoupon = async (codeToApply?: string) => {
+        const code = (codeToApply || couponCode).trim();
+        if (!code) return;
+
         setIsApplyingCoupon(true);
         setCouponMessage(null);
 
         try {
             const productIds = cartItems.map(p => p.id.toString());
-            const result = await applyCoupon(couponCode.trim(), productIds);
+            const result = await applyCoupon(code, productIds, userId);
 
             if (result.success && result.coupon) {
                 let calcDiscount = 0;
@@ -105,12 +170,6 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         }
     };
 
-    const handleRemoveCoupon = () => {
-        setCouponCode('');
-        setAppliedCoupon(null);
-        setDiscountAmount(0);
-        setCouponMessage(null);
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -123,11 +182,34 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
             return;
         }
 
+        // Basic validation
+        if (paymentMethod === 'M-Pesa' && !mpesaPhone) {
+            setError('Please enter your M-Pesa phone number.');
+            setIsProcessing(false);
+            return;
+        }
+
         try {
-            const shippingAddress = `${formData.addressLine1}, ${formData.townCity}, ${formData.county}, ${formData.postcode}, ${formData.country}`;
-            const orderId = await checkout(userId, 'Card', shippingAddress, {
-                couponCode: appliedCoupon?.code || null,
-            });
+            // Sync cart items to database before checkout
+            const syncSuccess = await syncCart(userId, cartItems);
+            if (!syncSuccess) {
+                setError('Failed to synchronize cart. Please try again.');
+                setIsProcessing(false);
+                return;
+            }
+
+            const orderId = await checkout(
+                userId,
+                paymentMethod,
+                {
+                    ...formData,
+                    phoneNumber: paymentMethod === 'M-Pesa' ? mpesaPhone : formData.phoneNumber,
+                },
+                {
+                    couponCode: appliedCoupon?.code || null,
+                    expressDelivery: isExpress,
+                }
+            );
 
             if (orderId) {
                 onCheckoutComplete();
@@ -268,33 +350,97 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                         </form>
                     </div>
 
+                    {/* Delivery Options */}
+                    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Delivery Speed</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <label className={`flex flex-col p-4 border-2 rounded-xl cursor-pointer transition-all ${!isExpress ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <input type="radio" checked={!isExpress} onChange={() => setIsExpress(false)} className="text-primary focus:ring-primary" />
+                                    <span className="font-bold text-gray-900 dark:text-white">Standard Delivery</span>
+                                </div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Arrives in 3-5 business days</p>
+                                <p className="text-sm font-bold text-green-600 mt-2">FREE</p>
+                            </label>
+                            <label className={`flex flex-col p-4 border-2 rounded-xl cursor-pointer transition-all ${isExpress ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <input type="radio" checked={isExpress} onChange={() => setIsExpress(true)} className="text-primary focus:ring-primary" />
+                                    <span className="font-bold text-gray-900 dark:text-white">Express Delivery</span>
+                                </div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Arrives in 1-2 business days</p>
+                                <p className="text-sm font-bold text-primary mt-2">{currencySymbol}6.99</p>
+                            </label>
+                        </div>
+                    </div>
+
                     {/* Payment Methods */}
                     <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Payment methods</h2>
                         <div className="space-y-3">
-                            <div className="flex items-center gap-3 p-3 border border-primary bg-orange-50 dark:bg-gray-700 dark:border-primary rounded-md cursor-pointer">
-                                <input type="radio" name="payment" defaultChecked className="text-primary focus:ring-primary" />
-                                <span className="material-icons text-gray-600 dark:text-gray-300">credit_card</span>
-                                <span className="font-medium text-gray-900 dark:text-white">Card</span>
-                                <div className="flex gap-1 ml-auto">
-                                    <span className="text-xs bg-gray-200 px-1 rounded">VISA</span>
-                                    <span className="text-xs bg-gray-200 px-1 rounded">MC</span>
+                            {/* Card */}
+                            <label className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all ${paymentMethod === 'Card' ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                <input type="radio" checked={paymentMethod === 'Card'} onChange={() => setPaymentMethod('Card')} className="text-primary focus:ring-primary" />
+                                <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded-lg">
+                                    <span className="material-icons text-gray-600 dark:text-gray-300">credit_card</span>
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <input type="radio" name="payment" className="text-primary focus:ring-primary" />
-                                <span className="material-icons text-blue-600">account_balance</span>
-                                <span className="font-medium text-gray-900 dark:text-white">PayPal</span>
-                            </div>
-                            <div className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <input type="radio" name="payment" className="text-primary focus:ring-primary" />
-                                <span className="material-icons text-black dark:text-white">apple</span>
-                                <span className="font-medium text-gray-900 dark:text-white">Apple Pay</span>
-                            </div>
-                            <div className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <input type="radio" name="payment" className="text-primary focus:ring-primary" />
-                                <span className="material-icons text-blue-500">google</span>
-                                <span className="font-medium text-gray-900 dark:text-white">Google Pay</span>
+                                <div className="flex-1">
+                                    <span className="font-bold text-gray-900 dark:text-white">Credit / Debit Card</span>
+                                    <div className="flex gap-2 mt-1">
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg" alt="Visa" className="h-4" />
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" alt="Mastercard" className="h-4" />
+                                    </div>
+                                </div>
+                            </label>
+
+                            {/* M-Pesa */}
+                            <label className={`flex flex-col p-4 border-2 rounded-xl cursor-pointer transition-all ${paymentMethod === 'M-Pesa' ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                <div className="flex items-center gap-4 mb-3">
+                                    <input type="radio" checked={paymentMethod === 'M-Pesa'} onChange={() => setPaymentMethod('M-Pesa')} className="text-primary focus:ring-primary" />
+                                    <div className="p-2 bg-green-100 rounded-lg">
+                                        <span className="material-icons text-green-600">phone_android</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <span className="font-bold text-gray-900 dark:text-white">M-Pesa / Mobile Money</span>
+                                    </div>
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/1/15/M-Pesa_logo.png" alt="M-Pesa" className="h-6" />
+                                </div>
+                                {paymentMethod === 'M-Pesa' && (
+                                    <div className="ml-8 mt-2 space-y-2">
+                                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">M-Pesa Phone Number</label>
+                                        <input
+                                            type="tel"
+                                            placeholder="2547XXXXXXXX"
+                                            value={mpesaPhone}
+                                            onChange={(e) => setMpesaPhone(e.target.value)}
+                                            className="w-full max-w-xs border-gray-300 dark:border-gray-600 rounded-lg py-2 px-3 dark:bg-gray-800 dark:text-white focus:ring-primary focus:border-primary"
+                                        />
+                                        <p className="text-[10px] text-gray-400">Enter the phone number you want to pay with.</p>
+                                    </div>
+                                )}
+                            </label>
+
+                            {/* PayPal */}
+                            <label className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all ${paymentMethod === 'PayPal' ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                <input type="radio" checked={paymentMethod === 'PayPal'} onChange={() => setPaymentMethod('PayPal')} className="text-primary focus:ring-primary" />
+                                <div className="p-2 bg-blue-100 rounded-lg">
+                                    <span className="material-icons text-blue-600">account_balance</span>
+                                </div>
+                                <span className="font-bold text-gray-900 dark:text-white">PayPal</span>
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" alt="PayPal" className="h-4 ml-auto" />
+                            </label>
+
+                            {/* Apple/Google Pay */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${paymentMethod === 'Apple Pay' ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                    <input type="radio" checked={paymentMethod === 'Apple Pay'} onChange={() => setPaymentMethod('Apple Pay')} className="text-primary focus:ring-primary" />
+                                    <span className="material-icons text-black dark:text-white">apple</span>
+                                    <span className="font-bold text-sm text-gray-900 dark:text-white">Apple Pay</span>
+                                </label>
+                                <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ${paymentMethod === 'Google Pay' ? 'border-primary bg-orange-50 dark:bg-gray-700' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                                    <input type="radio" checked={paymentMethod === 'Google Pay'} onChange={() => setPaymentMethod('Google Pay')} className="text-primary focus:ring-primary" />
+                                    <span className="material-icons text-blue-500">google</span>
+                                    <span className="font-bold text-sm text-gray-900 dark:text-white">Google Pay</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -316,7 +462,9 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                             </div>
                             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                 <span>Shipping</span>
-                                <span className="text-green-600">FREE</span>
+                                <span className={deliveryFee === 0 ? 'text-green-600 font-bold' : 'text-gray-900 dark:text-white font-bold'}>
+                                    {deliveryFee === 0 ? 'FREE' : `${currencySymbol}${deliveryFee.toFixed(2)}`}
+                                </span>
                             </div>
                             {discountAmount > 0 && (
                                 <div className="flex justify-between text-sm text-rose-700 dark:text-rose-400 font-medium">
@@ -340,34 +488,9 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                             <p className="text-xs text-gray-500 mt-1 text-right">VAT included</p>
                         </div>
 
-                        <div className="mt-4 space-y-2">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={couponCode}
-                                    onChange={(e) => setCouponCode(e.target.value)}
-                                    placeholder="Coupon code"
-                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500 uppercase"
-                                />
-                                {appliedCoupon ? (
-                                    <button
-                                        onClick={handleRemoveCoupon}
-                                        className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                                    >
-                                        Remove
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={handleApplyCoupon}
-                                        disabled={isApplyingCoupon || !couponCode}
-                                        className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-600 disabled:opacity-60 transition-colors"
-                                    >
-                                        {isApplyingCoupon ? 'Applying...' : 'Apply'}
-                                    </button>
-                                )}
-                            </div>
-                            {couponMessage && (
-                                <p className={`text-xs ${couponMessage.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                        <div className="mt-4">
+                            {couponMessage && couponMessage.type === 'error' && (
+                                <p className="text-xs text-red-600">
                                     {couponMessage.text}
                                 </p>
                             )}

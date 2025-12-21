@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { Product } from '@/types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Product, UserCoupon, AppliedCoupon } from '@/types';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
+import { fetchUserCoupons, applyCoupon, checkout, fetchCartDeliveryFee, syncCart } from '@/lib/api';
 
 interface CartItem {
   product: Product;
@@ -9,8 +10,9 @@ interface CartItem {
 
 interface CheckoutSheetProps {
   items: CartItem[];
+  userId?: string;
   onClose: () => void;
-  onPlaceOrder: () => void;
+  onPlaceOrder: (options?: { couponCode?: string | null }) => void;
 }
 
 const formatPrice = (value: number, currency?: string) => {
@@ -25,19 +27,133 @@ const formatPrice = (value: number, currency?: string) => {
   }
 };
 
-export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, onPlaceOrder }) => {
+export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onClose, onPlaceOrder }) => {
   const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
-  const [payment, setPayment] = useState<'card' | 'cod' | 'wallet'>('card');
+  const [payment, setPayment] = useState<'card' | 'mpesa' | 'cod' | 'wallet'>('card');
+  const [mpesaPhone, setMpesaPhone] = useState('');
   const [selectedAddress, setSelectedAddress] = useState<'home' | 'new'>('home');
   const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
 
-  React.useEffect(() => {
+  const [addressData, setAddressData] = useState({
+    firstName: '',
+    lastName: '',
+    phoneNumber: '',
+    postcode: '',
+    addressLine1: '',
+    townCity: '',
+    county: '',
+    country: 'Kenya',
+  });
+
+  const [deliveryFee, setDeliveryFee] = useState(0);
+
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [isApplying, setIsApplying] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [hasAttemptedAutoApply, setHasAttemptedAutoApply] = useState(false);
+
+  useEffect(() => {
     const applyPromos = async () => {
       const result = await applyPromotionsToCart(items);
       setPromoResult(result);
     };
     applyPromos();
   }, [items]);
+
+  useEffect(() => {
+    const getDeliveryFee = async () => {
+      if (userId) {
+        const fee = await fetchCartDeliveryFee(userId, shipping === 'express');
+        setDeliveryFee(fee);
+      }
+    };
+    getDeliveryFee();
+  }, [userId, shipping, items]);
+
+  // Auto-apply best coupon
+  useEffect(() => {
+    const autoApplyBestCoupon = async () => {
+      if (!userId || items.length === 0 || hasAttemptedAutoApply || appliedCoupon) return;
+
+      try {
+        setHasAttemptedAutoApply(true);
+        const userCoupons = await fetchUserCoupons(userId);
+
+        // Filter for active and unused coupons
+        const activeCoupons = userCoupons.filter(uc =>
+          !uc.used_at &&
+          uc.coupon.status === 'Ongoing' &&
+          new Date(uc.coupon.end_time) > new Date()
+        );
+
+        if (activeCoupons.length === 0) return;
+
+        const currentSubtotal = promoResult?.subtotal || items.reduce((sum, line) => sum + (line.product.price || 0) * line.quantity, 0);
+
+        let bestCoupon = null;
+        let maxDiscount = 0;
+
+        for (const uc of activeCoupons) {
+          let potentialDiscount = 0;
+          if (uc.coupon.discount_amount) {
+            potentialDiscount = uc.coupon.discount_amount;
+          } else if (uc.coupon.discount_percentage) {
+            potentialDiscount = (currentSubtotal * uc.coupon.discount_percentage) / 100;
+          }
+
+          if (potentialDiscount > maxDiscount) {
+            maxDiscount = potentialDiscount;
+            bestCoupon = uc.coupon;
+          }
+        }
+
+        if (bestCoupon) {
+          handleApplyCoupon(bestCoupon.code);
+        }
+      } catch (err) {
+        console.error('Failed to auto-apply coupon:', err);
+      }
+    };
+
+    if (promoResult) {
+      autoApplyBestCoupon();
+    }
+  }, [userId, items, promoResult, hasAttemptedAutoApply]);
+
+  const handleApplyCoupon = async (code: string) => {
+    if (!code) return;
+    setIsApplying(true);
+    setCouponError(null);
+
+    try {
+      const productIds = items.map(item => item.product.id.toString());
+      const result = await applyCoupon(code, productIds, userId);
+
+      if (result.success && result.coupon) {
+        setAppliedCoupon(result.coupon);
+        setCouponCode(result.coupon.code);
+
+        const currentSubtotal = promoResult?.subtotal || items.reduce((sum, line) => sum + (line.product.price || 0) * line.quantity, 0);
+        let disc = 0;
+        if (result.coupon.type === 'fixed') {
+          disc = result.coupon.discount_amount || 0;
+        } else if (result.coupon.type === 'percentage') {
+          disc = (currentSubtotal * (result.coupon.discount_percentage || 0)) / 100;
+        }
+        setDiscountAmount(disc);
+      } else {
+        setCouponError(result.message);
+      }
+    } catch (err) {
+      setCouponError('Failed to apply coupon');
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
 
   const currency = items[0]?.product.currency;
 
@@ -47,10 +163,81 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
   );
 
   const totalSavings = promoResult?.totalSavings || 0;
-
-  const shippingCost = shipping === 'express' ? 6.99 : 0;
   const fees = 0; // placeholder for taxes/fees if needed
-  const total = (promoResult?.finalTotal || subtotal) + shippingCost + fees;
+  const total = Math.max(0, (promoResult?.finalTotal || subtotal) - discountAmount) + deliveryFee + fees;
+
+  const handlePlaceOrder = async () => {
+    if (!userId) {
+      alert('Please sign in to place order');
+      return;
+    }
+
+    if (payment === 'mpesa' && !mpesaPhone) {
+      alert('Please enter M-Pesa phone number');
+      return;
+    }
+
+    if (selectedAddress === 'new') {
+      const { firstName, lastName, addressLine1, townCity, postcode } = addressData;
+      if (!firstName || !lastName || !addressLine1 || !townCity || !postcode) {
+        alert('Please fill in all required address fields');
+        return;
+      }
+    }
+
+    try {
+      // Sync cart items to database before checkout
+      const flatItems: Product[] = [];
+      items.forEach(item => {
+        for (let i = 0; i < item.quantity; i++) {
+          flatItems.push(item.product);
+        }
+      });
+
+      const syncSuccess = await syncCart(userId, flatItems);
+      if (!syncSuccess) {
+        alert('Failed to synchronize cart. Please try again.');
+        return;
+      }
+
+      // For demo purposes, we'll assume "home" is already saved. 
+      // In a real app, you'd fetch this from the user's profile.
+      const shippingDetails = selectedAddress === 'home'
+        ? {
+          firstName: 'John',
+          lastName: 'Doe',
+          phoneNumber: '254712345678',
+          addressLine1: '123 Market Street',
+          postcode: '00100',
+          townCity: 'Nairobi',
+          county: 'Nairobi',
+          country: 'Kenya'
+        }
+        : addressData;
+
+      const orderId = await checkout(
+        userId,
+        payment === 'mpesa' ? 'M-Pesa' : payment.toUpperCase(),
+        {
+          ...shippingDetails,
+          phoneNumber: payment === 'mpesa' ? mpesaPhone : shippingDetails.phoneNumber,
+        },
+        {
+          couponCode: appliedCoupon?.code,
+          expressDelivery: shipping === 'express',
+        }
+      );
+
+      if (orderId) {
+        onPlaceOrder({ couponCode: appliedCoupon?.code });
+      } else {
+        alert('Failed to place order. Please try again.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error placing order');
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex flex-col justify-end">
@@ -74,26 +261,66 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
               <button className="text-xs font-semibold text-primary" onClick={() => setSelectedAddress('new')}>Change</button>
             </div>
             <div className="space-y-2">
-              <label className={`flex items-center gap-2 p-2 rounded-xl border ${selectedAddress === 'home' ? 'border-primary bg-white dark:bg-gray-800' : 'border-gray-200 dark:border-gray-700'}`}>
+              <label className={`flex items-center gap-2 p-3 rounded-xl border transition-all ${selectedAddress === 'home' ? 'border-primary bg-orange-50/50 dark:bg-gray-800' : 'border-gray-200 dark:border-gray-700'}`}>
                 <input
                   type="radio"
                   name="address"
                   checked={selectedAddress === 'home'}
                   onChange={() => setSelectedAddress('home')}
+                  className="text-primary focus:ring-primary"
                 />
                 <div className="text-xs text-gray-700 dark:text-gray-200">
-                  <div className="font-semibold">Home</div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">123 Market Street, Suite 4</div>
+                  <div className="font-bold">Home</div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">123 Market Street, Suite 4, Nairobi</div>
                 </div>
               </label>
-              <label className={`flex items-center gap-2 p-2 rounded-xl border ${selectedAddress === 'new' ? 'border-primary bg-white dark:bg-gray-800' : 'border-dashed border-gray-300 dark:border-gray-700'}`}>
-                <input
-                  type="radio"
-                  name="address"
-                  checked={selectedAddress === 'new'}
-                  onChange={() => setSelectedAddress('new')}
-                />
-                <div className="text-xs text-gray-700 dark:text-gray-200">Add a new address</div>
+
+              <label className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${selectedAddress === 'new' ? 'border-primary bg-orange-50/50 dark:bg-gray-800' : 'border-dashed border-gray-300 dark:border-gray-700'}`}>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="address"
+                    checked={selectedAddress === 'new'}
+                    onChange={() => setSelectedAddress('new')}
+                    className="text-primary focus:ring-primary"
+                  />
+                  <div className="text-xs font-bold text-gray-700 dark:text-gray-200">Add a new address</div>
+                </div>
+
+                {selectedAddress === 'new' && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <input
+                      placeholder="First Name"
+                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
+                      value={addressData.firstName}
+                      onChange={(e) => setAddressData({ ...addressData, firstName: e.target.value })}
+                    />
+                    <input
+                      placeholder="Last Name"
+                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
+                      value={addressData.lastName}
+                      onChange={(e) => setAddressData({ ...addressData, lastName: e.target.value })}
+                    />
+                    <input
+                      placeholder="Address Line 1"
+                      className="col-span-2 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
+                      value={addressData.addressLine1}
+                      onChange={(e) => setAddressData({ ...addressData, addressLine1: e.target.value })}
+                    />
+                    <input
+                      placeholder="Town / City"
+                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
+                      value={addressData.townCity}
+                      onChange={(e) => setAddressData({ ...addressData, townCity: e.target.value })}
+                    />
+                    <input
+                      placeholder="Postcode"
+                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
+                      value={addressData.postcode}
+                      onChange={(e) => setAddressData({ ...addressData, postcode: e.target.value })}
+                    />
+                  </div>
+                )}
               </label>
             </div>
           </section>
@@ -143,11 +370,14 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
               {[{ key: 'standard', label: 'Standard (3-5d)', price: 0 }, { key: 'express', label: 'Express (1-2d)', price: 6.99 }].map((opt) => (
                 <button
                   key={opt.key}
-                  className={`rounded-2xl border p-3 text-left text-xs font-semibold transition ${shipping === opt.key ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'}`}
+                  className={`rounded-2xl border p-3 text-left text-xs font-semibold transition-all ${shipping === opt.key ? 'border-primary bg-orange-50/50 text-primary' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'}`}
                   onClick={() => setShipping(opt.key as 'standard' | 'express')}
                 >
-                  <div>{opt.label}</div>
-                  <div className="text-[11px] font-bold mt-1">{opt.price === 0 ? 'Free' : formatPrice(opt.price, currency)}</div>
+                  <div className="flex items-center justify-between">
+                    <span>{opt.label}</span>
+                    {shipping === opt.key && <span className="material-icons-outlined text-[14px]">check_circle</span>}
+                  </div>
+                  <div className="text-[11px] font-bold mt-1 text-gray-500">{opt.price === 0 ? 'Free' : formatPrice(opt.price, currency)}</div>
                 </button>
               ))}
             </div>
@@ -156,21 +386,51 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
           {/* Payment */}
           <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800">
             <h3 className="text-sm font-bold text-black dark:text-white mb-2">Payment</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {[{ key: 'card', label: 'Card' }, { key: 'wallet', label: 'Wallet' }, { key: 'cod', label: 'Cash' }].map((opt) => (
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { key: 'card', label: 'Card' },
+                { key: 'mpesa', label: 'M-Pesa' },
+                { key: 'wallet', label: 'Wallet' },
+                { key: 'cod', label: 'Cash' }
+              ].map((opt) => (
                 <button
                   key={opt.key}
-                  className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${payment === opt.key ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'}`}
-                  onClick={() => setPayment(opt.key as 'card' | 'wallet' | 'cod')}
+                  className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all ${payment === opt.key ? 'border-primary bg-orange-50/50 text-primary' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'}`}
+                  onClick={() => setPayment(opt.key as any)}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-            <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
-              {payment === 'cod' ? 'Pay on delivery available for eligible orders.' : 'Cards and wallets are processed securely with 3D Secure where required.'}
+            {payment === 'mpesa' && (
+              <div className="mt-3 space-y-2">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">M-Pesa Phone Number</label>
+                <input
+                  placeholder="2547XXXXXXXX"
+                  className="w-full p-3 text-xs border rounded-xl dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white outline-none focus:border-primary transition-all"
+                  value={mpesaPhone}
+                  onChange={(e) => setMpesaPhone(e.target.value)}
+                />
+                <p className="text-[9px] text-gray-400">Payment request will be sent to this number.</p>
+              </div>
+            )}
+            <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              {payment === 'cod' ? 'Pay on delivery available for eligible orders.' : payment === 'mpesa' ? 'Mobile money payments are fast and secure.' : 'Cards and wallets are processed securely with 3D Secure.'}
             </div>
           </section>
+
+          {/* Coupons Savings Display */}
+          {discountAmount > 0 && (
+            <section className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-3 border border-emerald-100 dark:border-emerald-800/50">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-emerald-600 text-sm">confirmation_number</span>
+                <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                  Best coupon "{appliedCoupon?.code}" automatically applied!
+                </div>
+              </div>
+            </section>
+          )}
+          {couponError && <div className="text-[10px] text-red-500 mt-1 px-4 font-medium">{couponError}</div>}
 
           {/* Totals */}
           <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800 space-y-2">
@@ -185,8 +445,20 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
             )}
             <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
               <span>Shipping</span>
-              <span>{shippingCost === 0 ? 'Free' : formatPrice(shippingCost, currency)}</span>
+              <span className={deliveryFee === 0 ? 'text-green-600 font-bold' : 'font-bold'}>
+                {deliveryFee === 0 ? 'Free' : formatPrice(deliveryFee, currency)}
+              </span>
             </div>
+            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
+              <span>Subtotal</span>
+              <span>{formatPrice(subtotal, currency)}</span>
+            </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-xs text-indigo-600 font-bold">
+                <span>Coupon discount</span>
+                <span>-{formatPrice(discountAmount, currency)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
               <span>Fees & taxes</span>
               <span>{formatPrice(fees, currency)}</span>
@@ -196,10 +468,13 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, onClose, on
               <span>{formatPrice(total, currency)}</span>
             </div>
             <button
-              className="w-full bg-primary hover:bg-orange-600 text-white font-bold rounded-full py-3 text-sm shadow-md transition-colors mt-2"
-              onClick={onPlaceOrder}
+              className="w-full bg-primary hover:bg-orange-600 text-white font-black rounded-full py-4 text-sm shadow-xl shadow-primary/20 transition-all active:scale-[0.98] mt-2 group"
+              onClick={handlePlaceOrder}
             >
-              Place order ({items.reduce((s, i) => s + i.quantity, 0)})
+              <div className="flex items-center justify-center gap-2">
+                <span>Place order ({items.reduce((s, i) => s + i.quantity, 0)})</span>
+                <span className="material-icons-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+              </div>
             </button>
           </section>
         </div>

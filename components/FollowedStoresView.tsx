@@ -68,6 +68,16 @@ const FollowedStoresView: React.FC<FollowedStoresViewProps> = ({ userId, onProdu
                 {stores.map((store) => (
                     <div key={store.vendor_id} className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
                         <div className="flex justify-between items-start">
+                            {store.logo_url && (
+                                <div className="mr-6 flex-shrink-0">
+                                    <img
+                                        src={store.logo_url}
+                                        alt={store.business_name}
+                                        className="w-16 h-16 rounded-full object-cover border border-gray-200"
+                                    />
+                                </div>
+                            )}
+
                             <div className="flex-1">
                                 <h3 className="text-xl font-semibold mb-2">{store.business_name}</h3>
                                 {store.business_description && (
@@ -108,7 +118,7 @@ const FollowedStoresView: React.FC<FollowedStoresViewProps> = ({ userId, onProdu
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-2 items-end">
+                            <div className="flex flex-col gap-2 items-end ml-4">
                                 <button
                                     onClick={() => onProductClick?.(store.vendor_id)}
                                     className="px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200 transition-colors"

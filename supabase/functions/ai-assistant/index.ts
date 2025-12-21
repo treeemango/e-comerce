@@ -34,7 +34,7 @@ serve(async (req: Request) => {
                 Guidelines:
                 - Use professional and engaging language.
                 - Use bullet points for features.
-                - Keep it under 200 words.
+                - Keep it under 3000 characters.
                 - Return ONLY the description text. 
                 - Do NOT include keywords, labels, or word count footers.`;
                 break;
