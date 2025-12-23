@@ -14,9 +14,7 @@ interface CartViewProps {
 }
 
 const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpdateQuantity, onCheckoutClick, onHomeClick, userId }) => {
-    const [couponCode, setCouponCode] = useState('');
     const [discount, setDiscount] = useState(0);
-    const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [isApplying, setIsApplying] = useState(false);
     const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
     const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
@@ -83,7 +81,6 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                 }
 
                 if (bestCoupon) {
-                    setCouponCode(bestCoupon.code);
                     handleApplyCouponByCode(bestCoupon.code);
                 }
             } catch (err) {
@@ -100,7 +97,6 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
 
     const handleApplyCouponByCode = async (code: string) => {
         setIsApplying(true);
-        setCouponMessage(null);
         try {
             const productIds = cartItems.map(p => p.id.toString());
             const result = await applyCoupon(code, productIds, userId);
@@ -114,7 +110,6 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                 }
                 setDiscount(disc);
                 setAppliedCoupon(result.coupon);
-                setCouponMessage({ type: 'success', text: `Best coupon applied!` });
             }
         } catch (error) {
             console.error(error);
@@ -323,11 +318,6 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                             Best coupon "{appliedCoupon?.code}" automatically applied!
                                         </p>
                                     </div>
-                                )}
-                                {couponMessage && couponMessage.type === 'error' && (
-                                    <p className="text-xs mt-2 text-red-500">
-                                        {couponMessage.text}
-                                    </p>
                                 )}
                             </div>
 

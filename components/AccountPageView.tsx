@@ -175,9 +175,12 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                                     {store.is_verified && <div className="text-blue-500 text-xs flex items-center gap-1"><span className="material-icons text-xs">verified</span> Verified</div>}
                                  </div>
                               </div>
-                              <div className="flex justify-between text-xs text-gray-500 mb-3">
-                                 <span>{store.follower_count?.toLocaleString()} followers</span>
-                                 <span className="flex items-center gap-1"><span className="material-icons text-xs text-yellow-500">star</span> {store.rating?.toFixed(1)}</span>
+                              <div className="flex justify-between items-center text-xs mb-3">
+                                 <span className="text-gray-500">{store.follower_count?.toLocaleString()} followers</span>
+                                 <span className="flex items-center gap-1 font-bold text-slate-900 dark:text-white">
+                                    <span className="material-icons text-[14px] text-slate-900 dark:text-slate-100">star</span>
+                                    {store.rating?.toFixed(1) || '0.0'}
+                                 </span>
                               </div>
                               <button
                                  onClick={() => onVisitStore?.(store.vendor_id)}

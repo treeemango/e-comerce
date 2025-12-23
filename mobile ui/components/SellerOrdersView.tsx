@@ -114,12 +114,18 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                             <div className="space-y-3 mb-4">
                                 {order.items?.map((item, i) => (
                                     <div key={i} className="flex gap-3">
-                                        <div className="w-12 h-12 bg-gray-50 rounded-lg flex-shrink-0 border flex items-center justify-center">
-                                            <span className="material-icons text-gray-300 text-sm">image</span>
+                                        <div className="w-12 h-12 bg-gray-50 rounded-lg flex-shrink-0 border overflow-hidden">
+                                            {item.image_url ? (
+                                                <img src={item.image_url} alt={item.product_title} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <span className="material-icons text-gray-300 text-sm">image</span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-bold text-gray-900 line-clamp-1">{item.product_title}</div>
-                                            <div className="text-xs text-gray-500 mt-0.5">Qty: {item.quantity} • {formatCurrency(item.price || 0, 'GBP')}</div>
+                                            <div className="text-xs text-gray-500 mt-0.5">Qty: {item.quantity} • {formatCurrency(item.price || 0, item.currency || 'USD')}</div>
                                         </div>
                                     </div>
                                 ))}
@@ -132,7 +138,7 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                                 </div>
                                 <div className="text-right">
                                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Total Amount</div>
-                                    <div className="text-sm font-black text-orange-600">{formatCurrency(order.total_amount || 0, 'GBP')}</div>
+                                    <div className="text-sm font-black text-orange-600">{formatCurrency(order.total_amount || 0, order.items?.[0]?.currency || 'USD')}</div>
                                 </div>
                             </div>
 

@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts } from '../lib/api';
+import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist } from '../lib/api';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
-import { playFollowSound, playUnfollowSound } from '../lib/sounds';
+import { playFollowSound, playUnfollowSound, playWishlistAddSound, playWishlistRemoveSound } from '../lib/sounds';
 import { useSEO } from '../lib/useSEO';
 import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
 import { formatPrice, getCurrencySymbol } from '../lib/currency';
@@ -55,6 +55,10 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [isFollowing, setIsFollowing] = useState(false);
    const [isFollowLoading, setIsFollowLoading] = useState(false);
    const [followerCount, setFollowerCount] = useState(0);
+
+   // Wishlist State
+   const [isWishlisted, setIsWishlisted] = useState(false);
+   const [isWishlistLoading, setIsWishlistLoading] = useState(false);
 
    // Message Modal State
    const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
@@ -314,6 +318,45 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       };
       checkFollowStatus();
    }, [vendor?.vendor_id, user?.id]);
+
+   // Check if product is in wishlist
+   useEffect(() => {
+      const checkWishlistStatus = async () => {
+         if (product.id && user?.id) {
+            const inWishlist = await isInWishlist(user.id, product.id.toString());
+            setIsWishlisted(inWishlist);
+         } else {
+            setIsWishlisted(false);
+         }
+      };
+      checkWishlistStatus();
+   }, [product.id, user?.id]);
+
+   const handleWishlistToggle = async () => {
+      if (!user) {
+         alert('Please sign in to save items');
+         return;
+      }
+      if (!product.id) return;
+
+      setIsWishlistLoading(true);
+      try {
+         const result = await toggleWishlist(user.id, product.id.toString());
+         if (result.success) {
+            setIsWishlisted(result.inWishlist);
+            // Play appropriate sound based on action
+            if (result.inWishlist) {
+               playWishlistAddSound();
+            } else {
+               playWishlistRemoveSound();
+            }
+         }
+      } catch (error) {
+         console.error('Error toggling wishlist:', error);
+      } finally {
+         setIsWishlistLoading(false);
+      }
+   };
 
    const handleMessageClick = () => {
       if (!user) {
@@ -635,8 +678,17 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      <button className="bg-white/90 dark:bg-black/50 p-2 rounded-full shadow hover:bg-white dark:hover:bg-black transition-colors">
                         <span className="material-icons text-slate-700 dark:text-white">share</span>
                      </button>
-                     <button className="bg-white/90 dark:bg-black/50 p-2 rounded-full shadow hover:bg-white dark:hover:bg-black transition-colors">
-                        <span className="material-icons text-slate-700 dark:text-white">favorite_border</span>
+                     <button
+                        onClick={handleWishlistToggle}
+                        disabled={isWishlistLoading}
+                        className={`p-2 rounded-full shadow transition-all ${isWishlisted
+                           ? 'bg-red-500 hover:bg-red-600'
+                           : 'bg-white/90 dark:bg-black/50 hover:bg-white dark:hover:bg-black'}`}
+                        title={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+                     >
+                        <span className={`material-icons ${isWishlisted ? 'text-white' : 'text-slate-700 dark:text-white'} ${isWishlistLoading ? 'animate-pulse' : ''}`}>
+                           {isWishlisted ? 'favorite' : 'favorite_border'}
+                        </span>
                      </button>
                   </div>
                </div>
@@ -667,9 +719,12 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   </h1>
 
                   <div className="flex items-center gap-1 text-xs mb-4">
-                     <span className="flex items-center text-slate-900 dark:text-white font-bold">{formattedRating} <span className="material-icons text-sm">star</span></span>
+                     <div className="flex items-center gap-1">
+                        <span className="material-icons !text-[14px] text-slate-900 dark:text-slate-100">star</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{formattedRating}</span>
+                     </div>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
-                     <a href="#reviews" className="text-slate-500 hover:underline">{product.reviews?.toLocaleString?.() ?? product.reviews} reviews</a>
+                     <a href="#reviews" className="text-slate-500 hover:underline">({product.reviews?.toLocaleString?.() ?? product.reviews})</a>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
                      <span className="text-slate-500">{soldLabel}</span>
                   </div>

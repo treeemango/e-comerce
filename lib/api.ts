@@ -1,11 +1,13 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences } from '@/types';
 
 export type { NavbarCategory, PersonalizedNavbarCategory };
 
 export interface LightningDealItem {
     id: string;
     title: string;
+    description?: string;
+    metaDescription?: string;
     price: number;
     originalPrice: number;
     discountPercent: number;
@@ -32,6 +34,10 @@ export interface LightningDealItem {
     in_stock?: boolean;
     category_id?: string;
     category_name?: string;
+    rating?: number;
+    reviews?: number;
+    soldCount?: number;
+    stock?: number;
 }
 
 export interface DealCategoryNavItem {
@@ -65,13 +71,13 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
     const products = payload?.products ?? [];
 
     const mapped: LightningDealItem[] = products.map((item: any) => {
-        const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
-        const price = item.current_price ?? item.price ?? originalPrice;
-        const discountPercent = item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
+        const originalPrice = item.originalPrice ?? item.original_price ?? item.price ?? 0;
+        const price = item.price ?? item.current_price ?? originalPrice;
+        const discountPercent = item.discountPercent ?? item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
 
         const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
             ? item.gallery.map((media: any, idx: number) => ({
-                id: media.id ?? `${item.id} -media - ${idx} `,
+                id: media.id ?? `${item.id}-media-${idx}`,
                 image_url: media.image_url ?? media.url ?? undefined,
                 thumbnail_url: media.thumbnail_url ?? undefined,
                 is_main: media.is_main ?? false,
@@ -83,7 +89,7 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
 
         const mediaItems: MediaItem[] = galleryMedia
             .map((media, idx) => ({
-                id: (media.id ?? `${item.id} -media - ${idx} `).toString(),
+                id: (media.id ?? `${item.id}-media-${idx}`).toString(),
                 type: (media.type as MediaItem['type']) ?? 'image',
                 url: (media.video_url ?? media.image_url ?? '').toString(),
                 thumbnail: media.thumbnail_url ?? undefined,
@@ -96,6 +102,8 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
         return {
             id: item.id,
             title: item.title,
+            description: item.description,
+            metaDescription: item.metaDescription,
             price,
             originalPrice,
             discountPercent,
@@ -108,6 +116,8 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             delivery_time_days: item.delivery_time_days || undefined,
             is_express_delivery: item.is_express_delivery ?? undefined,
             delivery_scope: item.delivery_scope || undefined,
+            delivery_locations: item.delivery_locations || [], // ✅ Added
+            sale_unit: item.sale_unit || undefined, // ✅ Unit of measurement
             vendor_country: item.vendor_country || undefined,
             seller_id: item.vendor_id || item.seller_id || undefined,
             tag: 'OVERALL BEST', // Custom tag for Hero
@@ -121,7 +131,11 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             personalization_score: item.personalization_score || undefined,
             in_stock: item.in_stock ?? (item.stock > 0),
             category_id: item.category_id || item.category_handle || undefined,
-            category_name: item.category_name || undefined
+            category_name: item.category_name || undefined,
+            rating: item.rating || 0,
+            reviews: item.review_count || item.reviews || 0,
+            soldCount: item.sales_count || item.sold_count || 0,
+            stock: item.stock || 0
         };
     });
 
@@ -147,14 +161,15 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
     const payload = Array.isArray(data) ? data[0] : data;
     const products = (payload?.products ?? []).slice(offset);
 
+
     const mapped: LightningDealItem[] = products.map((item: any) => {
-        const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
-        const price = item.current_price ?? item.price ?? originalPrice;
-        const discountPercent = item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
+        const originalPrice = item.originalPrice ?? item.original_price ?? item.price ?? 0;
+        const price = item.price ?? item.current_price ?? originalPrice;
+        const discountPercent = item.discountPercent ?? item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
 
         const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
             ? item.gallery.map((media: any, idx: number) => ({
-                id: media.id ?? `${item.id} -media - ${idx} `,
+                id: media.id ?? `${item.id}-media-${idx}`,
                 image_url: media.image_url ?? media.url ?? undefined,
                 thumbnail_url: media.thumbnail_url ?? undefined,
                 is_main: media.is_main ?? false,
@@ -166,7 +181,7 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
 
         const mediaItems: MediaItem[] = galleryMedia
             .map((media, idx) => ({
-                id: (media.id ?? `${item.id} -media - ${idx} `).toString(),
+                id: (media.id ?? `${item.id}-media-${idx}`).toString(),
                 type: (media.type as MediaItem['type']) ?? 'image',
                 url: (media.video_url ?? media.image_url ?? '').toString(),
                 thumbnail: media.thumbnail_url ?? undefined,
@@ -179,6 +194,8 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
         return {
             id: item.id,
             title: item.title,
+            description: item.description,
+            metaDescription: item.metaDescription,
             price,
             originalPrice,
             discountPercent,
@@ -207,13 +224,17 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
             in_stock: item.in_stock ?? (item.stock > 0),
             category_id: item.category_id || item.category_handle || undefined,
             category_name: item.category_name || undefined,
+            rating: item.rating || 0,
+            reviews: item.review_count || item.reviews || 0,
             has_quantity_discount: item.has_quantity_discount ?? false,
             auto_discount_type: item.auto_discount_type,
             auto_discount_value: item.auto_discount_value,
             auto_discount_buy_qty: item.auto_discount_buy_qty,
             auto_discount_get_qty: item.auto_discount_get_qty,
             auto_discount_min_requirement: item.auto_discount_min_requirement,
-            auto_discount_name: item.auto_discount_name
+            auto_discount_name: item.auto_discount_name,
+            soldCount: item.sales_count || item.sold_count || 0,
+            stock: item.stock || 0
         };
     });
 
@@ -499,7 +520,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
             has_quantity_discount: item.has_quantity_discount ?? false,
             vendor: item.business_name
                 ? {
-                    vendor_id: item.seller_id?.toString?.() || '',
+                    vendor_id: item.vendor_id || '',  // ✅ FIX: Use vendor_id from view (vendors.id), not seller_id (user_id)
                     business_name: item.business_name,
                     vendor_rating: item.seller_rating,
                     review_count: item.review_count,
@@ -714,6 +735,62 @@ export const fetchVendorInfo = async (productIds: string[]): Promise<Map<string,
     return vendorMap;
 };
 
+export interface VendorFullProfile extends VendorInfo {
+    logo_url?: string;
+    banner_url?: string;
+    follower_count?: number;
+}
+
+export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<VendorFullProfile | null> => {
+    try {
+        console.log('Fetching full vendor profile for:', vendorIdOrUserId);
+
+        // 1. Get basic info via existing RPC or similar logic
+        // We'll use get_vendor_card_info which works by product_ids, so we might need a workaround 
+        // if we only have vendor_id.
+        // Actually, let's just query the views/tables directly for a cleaner "Full Profile" fetch.
+
+        const { data: vendor, error } = await supabase
+            .from('vendors')
+            .select(`
+                *,
+                vendor_media (image_url, media_type)
+            `)
+            .or(`id.eq.${vendorIdOrUserId},user_id.eq.${vendorIdOrUserId}`)
+            .single();
+
+        if (error || !vendor) {
+            console.error('Error fetching vendor profile:', error);
+            return null;
+        }
+
+        const logoMedia = (vendor.vendor_media || []).find((m: any) => m.media_type === 'logo');
+        const bannerMedia = (vendor.vendor_media || []).find((m: any) => m.media_type === 'banner');
+
+        // 2. Map to our extended interface
+        return {
+            vendor_id: vendor.id,
+            user_id: vendor.user_id,
+            business_name: vendor.business_name,
+            business_description: vendor.business_description,
+            join_date: vendor.created_at,
+            vendor_rating: vendor.rating || 0,
+            review_count: vendor.review_count || 0,
+            total_products: 0,
+            completed_orders: 0,
+            badges: [],
+            is_verified: vendor.status === 'verified',
+            business_country: vendor.business_country,
+            logo_url: logoMedia?.image_url,
+            banner_url: bannerMedia?.image_url,
+            seller_since: vendor.created_at
+        };
+    } catch (e) {
+        console.error('Unexpected error in fetchVendorFullProfile:', e);
+        return null;
+    }
+};
+
 export const fetchFilteredProducts = async (
     searchQuery: string,
     appliedFilters: AppliedFilters,
@@ -755,7 +832,8 @@ export const fetchFilteredProducts = async (
 
     // Apply vendor filter if provided
     if (vendorId) {
-        query = query.eq('seller_id', vendorId);
+        // Try vendor_id first (vendors.id), fallback to seller_id (user_id) for compatibility
+        query = query.or(`vendor_id.eq.${vendorId},seller_id.eq.${vendorId}`);
     }
 
     // Apply delivery locations filter if provided
@@ -1234,11 +1312,12 @@ export const fetchRecentViews = async (currentProductId?: string): Promise<Recen
 };
 
 export const checkout = async (
-    userId: string,
+    userId: string | null,
     paymentMethod: string,
     shippingDetails: {
         firstName: string;
         lastName: string;
+        email?: string;
         phoneNumber: string;
         addressLine1: string;
         postcode: string;
@@ -1248,7 +1327,7 @@ export const checkout = async (
     },
     options?: { couponCode?: string | null; expressDelivery?: boolean }
 ): Promise<string | null> => {
-    console.log('Processing checkout for user:', userId);
+    console.log('Processing checkout for user:', userId || 'Guest');
 
     const { data, error } = await supabase
         .rpc('final_checkout_from_cart', {
@@ -1256,6 +1335,7 @@ export const checkout = async (
             p_payment_method: paymentMethod,
             p_first_name: shippingDetails.firstName,
             p_last_name: shippingDetails.lastName,
+            p_customer_email: shippingDetails.email || null,
             p_customer_phone: shippingDetails.phoneNumber,
             p_shipping_address_line1: shippingDetails.addressLine1,
             p_shipping_postcode: shippingDetails.postcode,
@@ -1275,7 +1355,13 @@ export const checkout = async (
     return data as string;
 };
 
-export const fetchCartDeliveryFee = async (userId: string, expressDelivery: boolean = false): Promise<number> => {
+export const fetchCartDeliveryFee = async (userId: string | null, expressDelivery: boolean = false): Promise<number> => {
+    // For guests, we might not have a userId to sync cart to db yet.
+    // If userId is null, we return a default or estimated fee.
+    if (!userId) {
+        return expressDelivery ? 15 : 10;
+    }
+
     const { data, error } = await supabase.rpc('calculate_cart_delivery_fee', {
         p_user_id: userId,
         p_express_delivery: expressDelivery
@@ -1290,10 +1376,219 @@ export const fetchCartDeliveryFee = async (userId: string, expressDelivery: bool
 };
 
 /**
- * Synchronizes the local in-memory cart with the database cart_items table.
- * This is required before calling the checkout RPC which processes items from the database.
+ * Fetch tax breakdown based on shipping country
+ * Queries the tax_rates table directly for country-specific rates
  */
-export const syncCart = async (userId: string, cartItems: Product[]): Promise<boolean> => {
+export interface TaxBreakdown {
+    tax_rate: number;
+    tax_name: string;
+    tax_amount: number;
+    taxable_amount: number;
+    country_code: string;
+    tax_percentage: number;
+}
+
+export const fetchTaxBreakdown = async (
+    subtotal: number,
+    deliveryFee: number,
+    countryCode: string
+): Promise<TaxBreakdown | null> => {
+    // Map country names to ISO codes (all countries from tax_rates table)
+    const countryCodeMap: Record<string, string> = {
+        'Algeria': 'DZ',
+        'Angola': 'AO',
+        'Benin': 'BJ',
+        'Botswana': 'BW',
+        'Burkina Faso': 'BF',
+        'Burundi': 'BI',
+        'Cabo Verde': 'CV',
+        'Cameroon': 'CM',
+        'Central African Republic': 'CF',
+        'Chad': 'TD',
+        'Comoros': 'KM',
+        'Congo-Brazzaville': 'CG',
+        'Congo-Kinshasa': 'CD',
+        'Djibouti': 'DJ',
+        'Egypt': 'EG',
+        'Equatorial Guinea': 'GQ',
+        'Eritrea': 'ER',
+        'Eswatini': 'SZ',
+        'Ethiopia': 'ET',
+        'Gabon': 'GA',
+        'Gambia': 'GM',
+        'Ghana': 'GH',
+        'Guinea': 'GN',
+        'Guinea-Bissau': 'GW',
+        'Ivory Coast': 'CI',
+        'Kenya': 'KE',
+        'Lesotho': 'LS',
+        'Liberia': 'LR',
+        'Libya': 'LY',
+        'Madagascar': 'MG',
+        'Malawi': 'MW',
+        'Mali': 'ML',
+        'Mauritania': 'MR',
+        'Mauritius': 'MU',
+        'Morocco': 'MA',
+        'Mozambique': 'MZ',
+        'Namibia': 'NA',
+        'Niger': 'NE',
+        'Nigeria': 'NG',
+        'Rwanda': 'RW',
+        'Sao Tome and Principe': 'ST',
+        'Senegal': 'SN',
+        'Seychelles': 'SC',
+        'Sierra Leone': 'SL',
+        'Somalia': 'SO',
+        'South Africa': 'ZA',
+        'South Sudan': 'SS',
+        'Sudan': 'SD',
+        'Tanzania': 'TZ',
+        'Togo': 'TG',
+        'Tunisia': 'TN',
+        'Uganda': 'UG',
+        'Zambia': 'ZM',
+        'Zimbabwe': 'ZW',
+        'United Kingdom': 'GB',
+        'United States': 'US',
+    };
+
+    const isoCode = countryCodeMap[countryCode] || countryCode.toUpperCase().substring(0, 2);
+
+    // Query tax_rates table directly
+    const { data: taxRate, error } = await supabase
+        .from('tax_rates')
+        .select('tax_rate, tax_name, country_code')
+        .eq('country_code', isoCode)
+        .eq('is_active', true)
+        .maybeSingle();
+
+    let rate = 0;
+    let name = 'VAT';
+    let code = isoCode;
+
+    if (error || !taxRate) {
+        // Try default rate
+        const { data: defaultRate } = await supabase
+            .from('tax_rates')
+            .select('tax_rate, tax_name')
+            .eq('country_code', 'DEFAULT')
+            .maybeSingle();
+
+        if (defaultRate) {
+            rate = Number(defaultRate.tax_rate) || 0;
+            name = defaultRate.tax_name || 'Tax';
+        } else {
+            // Fallback to 16% VAT if no rates exist
+            rate = 0.16;
+            name = 'VAT';
+        }
+    } else {
+        rate = Number(taxRate.tax_rate) || 0;
+        name = taxRate.tax_name || 'VAT';
+        code = taxRate.country_code;
+    }
+
+    const taxableAmount = subtotal + deliveryFee;
+    const taxAmount = Math.round(taxableAmount * rate * 100) / 100;
+
+    return {
+        tax_rate: rate,
+        tax_name: name,
+        tax_amount: taxAmount,
+        taxable_amount: taxableAmount,
+        country_code: code,
+        tax_percentage: Math.round(rate * 100)
+    };
+};
+
+/**
+ * Fetch order details for confirmation page
+ */
+export interface OrderDetails {
+    id: string;
+    order_number: string;
+    total: number;
+    status: string;
+    customer_email?: string;
+    shipping_address: string;
+    shipping_town_city?: string;
+    created_at: string;
+    items: {
+        title: string;
+        quantity: number;
+        price: number;
+        image: string;
+    }[];
+}
+
+export const fetchOrderDetails = async (orderId: string): Promise<OrderDetails | null> => {
+    const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select(`
+            id,
+            order_number,
+            total,
+            status,
+            shipping_address,
+            shipping_town_city,
+            created_at,
+            order_items (
+                quantity,
+                unit_price,
+                products!order_items_product_id_fkey (
+                    title,
+                    media!media_product_fk (
+                        image_url,
+                        is_main
+                    )
+                )
+            )
+        `)
+        .eq('id', orderId)
+        .single();
+
+    if (orderError || !order) {
+        console.error('Error fetching order details:', orderError);
+        return null;
+    }
+
+    const items = ((order as any).order_items || []).map((item: any) => {
+        const product = item.products;
+        // Get the first image from media array, or empty string if none
+        const mediaItems = product?.media || [];
+        const mainImage = mediaItems.find((m: any) => m.is_main) || mediaItems[0];
+
+        return {
+            title: product?.title || 'Product',
+            quantity: item.quantity || 1,
+            price: item.unit_price || 0,
+            image: mainImage?.image_url || ''
+        };
+    });
+
+    return {
+        id: order.id,
+        order_number: order.order_number || orderId,
+        total: order.total || 0,
+        status: order.status || 'pending',
+        shipping_address: order.shipping_address || '',
+        shipping_town_city: order.shipping_town_city || '',
+        created_at: order.created_at || new Date().toISOString(),
+        items
+    };
+};
+
+/**
+ * Synchronizes the local in-memory cart with the database cart_items table.
+ * For guests, an anonymous UUID should be provided as userId.
+ */
+export const syncCart = async (userId: string | null, cartItems: Product[]): Promise<boolean> => {
+    if (!userId) {
+        console.log('Skipping cart sync for unassigned guest session');
+        return true;
+    }
+
     try {
         console.log('Syncing cart for user:', userId, 'Items level:', cartItems.length);
 
@@ -1329,16 +1624,58 @@ export const syncCart = async (userId: string, cartItems: Product[]): Promise<bo
             .insert(cartRows);
 
         if (insertError) {
-            console.error('Error inserting cart items during sync:', insertError);
+            console.error('Error inserting cart items:', insertError);
             return false;
         }
 
-        console.log('Cart sync successful');
         return true;
     } catch (err) {
         console.error('Unexpected error in syncCart:', err);
         return false;
     }
+};
+
+export interface UserAddress {
+    id: string;
+    user_id: string;
+    address_name?: string;
+    first_name: string;
+    last_name: string;
+    phone_number: string;
+    address_line1: string;
+    postcode: string;
+    town_city: string;
+    county: string;
+    country: string;
+    is_default: boolean;
+}
+
+export const fetchUserAddresses = async (userId: string): Promise<UserAddress[]> => {
+    const { data, error } = await supabase
+        .from('user_addresses')
+        .select('*')
+        .eq('user_id', userId)
+        .order('is_default', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching user addresses:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const saveUserAddress = async (userId: string, address: Omit<UserAddress, 'id' | 'user_id'>): Promise<UserAddress | null> => {
+    const { data, error } = await supabase
+        .from('user_addresses')
+        .insert([{ ...address, user_id: userId }])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error saving user address:', error);
+        return null;
+    }
+    return data;
 };
 
 
@@ -1978,20 +2315,26 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
         .from('orders')
         .select(`
             id,
+            order_number,
             created_at,
             status,
-            total_amount,
-            currency,
-            tracking_code,
+            total:total_price,
+            tax_amount,
+            tax_rate,
+            delivery_fee,
+            tracking_number,
             shipping_method,
-            items:order_items (
+            items:order_items!order_items_order_id_fkey (
                 id,
-                product_id,
-                product_title,
-                variant_sku,
+                price,
                 quantity,
-                unit_price,
-                image_url
+                product:products!order_items_product_id_fkey (
+                    title,
+                    currency,
+                    media:media!media_product_fk (
+                        image_url
+                    )
+                )
             )
         `)
         .eq('user_id', userId)
@@ -2002,24 +2345,39 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
         return [];
     }
 
-    return (data || []).map((row: any) => ({
-        id: row.id,
-        created_at: row.created_at,
-        status: row.status,
-        total_amount: row.total_amount ?? 0,
-        currency: row.currency || 'USD',
-        tracking_code: row.tracking_code,
-        shipping_method: row.shipping_method,
-        items: (row.items || []).map((item: any) => ({
+    console.log('Raw orders data:', data);
+    console.log('First order items:', data?.[0]?.items);
+
+    // Flatten nested structure to match BuyerOrder interface
+    return (data || []).map((order: any) => {
+        const items = (order.items || []).map((item: any) => ({
             id: item.id,
-            product_id: item.product_id,
-            product_title: item.product_title || 'Item',
-            variant_sku: item.variant_sku,
+            product_id: null,
+            product_title: item.product?.title || 'Item',
+            variant_sku: null,
             quantity: item.quantity ?? 1,
-            unit_price: item.unit_price ?? 0,
-            image_url: item.image_url
-        }))
-    })) as BuyerOrder[];
+            unit_price: item.price ?? 0,
+            image_url: item.product?.media?.[0]?.image_url || null
+        }));
+
+        const itemsSubtotal = items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+        const totalFromItems = itemsSubtotal + (order.tax_amount || 0) + (order.delivery_fee || 0);
+
+        // Use DB total if > 0, otherwise calculate from items + tax + delivery
+        const finalTotal = (order.total && order.total > 0) ? order.total : totalFromItems;
+
+        return {
+            id: order.id,
+            order_number: order.order_number,
+            created_at: order.created_at,
+            status: order.status,
+            total_amount: finalTotal,
+            currency: order.items?.[0]?.product?.currency || 'USD',
+            tracking_code: order.tracking_number || null,
+            shipping_method: order.shipping_method,
+            items
+        };
+    }) as BuyerOrder[];
 };
 
 const deriveUserCouponStatus = (coupon?: PromoCoupon, usedAt?: string): UserCoupon['status'] => {
@@ -2767,10 +3125,14 @@ export const fetchUserReviews = async (userId: string): Promise<Review[]> => {
             quality_rating,
             created_at,
             updated_at,
-            user_name,
-            user_avatar,
-            product_title,
-            product_image
+            users:user_id (
+                name,
+                avatar_url
+            ),
+            products:product_id (
+                title,
+                featured_image_url
+            )
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -2780,13 +3142,22 @@ export const fetchUserReviews = async (userId: string): Promise<Review[]> => {
         return [];
     }
 
-    return (data || []) as Review[];
+    // Map the joined data to the expected Review format
+    const reviews = (data || []).map((review: any) => ({
+        ...review,
+        user_name: review.users?.name || 'Anonymous',
+        user_avatar: review.users?.avatar_url || null,
+        product_title: review.products?.title || 'Product',
+        product_image: review.products?.featured_image_url || null
+    }));
+
+    return reviews as Review[];
 };
 
 // Followed Stores API Functions
 import { FollowedStore } from '@/types';
 
-interface FollowToggleResponse {
+export interface FollowToggleResponse {
     success: boolean;
     vendor: any;
     was_following: boolean;
@@ -2795,13 +3166,13 @@ interface FollowToggleResponse {
     action: 'followed' | 'unfollowed';
 }
 
-interface FollowStatusResponse {
+export interface FollowStatusResponse {
     is_following: boolean;
     follower_count: number;
     followed_at: string | null;
 }
 
-interface PaginatedFollowedStores {
+export interface PaginatedFollowedStores {
     success: boolean;
     data: FollowedStore[];
     pagination: {
@@ -4622,7 +4993,8 @@ export const fetchPromotionalCampaigns = async (sellerId: string) => {
 
 // Order actions
 export const fulfillOrder = async (orderId: string, trackingNumber?: string) => {
-    const { error } = await supabase
+    // 1. Update order status
+    const { error: updateError } = await supabase
         .from('orders')
         .update({
             status: 'shipped',
@@ -4630,21 +5002,128 @@ export const fulfillOrder = async (orderId: string, trackingNumber?: string) => 
         })
         .eq('id', orderId);
 
-    return !error;
+    if (updateError) {
+        console.error('Error updating order for fulfillment:', updateError);
+        return false;
+    }
+
+    // 2. Add tracking event
+    await supabase.from('order_tracking_events').insert({
+        order_id: orderId,
+        event_type: 'shipped',
+        event_description: `Order fulfilled and shipped${trackingNumber ? ` (Tracking: ${trackingNumber})` : ''}`
+    });
+
+    return true;
 };
 
 export const fetchSellerOrders = async (sellerId: string) => {
-    const { data, error } = await supabase
-        .from('orders')
-        .select(`
-            *,
-            items:order_items(*)
-        `)
-        .eq('seller_id', sellerId)
-        .order('created_at', { ascending: false });
+    // Seller orders are linked via products.seller_id (auth.uid) → order_items.product_id
+    // First, get the seller's product IDs
+    const { data: sellerProducts, error: productsError } = await supabase
+        .from('products')
+        .select('id')
+        .eq('seller_id', sellerId);
 
-    if (error) return [];
-    return data || [];
+    if (productsError || !sellerProducts?.length) {
+        console.error('Error fetching seller products:', productsError);
+        return [];
+    }
+
+    const productIds = sellerProducts.map(p => p.id);
+    console.log('Seller product IDs:', productIds.length);
+
+    // Now get order_items for these products
+    const { data: orderItems, error: itemsError } = await supabase
+        .from('order_items')
+        .select(`
+            id,
+            order_id,
+            product_id,
+            quantity,
+            price,
+            product:products!order_items_product_id_fkey (
+                title,
+                currency,
+                media:media!media_product_fk (
+                    image_url
+                )
+            ),
+            variant:product_variants (sku),
+            order:orders!order_items_order_id_fkey (
+                id,
+                order_number,
+                created_at,
+                total:total_price,
+                status,
+                customer_email,
+                first_name,
+                last_name,
+                tax_amount,
+                tax_rate,
+                delivery_fee,
+                shipping_address
+            )
+        `)
+        .in('product_id', productIds)
+        .order('created_at', { ascending: false, foreignTable: 'orders' });
+
+    if (itemsError) {
+        console.error('Error fetching seller order items:', itemsError);
+        return [];
+    }
+
+    console.log('Order items found for seller:', orderItems?.length || 0);
+
+    // Group items by order
+    const ordersMap = new Map<string, any>();
+    (orderItems || []).forEach((item: any) => {
+        if (!item.order) return;
+
+        const orderId = item.order.id;
+        if (!ordersMap.has(orderId)) {
+            const firstName = item.order.first_name || '';
+            const lastName = item.order.last_name || '';
+            const fullName = `${firstName} ${lastName}`.trim() || item.order.customer_email || 'Customer';
+
+            ordersMap.set(orderId, {
+                id: item.order.id,
+                order_number: item.order.order_number,
+                created_at: item.order.created_at,
+                total_amount: item.order.total || 0,
+                status: item.order.status,
+                customer_name: fullName,
+                customer_email: item.order.customer_email || null,
+                shipping_address: item.order.shipping_address || null,
+                tax_amount: item.order.tax_amount || 0,
+                tax_rate: item.order.tax_rate || 0,
+                delivery_fee: item.order.delivery_fee || 0,
+                items: []
+            });
+        }
+
+        ordersMap.get(orderId).items.push({
+            product_title: item.product?.title || 'Unknown Product',
+            variant_sku: item.variant?.sku || null,
+            quantity: item.quantity,
+            price: item.price,
+            image_url: item.product?.media?.[0]?.image_url || null,
+            currency: item.product?.currency || 'USD'
+        });
+    });
+
+    // Finalize totals and convert map to array
+    return Array.from(ordersMap.values()).map(order => {
+        // Calculate subtotal from items
+        const subtotal = order.items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+
+        // If total_amount is 0 or less, calculate it from subtotal + tax + delivery
+        if (order.total_amount <= 0) {
+            order.total_amount = subtotal + order.tax_amount + order.delivery_fee;
+        }
+
+        return order;
+    });
 };
 
 // ==========================================
@@ -4832,7 +5311,7 @@ export const fetchOrderTrackingEvents = async (orderId: string): Promise<OrderTr
         .from('order_tracking_events')
         .select('*')
         .eq('order_id', orderId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true }); // Ascending for timeline
 
     if (error) {
         console.error('Error fetching order tracking events:', error);
@@ -4993,8 +5472,21 @@ export const fetchActiveDeliveryJobs = async (partnerId: string): Promise<Delive
     return data || [];
 };
 
+
 export const markOrderDelivered = async (orderId: string, location?: { lat: number; lng: number }): Promise<boolean> => {
-    const { error } = await supabase
+    // 1. Update master order status
+    const { error: orderError } = await supabase
+        .from('orders')
+        .update({ status: 'delivered' })
+        .eq('id', orderId);
+
+    if (orderError) {
+        console.error('Error updating master order status to delivered:', orderError);
+        return false;
+    }
+
+    // 2. Insert tracking event
+    const { error: eventError } = await supabase
         .from('order_tracking_events')
         .insert({
             order_id: orderId,
@@ -5004,8 +5496,10 @@ export const markOrderDelivered = async (orderId: string, location?: { lat: numb
             created_at: new Date().toISOString()
         });
 
-    if (error) {
-        console.error('Error marking order as delivered:', error);
+    if (eventError) {
+        console.error('Error marking order as delivered in tracking:', eventError);
+        // We still return true if the master status was updated? 
+        // No, let's keep them consistent.
         return false;
     }
     return true;
@@ -5077,4 +5571,275 @@ export const approvePayoutRequest = async (requestId: string, adminNotes?: strin
         return false;
     }
     return true;
+};
+
+// ==================== WISHLIST FUNCTIONS ====================
+
+export interface WishlistItem {
+    product_id: string;
+    added_at: string;
+}
+
+export interface WishlistProduct extends Product {
+    added_at: string;
+}
+
+/**
+ * Add a product to the user's wishlist
+ */
+export const addToWishlist = async (userId: string, productId: string): Promise<boolean> => {
+    // First get current wishlist
+    const { data: current, error: fetchError } = await supabase
+        .from('user_cart')
+        .select('wishlist')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    const currentWishlist: WishlistItem[] = current?.wishlist || [];
+
+    // Check if already in wishlist
+    if (currentWishlist.some(item => item.product_id === productId)) {
+        return true; // Already exists
+    }
+
+    const updatedWishlist = [...currentWishlist, {
+        product_id: productId,
+        added_at: new Date().toISOString()
+    }];
+
+    const { error } = await supabase
+        .from('user_cart')
+        .upsert({
+            user_id: userId,
+            wishlist: updatedWishlist,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+    if (error) {
+        console.error('Error adding to wishlist:', error);
+        return false;
+    }
+    return true;
+};
+
+/**
+ * Remove a product from the user's wishlist
+ */
+export const removeFromWishlist = async (userId: string, productId: string): Promise<boolean> => {
+    const { data: current, error: fetchError } = await supabase
+        .from('user_cart')
+        .select('wishlist')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (fetchError || !current) {
+        return false;
+    }
+
+    const currentWishlist: WishlistItem[] = current.wishlist || [];
+    const updatedWishlist = currentWishlist.filter(item => item.product_id !== productId);
+
+    const { error } = await supabase
+        .from('user_cart')
+        .update({
+            wishlist: updatedWishlist,
+            updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error removing from wishlist:', error);
+        return false;
+    }
+    return true;
+};
+
+/**
+ * Check if a product is in the user's wishlist
+ */
+export const isInWishlist = async (userId: string, productId: string): Promise<boolean> => {
+    const { data, error } = await supabase
+        .from('user_cart')
+        .select('wishlist')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (error || !data) return false;
+
+    const wishlist: WishlistItem[] = data.wishlist || [];
+    return wishlist.some(item => item.product_id === productId);
+};
+
+/**
+ * Get user's wishlist with full product details
+ */
+export const getWishlist = async (userId: string): Promise<WishlistProduct[]> => {
+    const { data: cartData, error: cartError } = await supabase
+        .from('user_cart')
+        .select('wishlist')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (cartError || !cartData?.wishlist || cartData.wishlist.length === 0) {
+        return [];
+    }
+
+    const wishlist: WishlistItem[] = cartData.wishlist;
+    const productIds = wishlist.map(item => item.product_id);
+
+    // Fetch product details - join with product_variants for price/stock, product_review_summary for ratings, and vendors for location
+    const { data: products, error: productsError } = await supabase
+        .from('products')
+        .select(`
+            id, title, description, min_price, max_price, currency,
+            seller_id, status, category_id, brand,
+            is_featured, is_choice, is_express_delivery, delivery_time_days,
+            delivery_scope, delivery_locations, sale_unit,
+            sales_count, lower_than_similar,
+            media!media_product_fk (
+                id, image_url, is_main, media_type, video_url, thumbnail_url
+            ),
+            product_variants!product_variants_product_id_fkey (
+                id, price, stock, sku, is_default, compare_at_price
+            ),
+            product_review_summary (
+                average_rating, total_reviews
+            ),
+            vendors!inner(user_id) (
+                id, business_name, address_country, vendor_rating, logo_url
+            )
+        `)
+        .in('id', productIds);
+
+    if (productsError || !products) {
+        console.error('Error fetching wishlist products:', productsError);
+        return [];
+    }
+
+    // Map products with wishlist added_at date
+    return products.map((product: any) => {
+        const wishlistItem = wishlist.find(w => w.product_id === product.id);
+        const rawMedia = product.media || [];
+
+        // Map media to standard format
+        const media: MediaItem[] = rawMedia.map((m: any) => ({
+            id: m.id.toString(),
+            type: (m.media_type === 'video' || m.media_type === 'youtube' ? m.media_type : 'image') as any,
+            url: m.image_url || m.video_url || '',
+            thumbnail: m.thumbnail_url || undefined,
+            isMain: m.is_main
+        })).filter((m: any) => m.url);
+
+        const mainImage = media.find(m => m.isMain)?.url || media[0]?.url || '';
+
+        // Get default variant or first variant for price/stock
+        const variants = product.product_variants || [];
+        const defaultVariant = variants.find((v: any) => v.is_default) || variants[0];
+
+        const price = defaultVariant?.price || product.min_price || 0;
+        const originalPrice = product.max_price && product.max_price > price ? product.max_price : price;
+
+        // Get review summary
+        const reviewSummary = product.product_review_summary?.[0] || product.product_review_summary || {};
+
+        // Get vendor info
+        const vendorData = product.vendors?.[0] || product.vendors || null;
+        const vendor = vendorData ? {
+            vendor_id: vendorData.id || product.seller_id,
+            business_name: vendorData.business_name || '',
+            business_country: vendorData.address_country || undefined,
+            vendor_rating: vendorData.vendor_rating || undefined,
+        } : undefined;
+
+        const discountPercent = defaultVariant?.compare_at_price && defaultVariant.compare_at_price > price
+            ? Math.round(((defaultVariant.compare_at_price - price) / defaultVariant.compare_at_price) * 100)
+            : 0;
+
+        return {
+            ...product,
+            price,
+            originalPrice,
+            stock: defaultVariant?.stock || 0,
+            sku: defaultVariant?.sku || null,
+            rating: reviewSummary?.average_rating || 0,
+            reviews: reviewSummary?.total_reviews || 0,
+            soldCount: product.sales_count || 0,
+            discountPercent,
+            image: mainImage,
+            media,
+            isExpressDelivery: !!product.is_express_delivery,
+            is_express_delivery: !!product.is_express_delivery,
+            deliveryTimeDays: product.delivery_time_days || undefined,
+            delivery_time_days: product.delivery_time_days || undefined,
+            deliveryScope: product.delivery_scope || undefined,
+            delivery_scope: product.delivery_scope || undefined,
+            delivery_locations: product.delivery_locations || [],
+            sale_unit: product.sale_unit || undefined,
+            vendor,
+            added_at: wishlistItem?.added_at || new Date().toISOString()
+        } as WishlistProduct;
+    });
+};
+
+/**
+ * Toggle wishlist status (add if not present, remove if present)
+ */
+export const toggleWishlist = async (userId: string, productId: string): Promise<{ inWishlist: boolean; success: boolean }> => {
+    const isIn = await isInWishlist(userId, productId);
+
+    if (isIn) {
+        const success = await removeFromWishlist(userId, productId);
+        return { inWishlist: false, success };
+    } else {
+        const success = await addToWishlist(userId, productId);
+        return { inWishlist: true, success };
+    }
+};
+
+/**
+ * Fetch buyer notification preferences
+ */
+export const fetchBuyerNotificationPreferences = async (userId: string): Promise<BuyerNotificationPreferences | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('buyer_notification_preferences')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+            console.error('Error fetching buyer notification preferences:', error);
+            return null;
+        }
+
+        return data as BuyerNotificationPreferences;
+    } catch (error) {
+        console.error('Unexpected error fetching buyer notification preferences:', error);
+        return null;
+    }
+};
+
+/**
+ * Update buyer notification preferences (upsert)
+ */
+export const updateBuyerNotificationPreferences = async (userId: string, prefs: Partial<BuyerNotificationPreferences>): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('buyer_notification_preferences')
+            .upsert({
+                user_id: userId,
+                ...prefs,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+
+        if (error) {
+            console.error('Error updating buyer notification preferences:', error);
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Unexpected error updating buyer notification preferences:', error);
+        return false;
+    }
 };

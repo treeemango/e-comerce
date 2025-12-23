@@ -110,7 +110,8 @@ export function getCurrencySymbol(currencyCode: string = 'USD'): string {
  */
 export function formatPrice(amount: number, currencyCode: string = 'USD'): string {
     const symbol = getCurrencySymbol(currencyCode);
-    return `${symbol}${amount.toFixed(2)}`;
+    const validAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
+    return `${symbol}${validAmount.toFixed(2)}`;
 }
 
 /**
@@ -122,6 +123,7 @@ export function formatPriceParts(amount: number, currencyCode: string = 'USD'): 
     decimal: string;
 } {
     const symbol = getCurrencySymbol(currencyCode);
-    const [integer, decimal] = amount.toFixed(2).split('.');
+    const validAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
+    const [integer, decimal] = validAmount.toFixed(2).split('.');
     return { symbol, integer, decimal };
 }

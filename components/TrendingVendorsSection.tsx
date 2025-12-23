@@ -145,9 +145,9 @@ const TrendingVendorsSection: React.FC<TrendingVendorsSectionProps> = ({
                                 {/* Stats */}
                                 <div className="vendor-stats">
                                     <div className="stat-item">
-                                        <span className="material-icons">star</span>
-                                        <span className="stat-value">{vendor.rating.toFixed(1)}</span>
-                                        <span className="stat-label">({vendor.review_count})</span>
+                                        <span className="material-icons text-slate-900 dark:text-slate-100 !text-sm">star</span>
+                                        <span className="stat-value font-bold text-slate-900 dark:text-white">{vendor.rating.toFixed(1)}</span>
+                                        <span className="stat-label text-slate-500">({vendor.review_count})</span>
                                     </div>
                                     <div className="stat-item">
                                         <span className="material-icons">inventory_2</span>

@@ -89,23 +89,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
         : undefined
     : undefined;
 
-  const renderStars = (rating: number) => {
-    const stars = [];
-    const fullStars = Math.floor(rating);
-    const hasHalf = rating % 1 !== 0;
-
-    for (let i = 0; i < fullStars; i++) {
-      stars.push(<span key={`star-${i}`} className="material-icons text-yellow-400 !text-sm">star</span>);
-    }
-    if (hasHalf) {
-      stars.push(<span key="star-half" className="material-icons text-yellow-400 !text-sm">star_half</span>);
-    }
-    const remaining = 5 - Math.ceil(rating);
-    for (let i = 0; i < remaining; i++) {
-      stars.push(<span key={`star-empty-${i}`} className="material-icons text-slate-300 dark:text-slate-600 !text-sm">star</span>);
-    }
-    return stars;
-  };
 
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
@@ -373,23 +356,19 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
               </span>
             </div>
           ) : hasProductRating ? (
-            <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 mb-2">
-              <div className="flex mr-1">
-                {renderStars(product.rating)}
-              </div>
+            <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+              <span className="material-icons !text-[12px] text-slate-900 dark:text-slate-100">star</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{product.rating?.toFixed(1)}</span>
               <span>({product.reviews})</span>
             </div>
           ) : null}
 
           {product.vendor && hasVendorRating && (
             <div className="mb-2 flex items-center justify-end gap-2">
-              <span className="flex items-center gap-0.5">
-                <div className="flex">
-                  {renderStars(product.vendor.vendor_rating)}
-                </div>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                  ({product.vendor.review_count})
-                </span>
+              <span className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <span className="material-icons !text-[12px] text-slate-900 dark:text-slate-100">star</span>
+                <span className="font-bold text-slate-700 dark:text-slate-200">{product.vendor.vendor_rating?.toFixed(1)}</span>
+                <span>({product.vendor.review_count})</span>
               </span>
             </div>
           )}

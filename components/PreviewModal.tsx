@@ -277,7 +277,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose }) => {
 
               <div className="flex items-center gap-3 mt-2 text-sm text-gray-500 dark:text-gray-400">
                 <div className="flex items-center gap-1">
-                  <span className="material-icons text-yellow-400 text-base">star</span>
+                  <span className="material-icons text-slate-900 dark:text-slate-100 text-base">star</span>
                   <span className="font-medium text-gray-900 dark:text-gray-100">{ratingValue.toFixed(1)}</span>
                 </div>
                 <span className="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>

@@ -3,11 +3,12 @@ import { Product } from '@/types';
 
 interface ProductCardProps {
     product: Product;
-    onClick?: () => void;
-    onAddToCart?: (product: Product) => void;
+    onProductClick?: (product: Product) => void;
+    onVisualSearch?: (product: Product) => void;
+    onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAddToCart }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, onVisualSearch, onAddToCart }) => {
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isPressed, setIsPressed] = useState(false);
 
@@ -112,7 +113,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
     return (
         <div
             className="bg-surface-light dark:bg-surface-dark rounded-md overflow-hidden relative group shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-all cursor-pointer active:scale-95"
-            onClick={onClick}
+            onClick={() => onProductClick?.(product)}
             onTouchStart={handlePressStart}
             onTouchEnd={handlePressEnd}
             onMouseDown={handlePressStart}
@@ -128,6 +129,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
                 />
+
+                {/* Visual Search Button - Bottom Left */}
+                <div className="absolute bottom-3 left-3 z-10">
+                    <div
+                        className="w-8 h-8 rounded-full bg-[#fff] flex items-center justify-center cursor-pointer shadow-[0_2px_6px_2px_rgba(0,0,0,0.12)] active:scale-95 transition-transform"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onVisualSearch?.(product);
+                        }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            {/* Four Corner Brackets */}
+                            <path d="M7 3H5c-1.1 0-2 .9-2 2v2" />
+                            <path d="M17 3h2c1.1 0 2 .9 2 2v2" />
+                            <path d="M21 17v2c0 1.1-.9 2-2 2h-2" />
+                            <path d="M3 17v2c0 1.1.9 2 2 2h2" />
+                            {/* Central Lens */}
+                            <circle cx="12" cy="12" r="3.2" />
+                            <path d="M14.5 14.5L15.5 15.5" />
+                        </svg>
+                    </div>
+                </div>
 
                 {/* Top Left Badges - Show only on press/hover */}
                 <div className={`absolute top-2 left-2 flex flex-col gap-1 transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
@@ -194,17 +217,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
                     </div>
                 )}
 
-                {/* Bottom Left - Brand/Seller - Show only on press/hover */}
-                {product.brand_name && (
-                    <div className={`absolute bottom-2 left-2 transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
-                        <span className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium">
+                {/* Bottom Left - Brand/Seller - REMOVED from here to avoid collision with Visual Search */}
+
+                {/* Bottom Right - Brand, Delivery & Stock - Show only on press/hover */}
+                <div className={`absolute bottom-2 right-2 flex flex-col gap-1 items-end transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+                    {/* Brand Name */}
+                    {product.brand_name && (
+                        <span className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium mb-1">
                             {product.brand_name}
                         </span>
-                    </div>
-                )}
+                    )}
 
-                {/* Bottom Right - Delivery & Stock - Show only on press/hover */}
-                <div className={`absolute bottom-2 right-2 flex flex-col gap-1 items-end transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
                     {/* Free Delivery */}
                     {product.free_delivery && (
                         <div className="bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
@@ -240,49 +263,57 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
             {/* Content */}
             <div className="p-3 relative">
                 {/* Title */}
-                <div className="text-sm text-text-primary-light dark:text-text-primary-dark line-clamp-2 leading-tight mb-2 font-medium">
+                <div className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 leading-tight mb-2 font-normal">
                     {product.title}
                 </div>
 
                 {/* Rating & Reviews */}
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1">
-                        <div className="flex">
-                            {[...Array(5)].map((_, i) => (
-                                <span key={i} className={`material-icons-round text-xs ${i < Math.floor(product.rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`}>star</span>
-                            ))}
+                {((product.rating ?? 0) > 0 && (product.reviews ?? 0) > 0) && (
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1 text-[11px]">
+                            <span className="material-icons !text-[12px] text-gray-900 dark:text-gray-100">star</span>
+                            <span className="font-bold text-text-primary-light dark:text-text-primary-dark">{product.rating?.toFixed(1)}</span>
+                            <span className="text-gray-500 font-medium">({product.reviews || 0})</span>
                         </div>
-                        <span className="text-xs text-gray-500 font-medium">
-                            {product.reviews || 0}
-                        </span>
-                    </div>
 
-                    {/* Seller Rating Badge */}
-                    {product.seller_rating && (
-                        <div className="flex items-center gap-1 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded-full">
-                            <span className="material-icons-round text-green-600 text-xs">verified</span>
-                            <span className="text-xs text-green-700 dark:text-green-400 font-medium">
-                                {product.seller_rating.toFixed(1)}
-                            </span>
+                        {/* Seller Badges Line */}
+                        <div className="flex items-center gap-2">
+                            {/* Years Badge */}
+                            <div className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-[10px] font-bold text-gray-600 dark:text-gray-400">
+                                {product.seller_since ? `${new Date().getFullYear() - new Date(product.seller_since).getFullYear()}YRS` : '1YR'}
+                            </div>
+
+                            {/* Seller Rating Badge */}
+                            {product.seller_rating && (
+                                <div className="flex items-center gap-1 bg-[#127FFF]/10 dark:bg-[#127FFF]/20 px-1.5 py-0.5 rounded-full">
+                                    <span className="material-icons-round text-[#127FFF] text-xs">verified</span>
+                                    <span className="text-xs text-[#127FFF] font-bold">
+                                        Verified
+                                    </span>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 {/* Delivery Info */}
-                {(product.free_delivery || product.delivery_time_estimate) && (
-                    <div className="flex items-center gap-1 mb-2">
-                        {product.free_delivery && (
-                            <span className="text-xs text-green-600 font-semibold">🚚 FREE delivery</span>
-                        )}
-                        {product.delivery_time_estimate && (
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
-                                • {product.delivery_time_estimate}
+                {(product.free_delivery || product.delivery_time_estimate || product.deliveryScope || (product.delivery_locations && product.delivery_locations.length > 0)) && (
+                    <div className="flex flex-wrap items-center gap-2 text-[10.5px] mb-2">
+                        {(product.free_delivery || product.delivery_time_estimate) && (
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-slate-100 via-white to-slate-100 px-2.75 py-1 font-semibold text-slate-800 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm dark:from-slate-800/60 dark:via-slate-900/60 dark:to-slate-800/60 dark:text-slate-100 dark:ring-slate-700/70">
+                                <span className="material-icons !text-[13px] leading-none text-slate-500 dark:text-slate-300">
+                                    {product.is_express_delivery ? 'bolt' : 'local_shipping'}
+                                </span>
+                                <span className="leading-none">
+                                    {product.free_delivery ? 'Free Delivery' : `Delivery ${product.delivery_time_estimate}`}
+                                </span>
                             </span>
                         )}
+
                         {(product.deliveryScope || (product.delivery_locations && product.delivery_locations.length > 0)) && (
-                            <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 flex items-center gap-0.5">
-                                <span className="material-icons-round text-[10px]">public</span>
-                                <span className="max-w-[80px] truncate">
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
+                                <span className="material-icons !text-[13px] leading-none">travel_explore</span>
+                                <span className="leading-none">
                                     {product.delivery_locations && product.delivery_locations.length > 0
                                         ? product.delivery_locations.join(', ')
                                         : product.deliveryScope === 'nationwide' ? 'Nationwide' : 'Local'}
@@ -294,9 +325,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
 
 
                 {/* Price Section */}
-                <div className="mb-2 pr-10">
+                <div className="mb-2 pr-10 relative">
                     <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-lg font-bold text-gray-900 dark:text-white">
+                        <span className="text-lg font-black text-gray-900 dark:text-white">
                             {formatPrice(product.price || 0, product.currency)}
                         </span>
                         {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400">/{product.sale_unit}</span>}
@@ -306,42 +337,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
                             </span>
                         )}
                     </div>
+                    {onAddToCart && (
+                        <button
+                            className="absolute -right-2 top-0 h-10 w-10 flex items-center justify-center rounded-full bg-red-600 text-white shadow-lg active:scale-90 transition-transform z-10"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onAddToCart(product);
+                            }}
+                        >
+                            <span className="material-icons text-xl">add_shopping_cart</span>
+                        </button>
+                    )}
+                    {/* Stock & MOQ Info */}
+                    <div className="flex flex-col gap-1 text-[11px] text-slate-500 mt-1">
+                        {product.stock ? (
+                            <span>{product.stock} {product.sale_unit || 'pieces'} (MOQ)</span>
+                        ) : (
+                            <span>1 piece (MOQ)</span>
+                        )}
+                    </div>
 
                     {/* Savings */}
                     {savings > 0 && (
-                        <div className="text-sm text-green-600 font-semibold mb-1">
+                        <div className="text-[11px] text-green-600 font-bold mt-1">
                             Save {formatPrice(savings, product.currency)}
                         </div>
                     )}
-
-                    {/* Stock Status */}
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
-                        {isLowStock ? (
-                            <span className="text-orange-600 font-medium">Only {product.stock} left in stock!</span>
-                        ) : product.in_stock === false ? (
-                            <span className="text-red-600 font-medium">Out of stock</span>
-                        ) : product.stock ? (
-                            <span>{product.stock} in stock</span>
-                        ) : (
-                            <span>In stock</span>
-                        )}
-                    </div>
                 </div>
 
-                {/* Modern Cart Button - Bottom Right - Small Circular Icon */}
-                {onAddToCart && (
-                    <button
-                        className="absolute bottom-2.5 right-2 w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 flex items-center justify-center hover:border-primary hover:bg-primary/5 active:scale-90 transition-all"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            triggerHaptic();
-                            onAddToCart(product);
-                        }}
-                        aria-label="Add to cart"
-                    >
-                        <span className="material-icons-outlined text-gray-500 dark:text-gray-400 text-[18px]">add_shopping_cart</span>
-                    </button>
-                )}
             </div>
         </div>
     );

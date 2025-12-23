@@ -182,6 +182,56 @@ export function generateFAQSchema(faqs: Array<{ question: string; answer: string
 }
 
 /**
+ * Generate Article structured data
+ * Perfect for corporate, news, and complex info pages
+ */
+export function generateArticleSchema(page: { title: string; description: string; image?: string; url: string; lastUpdated?: string }) {
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: page.title,
+        description: page.description,
+        image: page.image || `${SITE_CONFIG.url}${SITE_CONFIG.logo}`,
+        dateModified: page.lastUpdated || new Date().toISOString(),
+        author: {
+            '@type': 'Organization',
+            name: SITE_CONFIG.fullName,
+            url: SITE_CONFIG.url
+        },
+        publisher: {
+            '@type': 'Organization',
+            name: SITE_CONFIG.fullName,
+            logo: {
+                '@type': 'ImageObject',
+                url: `${SITE_CONFIG.url}${SITE_CONFIG.logo}`
+            }
+        },
+        mainEntityOfPage: {
+            '@type': 'WebPage',
+            '@id': page.url
+        }
+    };
+}
+
+/**
+ * Generate WebPage structured data
+ * General purpose schema for static informational pages
+ */
+export function generateWebPageSchema(page: { title: string; description: string; url: string }) {
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: page.title,
+        description: page.description,
+        url: page.url,
+        publisher: {
+            '@type': 'Organization',
+            name: SITE_CONFIG.fullName
+        }
+    };
+}
+
+/**
  * Update document meta tags dynamically
  */
 export function updatePageMeta(config: {

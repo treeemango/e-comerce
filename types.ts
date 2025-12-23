@@ -729,15 +729,23 @@ export interface CreateProductPayload {
 
 export interface SellerOrder {
     id: string;
+    order_number?: string | null;
     created_at: string;
     total_amount: number;
     status: string;
     customer_name: string;
+    customer_email?: string | null;
+    shipping_address?: string | null;
+    tax_amount?: number;
+    tax_rate?: number;
+    delivery_fee?: number;
     items: {
         product_title: string;
-        variant_sku: string;
+        variant_sku: string | null;
         quantity: number;
         price: number;
+        image_url?: string | null;
+        currency?: string;
     }[];
 }
 
@@ -1460,4 +1468,13 @@ export interface DeliveryPartner {
     is_verified: boolean;
     created_at: string;
     vehicles?: DeliveryPartnerVehicle[];
+}
+export interface BuyerNotificationPreferences {
+    user_id: string;
+    orders: boolean;
+    deals: boolean;
+    price_drops: boolean;
+    messages: boolean;
+    recommendations: boolean;
+    updated_at?: string;
 }

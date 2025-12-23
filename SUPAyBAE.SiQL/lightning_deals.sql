@@ -34,7 +34,7 @@ BEGIN
   -- Check if user has sufficient history for personalization
   SELECT 
     COALESCE(
-      (SELECT COUNT(*) FROM user_product_views WHERE user_id = p_user_param::UUID AND viewed_at > NOW() - INTERVAL '30 days') +
+      (SELECT COUNT(*) FROM user_product_views WHERE user_id = p_user_param::UUID AND viewed_at > NOW() - INTERVAL '30 days' ) +
       (SELECT COUNT(*) FROM orders o JOIN order_items oi ON o.id = oi.order_id WHERE o.user_id = p_user_param::UUID AND o.status IN ('completed', 'shipped') AND o.created_at > NOW() - INTERVAL '90 days'),
       0
     ) INTO user_history_count;
@@ -174,6 +174,8 @@ BEGIN
       SELECT
           p.id,
           p.title,
+          p.description,
+          p.meta_description,
           p.category_id,
           p.seller_id AS vendor_id,
           p.rating,
@@ -183,9 +185,12 @@ BEGIN
           p.delivery_time_days,
           p.is_express_delivery,
           p.delivery_scope,
+          p.delivery_locations,
+          p.sale_unit, -- 🔹 ADDED: Unit of measurement
+          COALESCE(p.sales_count, 0) as sales_count,
           v.stock,
           v.price as base_price,
-          v.compare_at_price as original_price,
+          COALESCE(v.compare_at_price, v.price) as original_price,
           v.discount_percent as base_discount_percent,
           CASE 
               WHEN ac.discount_percentage IS NOT NULL THEN
@@ -203,18 +208,19 @@ BEGIN
           COALESCE(ac.discount_amount, CASE WHEN ad.discount_type = 'fixed_amount' THEN ad.discount_value ELSE NULL END) as coupon_discount_amount,
           ac.end_time as coupon_end,
           CASE 
-              WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > 0 AND ac.discount_percentage IS NOT NULL THEN
-                  ((v.compare_at_price - (v.price * (1 - ac.discount_percentage / 100.0))) / NULLIF(v.compare_at_price, 0)) * 100
-              WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > 0 AND ad.discount_type = 'percentage' THEN
-                  ((v.compare_at_price - (v.price * (1 - ad.discount_value / 100.0))) / NULLIF(v.compare_at_price, 0)) * 100
               WHEN v.compare_at_price IS NOT NULL AND v.compare_at_price > 0 THEN
-                  ((v.compare_at_price - v.price) / NULLIF(v.compare_at_price, 0)) * 100
-              WHEN v.discount_percent IS NOT NULL AND ac.discount_percentage IS NOT NULL THEN
-                  (1 - ((1 - v.discount_percent / 100.0) * (1 - ac.discount_percentage / 100.0))) * 100
-              WHEN v.discount_percent IS NOT NULL AND ad.discount_type = 'percentage' THEN
-                  (1 - ((1 - v.discount_percent / 100.0) * (1 - ad.discount_value / 100.0))) * 100
-              WHEN v.discount_percent IS NOT NULL THEN
-                  v.discount_percent
+                  ((v.compare_at_price - CASE 
+                      WHEN ac.discount_percentage IS NOT NULL THEN v.price * (1 - ac.discount_percentage / 100.0)
+                      WHEN ac.discount_amount IS NOT NULL THEN GREATEST(v.price - ac.discount_amount, 0)
+                      WHEN ad.discount_type = 'percentage' AND ad.min_requirement_value <= v.price THEN v.price * (1 - ad.discount_value / 100.0)
+                      WHEN ad.discount_type = 'fixed_amount' AND ad.min_requirement_value <= v.price THEN GREATEST(v.price - ad.discount_value, 0)
+                      ELSE v.price
+                  END) / NULLIF(v.compare_at_price, 0)) * 100
+              WHEN ac.discount_percentage IS NOT NULL THEN ac.discount_percentage
+              WHEN ac.discount_amount IS NOT NULL AND v.price > 0 THEN (ac.discount_amount / v.price) * 100
+              WHEN ad.discount_type = 'percentage' AND ad.min_requirement_value <= v.price THEN ad.discount_value
+              WHEN ad.discount_type = 'fixed_amount' AND ad.min_requirement_value <= v.price AND v.price > 0 THEN (ad.discount_value / v.price) * 100
+              WHEN v.discount_percent IS NOT NULL THEN v.discount_percent
               ELSE 0
           END as total_discount_percent,
           LEAST(
@@ -351,6 +357,8 @@ BEGIN
       SELECT 
           fp.id as product_id,
           fp.title as product_title,
+          fp.description as product_description,
+          fp.meta_description as product_meta_description,
           fp.product_image_url,
           fp.gallery,  -- 🔹 Include gallery
           fp.currency,
@@ -358,6 +366,8 @@ BEGIN
           fp.delivery_time_days,
           fp.is_express_delivery,
           fp.delivery_scope,
+          fp.delivery_locations,
+          fp.sale_unit, -- 🔹 ADDED: Unit of measurement
           fp.vendor_country,
           fp.final_price as current_price,
           fp.original_price,
@@ -388,7 +398,8 @@ BEGIN
           fp.auto_discount_value,
           fp.auto_discount_buy_qty,
           fp.auto_discount_get_qty,
-          fp.auto_discount_min_requirement
+          fp.auto_discount_min_requirement,
+          fp.sales_count
       FROM filtered_products fp
       WHERE fp.stock >= min_stock
         AND (fp.rating IS NULL OR fp.rating >= min_rating)
@@ -398,6 +409,8 @@ BEGIN
       SELECT DISTINCT ON (ps.product_id)
           ps.product_id,
           ps.product_title,
+          ps.product_description,
+          ps.product_meta_description,
           ps.product_image_url,
           ps.gallery,  -- 🔹 Include gallery
           ps.currency,
@@ -405,6 +418,8 @@ BEGIN
           ps.delivery_time_days,
           ps.is_express_delivery,
           ps.delivery_scope,
+          ps.delivery_locations,
+          ps.sale_unit, -- 🔹 ADDED: Unit of measurement
           ps.vendor_country,
           ps.current_price,
           ps.original_price,
@@ -424,7 +439,8 @@ BEGIN
           ps.auto_discount_value,
           ps.auto_discount_buy_qty,
           ps.auto_discount_get_qty,
-          ps.auto_discount_min_requirement
+          ps.auto_discount_min_requirement,
+          ps.sales_count
       FROM product_scores ps
       ORDER BY ps.product_id, ps.calculated_score DESC
   ),
@@ -440,6 +456,8 @@ BEGIN
       jsonb_build_object(
           'id', rp.product_id,
           'title', rp.product_title,
+          'description', rp.product_description,
+          'metaDescription', rp.product_meta_description,
           'image_url', rp.product_image_url,
           'gallery', rp.gallery,
           'media', rp.gallery,
@@ -449,6 +467,8 @@ BEGIN
           'delivery_time_days', rp.delivery_time_days,
           'is_express_delivery', rp.is_express_delivery,
           'delivery_scope', rp.delivery_scope,
+          'delivery_locations', rp.delivery_locations,
+          'sale_unit', rp.sale_unit, -- 🔹 ADDED: Unit of measurement
           'vendor_country', rp.vendor_country,
           'price', rp.current_price,
           'originalPrice', rp.original_price,
@@ -468,7 +488,8 @@ BEGIN
           'auto_discount_value', rp.auto_discount_value,
           'auto_discount_buy_qty', rp.auto_discount_buy_qty,
           'auto_discount_get_qty', rp.auto_discount_get_qty,
-          'auto_discount_min_requirement', rp.auto_discount_min_requirement
+          'auto_discount_min_requirement', rp.auto_discount_min_requirement,
+          'sales_count', rp.sales_count
       )
   ) INTO product_results
   FROM ranked_products rp;

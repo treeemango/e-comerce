@@ -7,10 +7,10 @@ import { ProductCard } from './ProductCard'; // Reusing the unified card
 interface MobileDealsPageProps {
     onBack: () => void;
     onProductClick: (product: Product) => void;
-    onAddToCart: (product: Product) => void;
+    onVisualSearch?: (product: Product) => void;
 }
 
-export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProductClick, onAddToCart }) => {
+export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProductClick, onVisualSearch }) => {
     const [deals, setDeals] = useState<LightningDealItem[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -39,8 +39,8 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
         image: deal.image,
         discountPercent: deal.discountPercent,
         currency: deal.currency,
-        rating: 0,
-        reviews: 0,
+        rating: deal.rating || 0,
+        reviews: deal.reviews || 0,
         deal_type: deal.deal_type,
         coupon_end: deal.coupon_end,
         coupon_name: deal.coupon_name,
@@ -87,8 +87,8 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
                             <ProductCard
                                 key={deal.id}
                                 product={mapDealToProduct(deal)}
-                                onClick={() => onProductClick(mapDealToProduct(deal))}
-                                onAddToCart={onAddToCart}
+                                onProductClick={onProductClick}
+                                onVisualSearch={onVisualSearch}
                             />
                         ))}
                     </div>

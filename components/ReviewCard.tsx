@@ -24,12 +24,9 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, onVote }) => {
 
     const renderStars = (rating: number) => {
         return (
-            <div className="flex text-yellow-400">
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <span key={star} className="material-icons text-base">
-                        {star <= rating ? 'star' : 'star_border'}
-                    </span>
-                ))}
+            <div className="flex items-center gap-1">
+                <span className="material-icons text-[14px] text-slate-900 dark:text-slate-100">star</span>
+                <span className="font-bold text-slate-900 dark:text-white text-sm">{rating.toFixed(1)}</span>
             </div>
         );
     };
@@ -158,16 +155,16 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, onVote }) => {
                 <div className="flex flex-wrap gap-2 mb-4">
                     {review.recommended !== undefined && (
                         <span className={`text-xs px-3 py-1 rounded-full font-medium ${review.recommended
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                             }`}>
                             {review.recommended ? '✓ I recommend this' : '✗ I don\'t recommend this'}
                         </span>
                     )}
                     {review.would_buy_again !== undefined && (
                         <span className={`text-xs px-3 py-1 rounded-full font-medium ${review.would_buy_again
-                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                             }`}>
                             {review.would_buy_again ? '✓ Would buy again' : '✗ Wouldn\'t buy again'}
                         </span>
@@ -228,8 +225,8 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, onVote }) => {
                             onClick={() => handleVote('helpful')}
                             disabled={hasVoted}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${hasVoted
-                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
-                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-green-100 dark:hover:bg-green-900/30 hover:text-green-700 dark:hover:text-green-400'
+                                ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-green-100 dark:hover:bg-green-900/30 hover:text-green-700 dark:hover:text-green-400'
                                 }`}
                         >
                             <span className="material-icons text-sm">thumb_up</span>
@@ -239,8 +236,8 @@ export const ReviewCard: React.FC<ReviewCardProps> = ({ review, onVote }) => {
                             onClick={() => handleVote('unhelpful')}
                             disabled={hasVoted}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${hasVoted
-                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
-                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400'
+                                ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400'
                                 }`}
                         >
                             <span className="material-icons text-sm">thumb_down</span>

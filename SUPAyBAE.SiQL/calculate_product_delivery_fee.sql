@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION public.calculate_product_delivery_fee(
-    p_product_id BIGINT,
+    p_product_id UUID,
     p_quantity BIGINT, -- CHANGED TO BIGINT
     p_express_delivery BOOLEAN DEFAULT FALSE
 )

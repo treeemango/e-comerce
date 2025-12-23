@@ -18,7 +18,7 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
 
     const loadDeals = async () => {
         try {
-            const data = await fetchLightningDeals(undefined, 8);
+            const data = await fetchLightningDeals(undefined, 8, 5);
             setDeals(data);
         } catch (error) {
             console.error('Failed to load mobile lightning deals', error);
@@ -75,21 +75,20 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
             <div className="flex overflow-x-auto gap-3 px-3 pb-2 hide-scrollbar snap-x snap-mandatory">
                 {deals.map(deal => {
                     const badge = getDealBadge(deal);
+                    const soldCount = deal.soldCount || 0;
+                    const stock = deal.stock || 0;
+                    const totalQuantity = soldCount + stock;
+                    const percentSold = totalQuantity > 0 ? Math.min(Math.round((soldCount / totalQuantity) * 100), 99) : 0;
+
                     return (
                         <div
                             key={deal.id}
                             className="flex-shrink-0 w-36 snap-start bg-white dark:bg-surface-dark rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 relative group active:scale-95 transition-transform"
                             onClick={() => onProductClick({
-                                id: deal.id,
-                                title: deal.title,
-                                price: deal.price,
-                                originalPrice: deal.originalPrice,
-                                image: deal.image,
-                                discountPercent: deal.discountPercent,
-                                currency: deal.currency,
-                                rating: 0,
-                                reviews: 0
-                            } as Product)}
+                                ...deal,
+                                rating: deal.rating || 0,
+                                reviews: deal.reviews || 0
+                            } as any as Product)}
                         >
                             <div className="aspect-[4/5] relative bg-gray-100 dark:bg-gray-800">
                                 <img src={deal.image} alt={deal.title} className="w-full h-full object-cover" />
@@ -113,9 +112,14 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
                                     {formatPrice(deal.originalPrice, deal.currency)}
                                 </div>
                                 <div className="mt-1 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-orange-500 w-2/3 rounded-full"></div>
+                                    <div
+                                        className="h-full bg-orange-500 rounded-full transition-all duration-500"
+                                        style={{ width: `${Math.max(percentSold, 15)}%` }}
+                                    ></div>
                                 </div>
-                                <div className="text-[9px] text-gray-500 mt-0.5 text-right">65% sold</div>
+                                <div className="text-[9px] text-gray-500 mt-0.5 text-right">
+                                    {soldCount > 0 ? `${percentSold}% sold` : `${stock} in stock`}
+                                </div>
                             </div>
                         </div>
                     );

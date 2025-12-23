@@ -4,9 +4,10 @@ interface FooterProps {
     onAdminClick?: () => void;
     onDriverClick?: () => void;
     onSellerClick?: () => void;
+    onInfoPageClick?: (slug: string) => void;
 }
 
-const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerClick }) => {
+const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerClick, onInfoPageClick }) => {
     return (
         <footer className="bg-[#222] text-white pt-12 pb-8 mt-12 font-display">
             <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -19,14 +20,14 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         <div>
                             <h3 className="font-bold mb-4 text-sm text-white">Company info</h3>
                             <ul className="space-y-2 text-xs text-gray-400">
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">About JuaExpress</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Affiliate & Influencer: Join to Earn</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Contact us</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Company Details</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Careers</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Press</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Sustainability at JuaExpress</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Corporate Responsibility</a></li>
+                                <li><button onClick={() => onInfoPageClick?.('about')} className="hover:text-white hover:underline transition-colors text-left">About JuaExpress</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('affiliate')} className="hover:text-white hover:underline transition-colors text-left">Affiliate & Influencer: Join to Earn</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('contact')} className="hover:text-white hover:underline transition-colors text-left">Contact us</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('company-details')} className="hover:text-white hover:underline transition-colors text-left">Company Details</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('careers')} className="hover:text-white hover:underline transition-colors text-left">Careers</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('press')} className="hover:text-white hover:underline transition-colors text-left">Press</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('sustainability')} className="hover:text-white hover:underline transition-colors text-left">Sustainability at JuaExpress</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('corporate-responsibility')} className="hover:text-white hover:underline transition-colors text-left">Corporate Responsibility</button></li>
                                 <li className="pt-2">
                                     <button
                                         onClick={onDriverClick}
@@ -43,11 +44,11 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         <div>
                             <h3 className="font-bold mb-4 text-sm text-white">Customer service</h3>
                             <ul className="space-y-2 text-xs text-gray-400">
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Return and refund policy</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Intellectual property policy</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Shipping info</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Report suspicious activity</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Minimum Order Value</a></li>
+                                <li><button onClick={() => onInfoPageClick?.('returns')} className="hover:text-white hover:underline transition-colors text-left">Return and refund policy</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('intellectual-property')} className="hover:text-white hover:underline transition-colors text-left">Intellectual property policy</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('shipping')} className="hover:text-white hover:underline transition-colors text-left">Shipping info</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('report-suspicious')} className="hover:text-white hover:underline transition-colors text-left">Report suspicious activity</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('minimum-order')} className="hover:text-white hover:underline transition-colors text-left">Minimum Order Value</button></li>
                             </ul>
                         </div>
 
@@ -55,11 +56,11 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         <div>
                             <h3 className="font-bold mb-4 text-sm text-white">Help</h3>
                             <ul className="space-y-2 text-xs text-gray-400">
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Support center</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Safety centre</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">JuaExpress purchase protection</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Sitemap</a></li>
-                                <li><a href="#" className="hover:text-white hover:underline transition-colors">Sell on JuaExpress</a></li>
+                                <li><button onClick={() => onInfoPageClick?.('support-center')} className="hover:text-white hover:underline transition-colors text-left">Support center</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('safety-centre')} className="hover:text-white hover:underline transition-colors text-left">Safety centre</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('protection')} className="hover:text-white hover:underline transition-colors text-left">JuaExpress purchase protection</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('sitemap')} className="hover:text-white hover:underline transition-colors text-left">Sitemap</button></li>
+                                <li><button onClick={() => onInfoPageClick?.('sell')} className="hover:text-white hover:underline transition-colors text-left">Sell on JuaExpress</button></li>
                             </ul>
                         </div>
                     </div>
@@ -181,8 +182,8 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         © 2022 - 2025 JuaExpress
                     </button>
                     <div className="flex flex-wrap justify-center gap-6 mt-4 md:mt-0">
-                        <a href="#" className="hover:text-white hover:underline transition-colors">Terms of use</a>
-                        <a href="#" className="hover:text-white hover:underline transition-colors">Privacy policy</a>
+                        <button onClick={() => onInfoPageClick?.('terms')} className="hover:text-white hover:underline transition-colors">Terms of use</button>
+                        <button onClick={() => onInfoPageClick?.('privacy')} className="hover:text-white hover:underline transition-colors">Privacy policy</button>
                         <a href="#" className="hover:text-white hover:underline transition-colors flex items-center gap-1">
                             Your privacy choices <span className="bg-blue-500 text-white rounded-full px-1 text-[8px] font-bold">✓</span>
                         </a>

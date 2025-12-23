@@ -76,25 +76,11 @@ export const SubcategoryCarousel: React.FC<SubcategoryCarouselProps> = ({
     }
 
     return (
-        <div className="bg-white dark:bg-surface-dark border-b border-gray-100 dark:border-gray-800 pb-3">
-            {/* Category Banner */}
-            <div className="px-3 py-2 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border-b border-orange-100 dark:border-orange-900/30">
-                <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1 text-green-700 dark:text-green-400 font-semibold">
-                        <span className="material-icons-outlined text-sm">check_circle</span>
-                        Free shipping
-                    </div>
-                    <div className="flex items-center gap-1 text-orange-700 dark:text-orange-400 font-semibold">
-                        <span className="material-icons-outlined text-sm">shield</span>
-                        Never overpay with our Price Match Guarantee
-                        <span className="material-icons-outlined text-sm">chevron_right</span>
-                    </div>
-                </div>
-            </div>
+        <div className="bg-white dark:bg-surface-dark border-b border-gray-100 dark:border-gray-800 pb-1.5">
 
             {/* Subcategory Carousel */}
-            <div className="px-3 pt-3">
-                <div className="flex items-start gap-3 overflow-x-auto scrollbar-hide scroll-smooth pb-2">
+            <div className="px-3 pt-1.5">
+                <div className="flex items-start gap-2.5 overflow-x-auto scrollbar-hide scroll-smooth pb-1.5">
                     {subcategories.map((sub) => {
                         const isActive = activeSubcategoryId === sub.id;
                         return (
@@ -104,8 +90,8 @@ export const SubcategoryCarousel: React.FC<SubcategoryCarouselProps> = ({
                                 className="flex-shrink-0 flex flex-col items-center gap-1.5 group"
                             >
                                 {/* Circular Icon */}
-                                <div className={`relative w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${isActive
-                                    ? 'border-primary shadow-lg scale-110'
+                                <div className={`relative w-14 h-14 rounded-full overflow-hidden border-2 transition-all ${isActive
+                                    ? 'border-primary shadow-md scale-105'
                                     : 'border-gray-200 dark:border-gray-700 group-hover:border-primary/50'
                                     }`}>
                                     {sub.imageUrl ? (

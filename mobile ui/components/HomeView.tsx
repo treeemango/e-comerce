@@ -7,12 +7,12 @@ import { MobileLightningDealsRow } from './MobileLightningDealsRow';
 interface HomeViewProps {
   products: Product[];
   onProductClick: (p: Product) => void;
-  onAddToCart?: (p: Product) => void;
   showPromotions?: boolean;
   onViewAllDeals?: () => void;
+  onVisualSearch?: (p: Product) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, onAddToCart, showPromotions = true, onViewAllDeals }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch }) => {
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -76,7 +76,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, on
           <div className="bg-surface-light dark:bg-surface-dark pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
             <div className="scroll-fade px-3 overflow-x-auto hide-scrollbar">
               <div className="flex items-center gap-2 min-w-max">
-                {[{ label: 'All', icon: 'bolt' }, { label: '5-Star Rated', icon: 'chat_bubble_outline' }, { label: 'Best Sellers', icon: 'thumb_up' }].map((filter, idx) => (
+                {[{ label: 'All', icon: 'bolt' }, { label: '5-Star Rated', icon: 'star' }, { label: 'Best Sellers', icon: 'thumb_up' }].map((filter, idx) => (
                   <button
                     key={filter.label}
                     className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${idx === 0
@@ -100,8 +100,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, on
           <ProductCard
             key={idx}
             product={item}
-            onClick={() => onProductClick(item)}
-            onAddToCart={onAddToCart}
+            onProductClick={onProductClick}
+            onVisualSearch={onVisualSearch}
           />
         ))}
       </div>

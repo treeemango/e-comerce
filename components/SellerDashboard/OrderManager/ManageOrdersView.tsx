@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { fetchSellerOrders } from '../../../lib/api';
 import { SellerOrder } from '../../../types';
+import { formatCurrency } from '../../../lib/utils';
+import OrderDetailsModal from './OrderDetailsModal';
 
 // Use SellerOrder interface from types.ts, mapped to view needs if necessary
 // But try to use the type directly.
@@ -16,6 +18,7 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
     const [orders, setOrders] = useState<SellerOrder[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedOrder, setSelectedOrder] = useState<SellerOrder | null>(null);
 
     useEffect(() => {
         const loadData = async () => {
@@ -167,9 +170,13 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
                                                     {/* Product Info Column Part */}
                                                     <div className="flex gap-3 flex-1">
                                                         <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 overflow-hidden flex-shrink-0">
-                                                            <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                                                                <span className="material-icons text-sm">image</span>
-                                                            </div>
+                                                            {item.image_url ? (
+                                                                <img src={item.image_url} alt={item.product_title} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
+                                                                    <span className="material-icons text-sm">image</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="space-y-1">
                                                             <p className="text-sm text-gray-900 font-medium line-clamp-1">{item.product_title}</p>
@@ -179,7 +186,7 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
 
                                                     {/* Unit Price Column Part */}
                                                     <div className="w-24 text-right">
-                                                        <div className="text-xs text-gray-500">Price: <span className="text-gray-900 font-medium">${item.price}</span></div>
+                                                        <div className="text-xs text-gray-500">Price: <span className="text-gray-900 font-medium">{formatCurrency(item.price || 0, item.currency || 'USD')}</span></div>
                                                     </div>
 
                                                     {/* Customer Option Column Part */}
@@ -199,7 +206,10 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
                                     </td>
                                     <td className="px-4 py-6 align-top">
                                         <div className="flex flex-col gap-2 items-center">
-                                            <button className="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-600 transition-colors shadow-sm">
+                                            <button
+                                                onClick={() => setSelectedOrder(order)}
+                                                className="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-600 transition-colors shadow-sm"
+                                            >
                                                 View Details
                                             </button>
                                         </div>
@@ -215,6 +225,19 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
                     </div>
                 )}
             </div>
+
+            {/* Order Details Modal */}
+            {selectedOrder && (
+                <OrderDetailsModal
+                    order={selectedOrder}
+                    onClose={() => setSelectedOrder(null)}
+                    onOrderUpdated={async () => {
+                        setSelectedOrder(null);
+                        const data = await fetchSellerOrders(sellerId!);
+                        setOrders(data);
+                    }}
+                />
+            )}
         </div>
     );
 };

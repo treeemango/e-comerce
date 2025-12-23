@@ -3,13 +3,23 @@ import React from 'react';
 interface HeaderProps {
   onSearchClick?: () => void;
   onUserClick?: () => void;
+  userAvatar?: string | null;
+  userName?: string | null;
+  notificationCount?: number;
+  cartCount?: number;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onSearchClick, onUserClick }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onSearchClick,
+  onUserClick,
+  userAvatar,
+  userName,
+  notificationCount = 0,
+  cartCount = 0
+}) => {
   return (
     <header className="bg-surface-light dark:bg-surface-dark shadow-sm pt-2">
       <div className="flex items-center justify-between px-3 py-2 gap-3">
-
 
         {/* Search Bar */}
         <div className="flex-grow relative cursor-pointer" onClick={onSearchClick}>
@@ -33,13 +43,27 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onUserClick }) =>
           </button>
 
           <button className="relative p-1" onClick={onUserClick}>
-            <img src="https://i.pravatar.cc/100?img=5" alt="User" className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700" />
-            <span className="absolute -top-1 -right-1 bg-primary text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center border border-white dark:border-surface-dark">24</span>
+            {userAvatar ? (
+              <img src={userAvatar} alt={userName || 'User'} className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 object-cover" />
+            ) : (
+              <div className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-bold">
+                {userName ? userName.slice(0, 2).toUpperCase() : <span className="material-icons text-lg">person</span>}
+              </div>
+            )}
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full h-4 w-4 flex items-center justify-center border border-white dark:border-surface-dark">
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </span>
+            )}
           </button>
 
           <button className="relative p-1">
             <span className="material-icons-outlined text-2xl">shopping_cart</span>
-            <span className="absolute -top-1 -right-1 bg-primary text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center border border-white dark:border-surface-dark">4</span>
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold rounded-full h-4 w-4 flex items-center justify-center border border-white dark:border-surface-dark">
+                {cartCount}
+              </span>
+            )}
           </button>
         </div>
       </div>

@@ -14,7 +14,9 @@ import AccountPageView from './components/AccountPageView';
 import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import CheckoutView from './components/CheckoutView';
+import OrderConfirmationView from './components/OrderConfirmationView';
 import CartView from './components/CartView';
+import WishlistView from './components/WishlistView';
 import TrendingVendorsSection from './components/TrendingVendorsSection';
 import SellerOnboardingView from './components/SellerOnboarding/SellerOnboardingView';
 import SellerDashboardLayout from './components/SellerDashboard/SellerDashboardLayout';
@@ -43,7 +45,7 @@ import SellerPerformanceView from './components/SellerDashboard/Performance/Sell
 import AppsServiceView from './components/SellerDashboard/Apps/AppsServiceView';
 import OrdersView from './components/SellerDashboard/OrdersView';
 import SellerMessagesView from './components/SellerDashboard/SellerMessagesView';
-import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions } from './types';
+import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
 import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, DealCategoryNavItem, NavbarCategory } from './lib/api';
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
@@ -59,6 +61,7 @@ import UserManagementView from './components/AdminDashboard/UserManagement/UserM
 import OrderManagementView from './components/AdminDashboard/OrderManagement/OrderManagementView';
 import ContentManagementView from './components/AdminDashboard/ContentManagement/ContentManagementView';
 import ActivityLogView from './components/AdminDashboard/ActivityLog/ActivityLogView';
+import InfoPageView from './components/InfoPageView';
 
 import DriverDashboardLayout from './components/DriverDashboard/DriverDashboardLayout';
 import { default as WebDriverDashboard } from './components/DriverDashboard/WebDriverDashboard';
@@ -66,8 +69,11 @@ import DriverLoginView from './components/DriverDashboard/DriverLoginView';
 import DriverOnboardingView from './components/DriverDashboard/DriverOnboardingView';
 import AdminLoginView from './components/AdminDashboard/AdminLoginView';
 
+import NotificationSystem from './components/NotificationSystem';
+import { WebNotificationWrapper } from './components/WebNotificationWrapper';
+
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'wishlist' | 'info-page'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
   const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'users' | 'orders' | 'content' | 'activity'>('overview');
   const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
@@ -92,6 +98,14 @@ const App: React.FC = () => {
   const [previousView, setPreviousView] = useState<string>('');
   const [activeDealsCategoryId, setActiveDealsCategoryId] = useState<string | null>(null);
   const [adminAccessMessage, setAdminAccessMessage] = useState<string | null>(null);
+  const [completedOrderInfo, setCompletedOrderInfo] = useState<{ orderId: string; orderNumber?: string; email?: string } | null>(null);
+  const [activeInfoPageSlug, setActiveInfoPageSlug] = useState<string>('about');
+  const [isActivityHubOpen, setIsActivityHubOpen] = useState(false);
+  const [activityHubTab, setActivityHubTab] = useState<'list' | 'promotions' | 'shipping' | 'notifications'>('list');
+
+  // Background Sync'd State
+  const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
+  const [recentOrders, setRecentOrders] = useState<BuyerOrder[]>([]);
   const isBuyerSurface = (view: typeof currentView) => ![
     'seller-login',
     'seller-onboarding',
@@ -100,7 +114,8 @@ const App: React.FC = () => {
     'driver-onboarding',
     'driver-dashboard',
     'admin-dashboard',
-    'admin-login'
+    'admin-login',
+    'info-page'
   ].includes(view);
   const [showBuyerAuthModal, setShowBuyerAuthModal] = useState(false);
 
@@ -544,6 +559,12 @@ const App: React.FC = () => {
   };
 
   const handleAccountPageClick = (pageTitle: string) => {
+    // Special handling for wishlist
+    if (pageTitle === 'Saved items') {
+      setCurrentView('wishlist');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setAccountPageTitle(pageTitle);
     setCurrentView('account-page');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -667,13 +688,25 @@ const App: React.FC = () => {
       setAccountPageTitle('Messages');
       setCurrentView('account-page');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      alert('Failed to start conversation. Please try again.');
     }
+  };
+
+  const handleInfoPageClick = (slug: string) => {
+    setActiveInfoPageSlug(slug);
+    setCurrentView('info-page');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <div className="min-h-screen flex flex-col font-display">
+      <NotificationSystem />
+      <WebNotificationWrapper
+        user={user}
+        onDataUpdate={useCallback((coupons: UserCoupon[], orders: BuyerOrder[]) => {
+          setUserCoupons(coupons);
+          setRecentOrders(orders);
+        }, [])}
+      />
       {/* Top Banner - Dark Theme (Hide on Seller Login/Auth/Onboarding/Dashboard/Admin) */}
       {currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' && (
         <div className="bg-black text-white text-xs py-2 hidden sm:block">
@@ -776,6 +809,10 @@ const App: React.FC = () => {
           cartItemCount={cartItems.length}
           user={user}
           loyaltyProfile={loyaltyProfile}
+          onOpenNotifications={() => {
+            setActivityHubTab('notifications');
+            setIsActivityHubOpen(true);
+          }}
         />
       )}
       <main className={`flex-1 w-full ${currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' ? 'max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8' : ''}`}>
@@ -854,8 +891,30 @@ const App: React.FC = () => {
             cartItems={cartItems}
             totalAmount={cartSubtotal}
             userId={user?.id}
-            onCheckoutComplete={() => {
+            onCheckoutComplete={async (orderId, email) => {
               setCartItems([]);
+              // Fetch order number for display
+              try {
+                const { fetchOrderDetails } = await import('./lib/api');
+                const orderDetails = await fetchOrderDetails(orderId);
+                setCompletedOrderInfo({
+                  orderId,
+                  orderNumber: orderDetails?.order_number || orderId,
+                  email: email || user?.email
+                });
+              } catch {
+                setCompletedOrderInfo({ orderId, email: email || user?.email });
+              }
+              setCurrentView('order-confirmation');
+            }}
+          />
+        )}
+        {currentView === 'order-confirmation' && (
+          <OrderConfirmationView
+            orderNumber={completedOrderInfo?.orderNumber}
+            customerEmail={completedOrderInfo?.email || user?.email || 'your email'}
+            onContinueShopping={() => {
+              setCompletedOrderInfo(null);
               setCurrentView('home');
             }}
           />
@@ -868,6 +927,16 @@ const App: React.FC = () => {
             onCheckoutClick={handleCheckoutClick}
             onHomeClick={handleHomeClick}
             userId={user?.id}
+          />
+        )}
+        {currentView === 'wishlist' && user && (
+          <WishlistView
+            user={user}
+            onBack={handleHomeClick}
+            onProductClick={handleProductClick}
+            onAddToCart={(product) => {
+              setCartItems(prev => [...prev, product]);
+            }}
           />
         )}
         {currentView === 'account-page' && (
@@ -1051,6 +1120,13 @@ const App: React.FC = () => {
             onCancel={() => setCurrentView('home')}
           />
         )}
+        {currentView === 'info-page' && (
+          <InfoPageView
+            slug={activeInfoPageSlug}
+            onClose={() => setCurrentView('home')}
+            onNavigate={setActiveInfoPageSlug}
+          />
+        )}
       </main>
       {showBuyerAuthModal && isBuyerSurface(currentView) && (
         <div className="fixed top-16 right-4 z-[90]">
@@ -1107,6 +1183,7 @@ const App: React.FC = () => {
             setCurrentView('seller-login');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
+          onInfoPageClick={handleInfoPageClick}
         />
       )}
       {isBuyerSurface(currentView) && (
@@ -1114,6 +1191,12 @@ const App: React.FC = () => {
           user={user}
           activeConversationId={activeConversationId}
           onRequireAuth={() => setShowBuyerAuthModal(true)}
+          userCoupons={userCoupons}
+          recentOrders={recentOrders}
+          isOpen={isActivityHubOpen}
+          onClose={() => setIsActivityHubOpen(false)}
+          activePane={activityHubTab}
+          onPaneChange={setActivityHubTab}
         />
       )}
     </div>

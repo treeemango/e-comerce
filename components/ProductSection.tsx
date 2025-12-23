@@ -437,7 +437,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
             </h2>
           ) : isFiveStarView ? (
             <>
-              <span className="material-icons text-yellow-400 text-3xl animate-bounce">star</span>
+              <span className="material-icons text-slate-900 dark:text-slate-100 text-3xl animate-bounce">star</span>
               <h2 className="text-2xl font-bold ml-2 text-slate-900 dark:text-white uppercase">
                 5-Star Rated Items
               </h2>
@@ -460,58 +460,59 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       {/* Category Pills (Legacy Navbar) - Shown ONLY on Landing Page (No Search, No Category Selected) */}
       {!searchQuery && !isFiveStarView && initialCategoryIds.length === 0 && showCategoryPills && (
         <div className="mb-8 relative group">
-          {isLoadingCategories ? (
-            <div className="flex items-center space-x-2 overflow-x-auto pb-4 scrollbar-hide mask-fade-right">
-              {Array.from({ length: 9 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="h-16 w-16 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm"
-                  style={{ backgroundSize: '200% 100%' }}
-                />
-              ))}
-              <div className="h-16 w-16 rounded-full bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer shadow-sm" style={{ backgroundSize: '200% 100%' }} />
-            </div>
-          ) : (
-            <div className="flex items-start gap-6 overflow-x-auto pb-4 pt-1 scrollbar-hide mask-fade-right">
-              <button
-                onClick={() => handleCategoryClick(null)}
-                className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === null ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
-              >
-                <span className={`relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm ring-2 ${selectedCategoryId === null ? 'ring-shop-red/50' : 'ring-slate-200 dark:ring-slate-600'}`}>
-                  <span className="material-icons text-3xl">grid_view</span>
-                </span>
-                <span className="text-sm font-semibold text-center">Recommended</span>
-              </button>
+          <div className="flex items-start gap-6 overflow-x-auto pb-4 pt-1 scrollbar-hide mask-fade-right">
+            {/* Always show Recommended button */}
+            <button
+              onClick={() => handleCategoryClick(null)}
+              className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === null ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
+            >
+              <span className={`relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white shadow-sm ring-2 ${selectedCategoryId === null ? 'ring-shop-red/50' : 'ring-slate-200 dark:ring-slate-600'}`}>
+                <span className="material-icons text-3xl">grid_view</span>
+              </span>
+              <span className="text-sm font-semibold text-center">Recommended</span>
+            </button>
 
-              {sortedNavbarCategories.map((cat) => (
-                <button
-                  key={cat.category_id}
-                  onClick={() => handleCategoryClick(cat.category_id)}
-                  className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === cat.category_id ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
-                  title={cat.category_name}
-                >
-                  <span
-                    className={`relative h-24 w-24 overflow-hidden rounded-full border shadow-md bg-white dark:bg-gray-800 flex items-center justify-center ${selectedCategoryId === cat.category_id ? 'border-shop-red ring-2 ring-shop-red/40' : 'border-gray-300 dark:border-gray-600'}`}
-                    style={{ backgroundImage: 'linear-gradient(180deg, rgba(245,246,250,0.9) 0%, rgba(230,233,240,0.9) 100%)' }}
+            {isLoadingCategories ? (
+              <>
+                {Array.from({ length: 12 }).map((_, idx) => (
+                  <div key={idx} className="flex flex-col items-center gap-3 min-w-[120px]">
+                    <div className="h-24 w-24 rounded-full bg-gray-200 dark:bg-gray-800 animate-pulse border border-gray-200 dark:border-gray-700 shadow-sm" />
+                    <div className="h-3 w-[80px] rounded bg-gray-200 dark:bg-gray-800 animate-pulse" />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                {sortedNavbarCategories.map((cat) => (
+                  <button
+                    key={cat.category_id}
+                    onClick={() => handleCategoryClick(cat.category_id)}
+                    className={`flex flex-col items-center gap-3 min-w-[120px] transition-all duration-200 ${selectedCategoryId === cat.category_id ? 'text-shop-red' : 'text-gray-700 dark:text-gray-200'}`}
+                    title={cat.category_name}
                   >
-                    {cat.trending_product_image_url ? (
-                      <img
-                        src={cat.trending_product_image_url}
-                        alt={cat.category_name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <span className="material-icons text-gray-400 text-3xl">image</span>
-                    )}
-                  </span>
-                  <span className="text-sm font-semibold text-center leading-tight line-clamp-2 max-w-[120px]">
-                    {cat.category_name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+                    <span
+                      className={`relative h-24 w-24 overflow-hidden rounded-full border shadow-md bg-white dark:bg-gray-800 flex items-center justify-center ${selectedCategoryId === cat.category_id ? 'border-shop-red ring-2 ring-shop-red/40' : 'border-gray-300 dark:border-gray-600'}`}
+                      style={{ backgroundImage: 'linear-gradient(180deg, rgba(245,246,250,0.9) 0%, rgba(230,233,240,0.9) 100%)' }}
+                    >
+                      {cat.trending_product_image_url ? (
+                        <img
+                          src={cat.trending_product_image_url}
+                          alt={cat.category_name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="material-icons text-gray-400 text-3xl">image</span>
+                      )}
+                    </span>
+                    <span className="text-sm font-semibold text-center leading-tight line-clamp-2 max-w-[120px]">
+                      {cat.category_name}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
         </div>
       )}
 

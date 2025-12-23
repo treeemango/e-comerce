@@ -4,6 +4,8 @@ import { CATEGORIES, FEATURED_CATEGORIES, PRODUCTS } from '../constants';
 import { fetchSuggestions, trackSearch, SearchSuggestion, fetchTrendingCategoriesOverlay, TrendingCategoryOverlay, fetchRecentViews, RecentViewProduct, fetchPopularSearches, fetchRecentSearches, SearchKeywordEntry } from '../lib/api';
 import { Product, User, LoyaltyProfile, VisualCategory } from '../types';
 import { getCurrencySymbol } from '@/lib/currency';
+import { useNotifications } from './NotificationContext';
+import NotificationInbox from './NotificationInbox';
 
 interface HeaderProps {
   onHomeClick?: () => void;
@@ -19,6 +21,7 @@ interface HeaderProps {
   cartItemCount?: number;
   user?: User | null;
   loyaltyProfile?: LoyaltyProfile | null;
+  onOpenNotifications?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -34,7 +37,8 @@ const Header: React.FC<HeaderProps> = ({
   onSignOutClick,
   cartItemCount = 0,
   user,
-  loyaltyProfile
+  loyaltyProfile,
+  onOpenNotifications
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -45,6 +49,7 @@ const Header: React.FC<HeaderProps> = ({
   const [recentViews, setRecentViews] = useState<RecentViewProduct[]>([]);
   const [recentSearches, setRecentSearches] = useState<SearchKeywordEntry[]>([]);
   const [popularSearches, setPopularSearches] = useState<SearchKeywordEntry[]>([]);
+  const { history } = useNotifications();
 
   useEffect(() => {
     const loadRecentViews = async () => {
@@ -200,7 +205,7 @@ const Header: React.FC<HeaderProps> = ({
               if (onFiveStarClick) onFiveStarClick();
             }}
           >
-            <span className="material-icons text-yellow-400 text-base">star</span>
+            <span className="material-icons text-slate-900 dark:text-slate-100 text-base">star</span>
             <span className="text-sm font-medium">5-Star Rated</span>
           </a>
 
@@ -566,6 +571,7 @@ const Header: React.FC<HeaderProps> = ({
                   <nav className="space-y-1">
                     {[
                       { icon: 'receipt_long', label: 'Your orders' },
+                      { icon: 'favorite', label: 'Saved items' },
                       { icon: 'rate_review', label: 'Your reviews' },
                       { icon: 'person_outline', label: 'Your profile' },
                       { icon: 'confirmation_number', label: 'Coupon codes' },
@@ -627,7 +633,6 @@ const Header: React.FC<HeaderProps> = ({
             <span className="text-sm font-bold text-white">Sign In / Register</span>
           </button>
         )}
-
         <a
           href="#"
           id="cart-icon-container"
@@ -642,73 +647,93 @@ const Header: React.FC<HeaderProps> = ({
             {cartItemCount}
           </span>
         </a>
+
+        {/* Notification Bell */}
+        <div className="relative">
+          <button
+            className="relative p-1 hover:text-gray-200 transition-colors text-white/80"
+            onClick={(e) => {
+              e.preventDefault();
+              if (onOpenNotifications) onOpenNotifications();
+            }}
+          >
+            <span className="material-icons text-2xl">notifications</span>
+            {history.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-black h-4 w-4 flex items-center justify-center rounded-full border-2 border-primary animate-pulse">
+                {history.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Drawer (Basic) */}
-      {isMobileMenuOpen && (
-        <div className="absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-xl lg:hidden p-4 border-t border-gray-200 dark:border-gray-700">
-          <nav className="space-y-3">
-            <a
-              href="#"
-              className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <span className="material-icons text-primary">category</span>
-              <span>Categories</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                if (onFiveStarClick) onFiveStarClick();
-              }}
-            >
-              <span className="material-icons text-yellow-400">star</span>
-              <span>5-Star Rated</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                if (onBestSellingClick) onBestSellingClick();
-              }}
-            >
-              <span className="material-icons text-red-500">local_fire_department</span>
-              <span>Best-Selling Items</span>
-            </a>
-            {user ? (
+      {
+        isMobileMenuOpen && (
+          <div className="absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-xl lg:hidden p-4 border-t border-gray-200 dark:border-gray-700">
+            <nav className="space-y-3">
+              <a
+                href="#"
+                className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <span className="material-icons text-primary">category</span>
+                <span>Categories</span>
+              </a>
               <a
                 href="#"
                 className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
                 onClick={(e) => {
                   e.preventDefault();
-                  if (onSignOutClick) onSignOutClick();
+                  setIsMobileMenuOpen(false);
+                  if (onFiveStarClick) onFiveStarClick();
                 }}
               >
-                <span className="material-icons text-gray-500">logout</span>
-                <span>Sign out</span>
+                <span className="material-icons text-slate-900 dark:text-slate-100">star</span>
+                <span>5-Star Rated</span>
               </a>
-            ) : (
               <a
                 href="#"
                 className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
                 onClick={(e) => {
                   e.preventDefault();
-                  if (onSignInClick) onSignInClick();
+                  setIsMobileMenuOpen(false);
+                  if (onBestSellingClick) onBestSellingClick();
                 }}
               >
-                <span className="material-icons text-gray-500">person</span>
-                <span>Sign In</span>
+                <span className="material-icons text-red-500">local_fire_department</span>
+                <span>Best-Selling Items</span>
               </a>
-            )}
-          </nav>
-        </div>
-      )}
-    </header>
+              {user ? (
+                <a
+                  href="#"
+                  className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onSignOutClick) onSignOutClick();
+                  }}
+                >
+                  <span className="material-icons text-gray-500">logout</span>
+                  <span>Sign out</span>
+                </a>
+              ) : (
+                <a
+                  href="#"
+                  className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onSignInClick) onSignInClick();
+                  }}
+                >
+                  <span className="material-icons text-gray-500">person</span>
+                  <span>Sign In</span>
+                </a>
+              )}
+            </nav>
+          </div>
+        )
+      }
+    </header >
   );
 };
 

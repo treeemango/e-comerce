@@ -77,7 +77,7 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
                     className="text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-orange-500 transition-colors min-w-[3rem]"
                     onClick={() => setFilters({ ...filters, rating: starCount })}
                 >
-                    {starCount} <span className="text-yellow-400">★</span>
+                    {starCount} <span className="text-slate-900 dark:text-slate-100">★</span>
                 </button>
                 <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
@@ -115,9 +115,9 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
                             <div className="text-6xl font-bold bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent">
                                 {summary.average_rating.toFixed(1)}
                             </div>
-                            <div className="flex text-yellow-400 text-2xl my-2">
-                                {'★'.repeat(Math.round(summary.average_rating))}
-                                {'☆'.repeat(5 - Math.round(summary.average_rating))}
+                            <div className="flex items-center gap-1 my-2">
+                                <span className="material-icons text-4xl text-slate-900 dark:text-slate-100">star</span>
+                                <span className="text-3xl font-bold text-slate-900 dark:text-white">{summary.average_rating.toFixed(1)}</span>
                             </div>
                             <div className="text-sm text-slate-600 dark:text-slate-400">
                                 Based on {summary.total_reviews} review{summary.total_reviews !== 1 ? 's' : ''}
@@ -183,8 +183,8 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
                 <div className="flex flex-wrap items-center gap-3 mb-6">
                     <button
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${!filters.rating && !filters.verified_only && !filters.with_photos
-                                ? 'bg-orange-500 text-white shadow-lg'
-                                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                            ? 'bg-orange-500 text-white shadow-lg'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
                             }`}
                         onClick={() => setFilters({})}
                     >
@@ -192,8 +192,8 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
                     </button>
                     <button
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1 ${filters.verified_only
-                                ? 'bg-green-500 text-white shadow-lg'
-                                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                            ? 'bg-green-500 text-white shadow-lg'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
                             }`}
                         onClick={() => setFilters({ ...filters, verified_only: !filters.verified_only })}
                     >
@@ -202,8 +202,8 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
                     </button>
                     <button
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1 ${filters.with_photos
-                                ? 'bg-blue-500 text-white shadow-lg'
-                                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                            ? 'bg-blue-500 text-white shadow-lg'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
                             }`}
                         onClick={() => setFilters({ ...filters, with_photos: !filters.with_photos })}
                     >

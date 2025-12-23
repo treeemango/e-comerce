@@ -1,35 +1,57 @@
 CREATE OR REPLACE FUNCTION public.final_checkout_from_cart(
-    p_user_id BIGINT,
-    p_payment_method TEXT,
-    p_shipping_address TEXT,
+    p_user_id UUID DEFAULT NULL,
+    p_payment_method TEXT DEFAULT 'Card',
+    p_first_name TEXT DEFAULT NULL,
+    p_last_name TEXT DEFAULT NULL,
+    p_customer_email TEXT DEFAULT NULL,
+    p_customer_phone TEXT DEFAULT NULL,
+    p_shipping_address_line1 TEXT DEFAULT NULL,
+    p_shipping_postcode TEXT DEFAULT NULL,
+    p_shipping_town_city TEXT DEFAULT NULL,
+    p_shipping_county TEXT DEFAULT NULL,
+    p_shipping_country TEXT DEFAULT 'Kenya',
     p_coupon_code TEXT DEFAULT NULL,
     p_express_delivery BOOLEAN DEFAULT FALSE
 )
-RETURNS BIGINT AS $$
+RETURNS UUID AS $$
 DECLARE
-    v_order_id BIGINT;
-    v_total_amount NUMERIC;
-    v_delivery_fee NUMERIC;
+    v_order_id UUID;
+    v_total_amount NUMERIC := 0.00;
+    v_delivery_fee NUMERIC := 0.00;
     v_discount_amount NUMERIC := 0.00;
+    v_tax_amount NUMERIC := 0.00;
+    v_tax_rate NUMERIC := 0.00;
     v_cart_item RECORD;
     v_coupon_result JSONB;
     v_coupon JSONB;
     v_product_ids UUID[];
     v_final_total NUMERIC;
+    v_shipping_address TEXT;
 BEGIN
-    -- 1. Calculate Delivery Fee (Uses the updated function)
-    v_delivery_fee := public.calculate_cart_delivery_fee(p_user_id, p_express_delivery);
+    -- Construct full shipping address
+    v_shipping_address := COALESCE(p_shipping_address_line1, '') || ', ' || 
+                          COALESCE(p_shipping_town_city, '') || ', ' || 
+                          COALESCE(p_shipping_postcode, '') || ', ' || 
+                          COALESCE(p_shipping_country, '');
 
-    -- 2. Calculate Total Product Value and Check Stock (Crucial Step for BIGINT)
-    SELECT COALESCE(SUM(p.price * ci.quantity::BIGINT), 0.00) -- Ensure calculation uses BIGINT
+    -- 1. Calculate Delivery Fee
+    IF p_user_id IS NOT NULL THEN
+        v_delivery_fee := public.calculate_cart_delivery_fee(p_user_id, p_express_delivery);
+    ELSE
+        -- Placeholder for guest delivery fee if not passed
+        v_delivery_fee := CASE WHEN p_express_delivery THEN 15.00 ELSE 10.00 END; 
+    END IF;
+
+    -- 2. Calculate Total Product Value and Check Stock
+    SELECT COALESCE(SUM(pv.price * ci.quantity), 0.00)
     INTO v_total_amount
     FROM cart_items ci
-    JOIN products p ON ci.product_id = p.id
+    JOIN product_variants pv ON ci.product_id = pv.product_id 
     WHERE ci.user_id = p_user_id;
 
     -- Check if cart is empty
     IF v_total_amount = 0.00 THEN
-        RETURN 0; -- Cart is empty
+        RAISE EXCEPTION 'Cart is empty for user %', p_user_id;
     END IF;
 
     -- 3. Apply Discount using coupon code when provided
@@ -39,7 +61,7 @@ BEGIN
     WHERE ci.user_id = p_user_id;
 
     IF p_coupon_code IS NOT NULL AND v_product_ids IS NOT NULL THEN
-        v_coupon_result := apply_coupon(p_coupon_code, v_product_ids, NULL);
+        v_coupon_result := apply_coupon(p_coupon_code, v_product_ids, p_user_id);
 
         IF COALESCE((v_coupon_result->>'success')::BOOLEAN, FALSE) THEN
             v_coupon := v_coupon_result->'coupon';
@@ -53,46 +75,60 @@ BEGIN
             v_discount_amount := LEAST(v_discount_amount, v_total_amount);
 
             UPDATE coupons
-            SET used_quantity = COALESCE(used_quantity, 0) + 1,
-                claimed_quantity = GREATEST(COALESCE(claimed_quantity, 0), COALESCE(used_quantity, 0) + 1)
+            SET used_quantity = COALESCE(used_quantity, 0) + 1
             WHERE id = (v_coupon->>'id')::UUID;
         END IF;
     END IF;
 
-    v_final_total := GREATEST(v_total_amount - v_discount_amount, 0) + v_delivery_fee;
+    -- 4. Calculate Tax
+    v_tax_rate := public.get_tax_rate(p_shipping_country);
+    v_tax_amount := public.calculate_order_tax(v_total_amount - v_discount_amount, v_delivery_fee, p_shipping_country);
 
-    -- 4. Create the main order record
-    INSERT INTO orders (user_id, status, total_amount, delivery_fee, discount_amount, payment_method, shipping_address)
-    VALUES (p_user_id, 'pending', v_final_total, v_delivery_fee, v_discount_amount, p_payment_method, p_shipping_address)
+    v_final_total := GREATEST(v_total_amount - v_discount_amount, 0) + v_delivery_fee + v_tax_amount;
+
+    -- 5. Create the main order record
+    INSERT INTO orders (
+        user_id, status, total, delivery_fee, discount_amount, tax_amount, tax_rate,
+        payment_method_id, shipping_address, first_name, last_name, customer_email, 
+        customer_phone, shipping_address_line1, shipping_postcode, shipping_town_city, 
+        shipping_county, shipping_country, is_guest
+    )
+    VALUES (
+        p_user_id, 'pending', v_final_total, v_delivery_fee, v_discount_amount, v_tax_amount, v_tax_rate,
+        p_payment_method, v_shipping_address, p_first_name, p_last_name, p_customer_email,
+        p_customer_phone, p_shipping_address_line1, p_shipping_postcode, p_shipping_town_city,
+        p_shipping_county, p_shipping_country, (p_user_id IS NULL)
+    )
     RETURNING id INTO v_order_id;
 
-    -- 5. Process Cart Items: Create order details and DEDUCT STOCK
+    -- 6. Process Cart Items: Create order details and DEDUCT STOCK
     FOR v_cart_item IN 
-        SELECT ci.product_id, ci.quantity::BIGINT AS quantity, p.price, p.stock::BIGINT AS current_stock -- Cast stock to BIGINT for comparison
+        SELECT ci.product_id, ci.quantity, pv.price, pv.stock, pv.id as variant_id
         FROM cart_items ci
-        JOIN products p ON ci.product_id = p.id
+        JOIN product_variants pv ON ci.product_id = pv.product_id
         WHERE ci.user_id = p_user_id
     LOOP
-        -- **Stock Check (Using BIGINT)**
-        IF v_cart_item.quantity > v_cart_item.current_stock THEN
-            -- In a production system, this would rollback the transaction and raise an error.
-            RAISE EXCEPTION 'Insufficient stock for product % (Requested: %, Available: %)', v_cart_item.product_id, v_cart_item.quantity, v_cart_item.current_stock;
+        -- Stock Check
+        IF v_cart_item.quantity > v_cart_item.stock THEN
+            RAISE EXCEPTION 'Insufficient stock for product % (Requested: %, Available: %)', v_cart_item.product_id, v_cart_item.quantity, v_cart_item.stock;
         END IF;
 
-        -- Create Order Detail
-        INSERT INTO order_details (order_id, product_id, quantity, unit_price)
-        VALUES (v_order_id, v_cart_item.product_id, v_cart_item.quantity, v_cart_item.price);
+        -- Create Order Item (Fix table name to order_items if that's what's used)
+        INSERT INTO order_items (order_id, product_id, variant_id, quantity, price)
+        VALUES (v_order_id, v_cart_item.product_id, v_cart_item.variant_id, v_cart_item.quantity, v_cart_item.price);
 
-        -- **Deduct Stock (Using BIGINT)**
-        UPDATE products
-        SET stock = stock - v_cart_item.quantity -- stock is now BIGINT
-        WHERE id = v_cart_item.product_id;
+        -- Deduct Stock
+        UPDATE product_variants
+        SET stock = stock - v_cart_item.quantity
+        WHERE id = v_cart_item.variant_id;
     END LOOP;
 
-    -- 6. Clear the cart
-    DELETE FROM cart_items WHERE user_id = p_user_id;
+    -- 7. Clear the cart
+    IF p_user_id IS NOT NULL THEN
+        DELETE FROM cart_items WHERE user_id = p_user_id;
+    END IF;
 
-    -- 7. Return the new order ID
+    -- 8. Return the new order ID
     RETURN v_order_id;
 END;
 $$ LANGUAGE plpgsql VOLATILE;

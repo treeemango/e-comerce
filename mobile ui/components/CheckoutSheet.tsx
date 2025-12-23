@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Product, UserCoupon, AppliedCoupon } from '@/types';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
-import { fetchUserCoupons, applyCoupon, checkout, fetchCartDeliveryFee, syncCart } from '@/lib/api';
+import { fetchUserCoupons, applyCoupon, checkout, fetchCartDeliveryFee, syncCart, fetchUserAddresses, UserAddress, fetchTaxBreakdown, TaxBreakdown } from '@/lib/api';
 
 interface CartItem {
   product: Product;
@@ -27,16 +27,37 @@ const formatPrice = (value: number, currency?: string) => {
   }
 };
 
+const getEstimatedDelivery = (isExpress: boolean) => {
+  const date = new Date();
+  const minDays = isExpress ? 1 : 3;
+  const maxDays = isExpress ? 2 : 5;
+
+  const minDate = new Date(date);
+  minDate.setDate(date.getDate() + minDays);
+
+  const maxDate = new Date(date);
+  maxDate.setDate(date.getDate() + maxDays);
+
+  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  return `${minDate.toLocaleDateString(undefined, options)} - ${maxDate.toLocaleDateString(undefined, options)}`;
+};
+
+type CheckoutStep = 'shipping' | 'payment' | 'review';
+
 export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onClose, onPlaceOrder }) => {
+  const [step, setStep] = useState<CheckoutStep>('shipping');
+  const [isGuest, setIsGuest] = useState(!userId);
   const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
   const [payment, setPayment] = useState<'card' | 'mpesa' | 'cod' | 'wallet'>('card');
   const [mpesaPhone, setMpesaPhone] = useState('');
-  const [selectedAddress, setSelectedAddress] = useState<'home' | 'new'>('home');
+  const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
 
   const [addressData, setAddressData] = useState({
     firstName: '',
     lastName: '',
+    email: '',
     phoneNumber: '',
     postcode: '',
     addressLine1: '',
@@ -54,6 +75,99 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
   const [isApplying, setIsApplying] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [hasAttemptedAutoApply, setHasAttemptedAutoApply] = useState(false);
+  const [townSuggestions, setTownSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [taxInfo, setTaxInfo] = useState<TaxBreakdown | null>(null);
+
+  const KENYAN_TOWNS = [
+    'Nairobi - CBD', 'Nairobi - Westlands', 'Nairobi - Kilimani', 'Nairobi - Lavington', 'Nairobi - Karen',
+    'Nairobi - South C', 'Nairobi - South B', 'Nairobi - Embakasi', 'Nairobi - Roysambu', 'Nairobi - Kasarani',
+    'Nairobi - Langata', 'Nairobi - Ruai', 'Mombasa - Nyali', 'Mombasa - Bamburi', 'Mombasa - CBD',
+    'Kisumu - Milimani', 'Kisumu - CBD', 'Nakuru - Milimani', 'Eldoret', 'Thika', 'Ruiru', 'Kiambu',
+    'Machakos', 'Naivasha', 'Nanyuki', 'Kitale', 'Malindi', 'Diani', 'Kericho', 'Kisii'
+  ];
+
+  const COUNTRIES = [
+    { code: 'DZ', name: 'Algeria' },
+    { code: 'AO', name: 'Angola' },
+    { code: 'BJ', name: 'Benin' },
+    { code: 'BW', name: 'Botswana' },
+    { code: 'BF', name: 'Burkina Faso' },
+    { code: 'BI', name: 'Burundi' },
+    { code: 'CV', name: 'Cabo Verde' },
+    { code: 'CM', name: 'Cameroon' },
+    { code: 'CF', name: 'Central African Republic' },
+    { code: 'TD', name: 'Chad' },
+    { code: 'KM', name: 'Comoros' },
+    { code: 'CG', name: 'Congo-Brazzaville' },
+    { code: 'CD', name: 'Congo-Kinshasa' },
+    { code: 'DJ', name: 'Djibouti' },
+    { code: 'EG', name: 'Egypt' },
+    { code: 'GQ', name: 'Equatorial Guinea' },
+    { code: 'ER', name: 'Eritrea' },
+    { code: 'SZ', name: 'Eswatini' },
+    { code: 'ET', name: 'Ethiopia' },
+    { code: 'GA', name: 'Gabon' },
+    { code: 'GM', name: 'Gambia' },
+    { code: 'GH', name: 'Ghana' },
+    { code: 'GN', name: 'Guinea' },
+    { code: 'GW', name: 'Guinea-Bissau' },
+    { code: 'CI', name: 'Ivory Coast' },
+    { code: 'KE', name: 'Kenya' },
+    { code: 'LS', name: 'Lesotho' },
+    { code: 'LR', name: 'Liberia' },
+    { code: 'LY', name: 'Libya' },
+    { code: 'MG', name: 'Madagascar' },
+    { code: 'MW', name: 'Malawi' },
+    { code: 'ML', name: 'Mali' },
+    { code: 'MR', name: 'Mauritania' },
+    { code: 'MU', name: 'Mauritius' },
+    { code: 'MA', name: 'Morocco' },
+    { code: 'MZ', name: 'Mozambique' },
+    { code: 'NA', name: 'Namibia' },
+    { code: 'NE', name: 'Niger' },
+    { code: 'NG', name: 'Nigeria' },
+    { code: 'RW', name: 'Rwanda' },
+    { code: 'ST', name: 'Sao Tome and Principe' },
+    { code: 'SN', name: 'Senegal' },
+    { code: 'SC', name: 'Seychelles' },
+    { code: 'SL', name: 'Sierra Leone' },
+    { code: 'SO', name: 'Somalia' },
+    { code: 'ZA', name: 'South Africa' },
+    { code: 'SS', name: 'South Sudan' },
+    { code: 'SD', name: 'Sudan' },
+    { code: 'TZ', name: 'Tanzania' },
+    { code: 'TG', name: 'Togo' },
+    { code: 'TN', name: 'Tunisia' },
+    { code: 'UG', name: 'Uganda' },
+    { code: 'ZM', name: 'Zambia' },
+    { code: 'ZW', name: 'Zimbabwe' },
+    { code: 'GB', name: 'United Kingdom' },
+    { code: 'US', name: 'United States' },
+  ];
+
+  useEffect(() => {
+    if (userId) {
+      fetchUserAddresses(userId).then(addresses => {
+        setSavedAddresses(addresses);
+        const defaultAddr = addresses.find(a => a.is_default) || addresses[0];
+        if (defaultAddr) {
+          setSelectedAddressId(defaultAddr.id);
+          setAddressData({
+            firstName: defaultAddr.first_name,
+            lastName: defaultAddr.last_name,
+            email: '',
+            phoneNumber: defaultAddr.phone_number,
+            postcode: defaultAddr.postcode,
+            addressLine1: defaultAddr.address_line1,
+            townCity: defaultAddr.town_city,
+            county: defaultAddr.county,
+            country: defaultAddr.country,
+          });
+        }
+      });
+    }
+  }, [userId]);
 
   useEffect(() => {
     const applyPromos = async () => {
@@ -65,15 +179,12 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
 
   useEffect(() => {
     const getDeliveryFee = async () => {
-      if (userId) {
-        const fee = await fetchCartDeliveryFee(userId, shipping === 'express');
-        setDeliveryFee(fee);
-      }
+      const fee = await fetchCartDeliveryFee(userId || null, shipping === 'express');
+      setDeliveryFee(fee);
     };
     getDeliveryFee();
   }, [userId, shipping, items]);
 
-  // Auto-apply best coupon
   useEffect(() => {
     const autoApplyBestCoupon = async () => {
       if (!userId || items.length === 0 || hasAttemptedAutoApply || appliedCoupon) return;
@@ -82,7 +193,6 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
         setHasAttemptedAutoApply(true);
         const userCoupons = await fetchUserCoupons(userId);
 
-        // Filter for active and unused coupons
         const activeCoupons = userCoupons.filter(uc =>
           !uc.used_at &&
           uc.coupon.status === 'Ongoing' &&
@@ -145,7 +255,7 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
         }
         setDiscountAmount(disc);
       } else {
-        setCouponError(result.message);
+        setCouponError(result.message || 'Invalid coupon');
       }
     } catch (err) {
       setCouponError('Failed to apply coupon');
@@ -154,39 +264,39 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
     }
   };
 
-
   const currency = items[0]?.product.currency;
-
   const subtotal = useMemo(
     () => promoResult?.subtotal || items.reduce((sum, line) => sum + (line.product.price || 0) * line.quantity, 0),
     [items, promoResult]
   );
 
   const totalSavings = promoResult?.totalSavings || 0;
-  const fees = 0; // placeholder for taxes/fees if needed
-  const total = Math.max(0, (promoResult?.finalTotal || subtotal) - discountAmount) + deliveryFee + fees;
+
+  // Fetch dynamic tax breakdown when country or amounts change
+  useEffect(() => {
+    const getTaxInfo = async () => {
+      const taxableSubtotal = Math.max(0, subtotal - totalSavings - discountAmount);
+      const tax = await fetchTaxBreakdown(taxableSubtotal, deliveryFee, addressData.country);
+      setTaxInfo(tax);
+    };
+    if (subtotal > 0) {
+      getTaxInfo();
+    }
+  }, [subtotal, deliveryFee, totalSavings, discountAmount, addressData.country]);
+
+  // Use dynamic tax from API, fallback to 16% if unavailable
+  const taxes = taxInfo?.tax_amount ?? ((subtotal + deliveryFee - totalSavings - discountAmount) * 0.16);
+  const taxName = taxInfo?.tax_name ?? 'VAT';
+  const taxPercentage = taxInfo?.tax_percentage ?? 16;
+  const total = Math.max(0, (promoResult?.finalTotal || subtotal) - discountAmount) + deliveryFee + taxes;
 
   const handlePlaceOrder = async () => {
-    if (!userId) {
-      alert('Please sign in to place order');
-      return;
-    }
-
     if (payment === 'mpesa' && !mpesaPhone) {
       alert('Please enter M-Pesa phone number');
       return;
     }
 
-    if (selectedAddress === 'new') {
-      const { firstName, lastName, addressLine1, townCity, postcode } = addressData;
-      if (!firstName || !lastName || !addressLine1 || !townCity || !postcode) {
-        alert('Please fill in all required address fields');
-        return;
-      }
-    }
-
     try {
-      // Sync cart items to database before checkout
       const flatItems: Product[] = [];
       items.forEach(item => {
         for (let i = 0; i < item.quantity; i++) {
@@ -194,33 +304,18 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
         }
       });
 
-      const syncSuccess = await syncCart(userId, flatItems);
+      const syncSuccess = await syncCart(userId || null, flatItems);
       if (!syncSuccess) {
-        alert('Failed to synchronize cart. Please try again.');
+        alert('Failed to synchronize cart.');
         return;
       }
 
-      // For demo purposes, we'll assume "home" is already saved. 
-      // In a real app, you'd fetch this from the user's profile.
-      const shippingDetails = selectedAddress === 'home'
-        ? {
-          firstName: 'John',
-          lastName: 'Doe',
-          phoneNumber: '254712345678',
-          addressLine1: '123 Market Street',
-          postcode: '00100',
-          townCity: 'Nairobi',
-          county: 'Nairobi',
-          country: 'Kenya'
-        }
-        : addressData;
-
       const orderId = await checkout(
-        userId,
+        userId || null,
         payment === 'mpesa' ? 'M-Pesa' : payment.toUpperCase(),
         {
-          ...shippingDetails,
-          phoneNumber: payment === 'mpesa' ? mpesaPhone : shippingDetails.phoneNumber,
+          ...addressData,
+          phoneNumber: payment === 'mpesa' ? mpesaPhone : addressData.phoneNumber,
         },
         {
           couponCode: appliedCoupon?.code,
@@ -231,7 +326,7 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
       if (orderId) {
         onPlaceOrder({ couponCode: appliedCoupon?.code });
       } else {
-        alert('Failed to place order. Please try again.');
+        alert('Order failed.');
       }
     } catch (err) {
       console.error(err);
@@ -239,244 +334,290 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
     }
   };
 
+  const handleAddressSelect = (id: string) => {
+    setSelectedAddressId(id);
+    const addr = savedAddresses.find(a => a.id === id);
+    if (addr) {
+      setAddressData({
+        firstName: addr.first_name,
+        lastName: addr.last_name,
+        email: addressData.email,
+        phoneNumber: addr.phone_number,
+        postcode: addr.postcode,
+        addressLine1: addr.address_line1,
+        townCity: addr.town_city,
+        county: addr.county,
+        country: addr.country,
+      });
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex flex-col justify-end">
-      <div className="bg-white dark:bg-surface-dark rounded-t-3xl shadow-2xl border-t border-gray-200 dark:border-gray-800 max-h-[85vh] overflow-hidden">
-        {/* Drag handle / header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto" />
-          <button aria-label="Close" className="absolute right-4 top-3 text-gray-500" onClick={onClose}>
-            <span className="material-icons-outlined text-xl">close</span>
-          </button>
+      <div className="bg-white dark:bg-surface-dark rounded-t-[2.5rem] shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Header with Progress */}
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-black text-black dark:text-white">Checkout</h2>
+            <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
+              <span className="material-icons-outlined text-sm">close</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {[1, 2, 3].map(i => {
+              const isActive = (step === 'shipping' && i === 1) || (step === 'payment' && i === 2) || (step === 'review' && i === 3);
+              const isDone = (step === 'payment' && i < 2) || (step === 'review' && i < 3);
+              return (
+                <React.Fragment key={i}>
+                  <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${isActive ? 'bg-primary' : isDone ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-800'}`} />
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="px-4 pb-4 pt-1 overflow-y-auto space-y-4">
-          {/* Address */}
-          <section className="bg-gray-50 dark:bg-gray-900/40 rounded-2xl p-3 border border-gray-100 dark:border-gray-800">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="material-icons-outlined text-primary">location_on</span>
-                <h3 className="text-sm font-bold text-black dark:text-white">Delivery address</h3>
-              </div>
-              <button className="text-xs font-semibold text-primary" onClick={() => setSelectedAddress('new')}>Change</button>
-            </div>
-            <div className="space-y-2">
-              <label className={`flex items-center gap-2 p-3 rounded-xl border transition-all ${selectedAddress === 'home' ? 'border-primary bg-orange-50/50 dark:bg-gray-800' : 'border-gray-200 dark:border-gray-700'}`}>
-                <input
-                  type="radio"
-                  name="address"
-                  checked={selectedAddress === 'home'}
-                  onChange={() => setSelectedAddress('home')}
-                  className="text-primary focus:ring-primary"
-                />
-                <div className="text-xs text-gray-700 dark:text-gray-200">
-                  <div className="font-bold">Home</div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">123 Market Street, Suite 4, Nairobi</div>
-                </div>
-              </label>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 
-              <label className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${selectedAddress === 'new' ? 'border-primary bg-orange-50/50 dark:bg-gray-800' : 'border-dashed border-gray-300 dark:border-gray-700'}`}>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="address"
-                    checked={selectedAddress === 'new'}
-                    onChange={() => setSelectedAddress('new')}
-                    className="text-primary focus:ring-primary"
-                  />
-                  <div className="text-xs font-bold text-gray-700 dark:text-gray-200">Add a new address</div>
-                </div>
+          {/* Step 1: Shipping */}
+          {step === 'shipping' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {userId && savedAddresses.length > 0 && (
+                <section>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3">Saved Addresses</h3>
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                    {savedAddresses.map(addr => (
+                      <div
+                        key={addr.id}
+                        onClick={() => handleAddressSelect(addr.id)}
+                        className={`flex-shrink-0 w-48 p-3 rounded-2xl border-2 transition-all ${selectedAddressId === addr.id ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
+                      >
+                        <p className="text-xs font-bold truncate">{addr.first_name} {addr.last_name}</p>
+                        <p className="text-[10px] text-gray-500 line-clamp-2 mt-1">{addr.address_line1}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{addr.town_city}</p>
+                      </div>
+                    ))}
+                    <div
+                      onClick={() => { setSelectedAddressId('new'); setAddressData({ ...addressData, addressLine1: '', postcode: '', townCity: '' }) }}
+                      className={`flex-shrink-0 w-48 p-3 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-gray-400 ${selectedAddressId === 'new' ? 'border-primary bg-orange-50 text-primary' : 'border-gray-200 dark:border-gray-800'}`}
+                    >
+                      <span className="material-icons text-lg mb-1">add</span>
+                      <span className="text-[10px] font-bold">Add New</span>
+                    </div>
+                  </div>
+                </section>
+              )}
 
-                {selectedAddress === 'new' && (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <input
-                      placeholder="First Name"
-                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
-                      value={addressData.firstName}
-                      onChange={(e) => setAddressData({ ...addressData, firstName: e.target.value })}
-                    />
-                    <input
-                      placeholder="Last Name"
-                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
-                      value={addressData.lastName}
-                      onChange={(e) => setAddressData({ ...addressData, lastName: e.target.value })}
-                    />
-                    <input
-                      placeholder="Address Line 1"
-                      className="col-span-2 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
-                      value={addressData.addressLine1}
-                      onChange={(e) => setAddressData({ ...addressData, addressLine1: e.target.value })}
-                    />
+              <section className="space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Delivery Information</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <input placeholder="First Name" value={addressData.firstName} onChange={e => setAddressData({ ...addressData, firstName: e.target.value })} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                  <input placeholder="Last Name" value={addressData.lastName} onChange={e => setAddressData({ ...addressData, lastName: e.target.value })} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                </div>
+                {(isGuest || !userId) && (
+                  <input placeholder="Email Address" value={addressData.email} onChange={e => setAddressData({ ...addressData, email: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                )}
+                <input placeholder="Phone Number" value={addressData.phoneNumber} onChange={e => setAddressData({ ...addressData, phoneNumber: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                <input placeholder="Shipping Address" value={addressData.addressLine1} onChange={e => setAddressData({ ...addressData, addressLine1: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
                     <input
                       placeholder="Town / City"
-                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
                       value={addressData.townCity}
-                      onChange={(e) => setAddressData({ ...addressData, townCity: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setAddressData({ ...addressData, townCity: val });
+                        if (val.length > 1) {
+                          const filtered = KENYAN_TOWNS.filter(t => t.toLowerCase().includes(val.toLowerCase()));
+                          setTownSuggestions(filtered);
+                          setShowSuggestions(true);
+                        } else {
+                          setShowSuggestions(false);
+                        }
+                      }}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                      className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm"
                     />
-                    <input
-                      placeholder="Postcode"
-                      className="col-span-1 p-2 text-[11px] border rounded-lg dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white"
-                      value={addressData.postcode}
-                      onChange={(e) => setAddressData({ ...addressData, postcode: e.target.value })}
-                    />
-                  </div>
-                )}
-              </label>
-            </div>
-          </section>
-
-          {/* Items summary */}
-          <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-bold text-black dark:text-white">Order summary</h3>
-              <span className="text-xs text-gray-500">{items.reduce((s, i) => s + i.quantity, 0)} items</span>
-            </div>
-            <div className="space-y-3">
-              {items.map((line) => (
-                <div key={line.product.id} className="flex gap-3 items-start">
-                  <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                    <img src={line.product.image} alt={line.product.title} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-black dark:text-white line-clamp-2">{line.product.title}</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">Qty {line.quantity}</div>
-                  </div>
-                  <div className="text-xs font-bold text-black dark:text-white whitespace-nowrap flex flex-col items-end">
-                    {(() => {
-                      const resultInfo = promoResult?.items.find(pi => pi.product.id === line.product.id);
-                      return (
-                        <>
-                          <div className={resultInfo && resultInfo.total < (line.product.price || 0) * line.quantity ? 'text-emerald-600' : ''}>
-                            {formatPrice(resultInfo ? resultInfo.total : (line.product.price || 0) * line.quantity, currency)}
+                    {showSuggestions && townSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl shadow-xl max-h-48 overflow-auto">
+                        {townSuggestions.map(town => (
+                          <div
+                            key={town}
+                            className="px-4 py-3 hover:bg-orange-50 dark:hover:bg-gray-900 text-xs font-medium dark:text-white border-b border-gray-50 dark:border-gray-800 last:border-0"
+                            onClick={() => {
+                              setAddressData({ ...addressData, townCity: town });
+                              setShowSuggestions(false);
+                            }}
+                          >
+                            {town}
                           </div>
-                          {resultInfo && resultInfo.total < (line.product.price || 0) * line.quantity && (
-                            <div className="text-[9px] text-gray-400 line-through">
-                              {formatPrice((resultInfo.originalPrice || line.product.price || 0) * line.quantity, currency)}
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <input placeholder="Postcode" value={addressData.postcode} onChange={e => setAddressData({ ...addressData, postcode: e.target.value })} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block">Country</label>
+                  <select
+                    value={addressData.country}
+                    onChange={e => setAddressData({ ...addressData, country: e.target.value })}
+                    className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm dark:text-white"
+                  >
+                    {COUNTRIES.map(country => (
+                      <option key={country.code} value={country.name}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-gray-400 mt-1">Tax calculated based on country</p>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Shipping Method</h3>
+                <div className="grid grid-cols-1 gap-3">
+                  <div
+                    onClick={() => setShipping('standard')}
+                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${shipping === 'standard' ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
+                  >
+                    <div>
+                      <p className="text-sm font-bold">Standard Delivery</p>
+                      <p className="text-[10px] text-gray-500">Est. {getEstimatedDelivery(false)}</p>
+                    </div>
+                    <p className="text-sm font-black text-green-600">FREE</p>
+                  </div>
+                  <div
+                    onClick={() => setShipping('express')}
+                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${shipping === 'express' ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
+                  >
+                    <div>
+                      <p className="text-sm font-bold">Express Delivery</p>
+                      <p className="text-[10px] text-gray-500">Est. {getEstimatedDelivery(true)}</p>
+                    </div>
+                    <p className="text-sm font-black text-primary">{formatPrice(6.99, currency)}</p>
                   </div>
                 </div>
-              ))}
+              </section>
             </div>
-          </section>
-
-          {/* Shipping */}
-          <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800">
-            <h3 className="text-sm font-bold text-black dark:text-white mb-2">Delivery speed</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {[{ key: 'standard', label: 'Standard (3-5d)', price: 0 }, { key: 'express', label: 'Express (1-2d)', price: 6.99 }].map((opt) => (
-                <button
-                  key={opt.key}
-                  className={`rounded-2xl border p-3 text-left text-xs font-semibold transition-all ${shipping === opt.key ? 'border-primary bg-orange-50/50 text-primary' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'}`}
-                  onClick={() => setShipping(opt.key as 'standard' | 'express')}
-                >
-                  <div className="flex items-center justify-between">
-                    <span>{opt.label}</span>
-                    {shipping === opt.key && <span className="material-icons-outlined text-[14px]">check_circle</span>}
-                  </div>
-                  <div className="text-[11px] font-bold mt-1 text-gray-500">{opt.price === 0 ? 'Free' : formatPrice(opt.price, currency)}</div>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* Payment */}
-          <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800">
-            <h3 className="text-sm font-bold text-black dark:text-white mb-2">Payment</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { key: 'card', label: 'Card' },
-                { key: 'mpesa', label: 'M-Pesa' },
-                { key: 'wallet', label: 'Wallet' },
-                { key: 'cod', label: 'Cash' }
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all ${payment === opt.key ? 'border-primary bg-orange-50/50 text-primary' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200'}`}
-                  onClick={() => setPayment(opt.key as any)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {payment === 'mpesa' && (
-              <div className="mt-3 space-y-2">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">M-Pesa Phone Number</label>
-                <input
-                  placeholder="2547XXXXXXXX"
-                  className="w-full p-3 text-xs border rounded-xl dark:bg-gray-900 border-gray-200 dark:border-gray-700 dark:text-white outline-none focus:border-primary transition-all"
-                  value={mpesaPhone}
-                  onChange={(e) => setMpesaPhone(e.target.value)}
-                />
-                <p className="text-[9px] text-gray-400">Payment request will be sent to this number.</p>
-              </div>
-            )}
-            <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-              {payment === 'cod' ? 'Pay on delivery available for eligible orders.' : payment === 'mpesa' ? 'Mobile money payments are fast and secure.' : 'Cards and wallets are processed securely with 3D Secure.'}
-            </div>
-          </section>
-
-          {/* Coupons Savings Display */}
-          {discountAmount > 0 && (
-            <section className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-3 border border-emerald-100 dark:border-emerald-800/50">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-600 text-sm">confirmation_number</span>
-                <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                  Best coupon "{appliedCoupon?.code}" automatically applied!
-                </div>
-              </div>
-            </section>
           )}
-          {couponError && <div className="text-[10px] text-red-500 mt-1 px-4 font-medium">{couponError}</div>}
 
-          {/* Totals */}
-          <section className="bg-white dark:bg-gray-900/30 rounded-2xl p-3 border border-gray-100 dark:border-gray-800 space-y-2">
-            <div className="flex items-center justify-between text-lg font-black text-black dark:text-white">
-              <span>Total</span>
-              <span>{formatPrice(total, currency)}</span>
+          {/* Step 2: Payment */}
+          {step === 'payment' && (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <section className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Select Payment Method</h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { id: 'card', label: 'Credit / Debit Card', icon: 'credit_card', color: 'blue' },
+                    { id: 'mpesa', label: 'M-Pesa Mobile Money', icon: 'phone_android', color: 'green' },
+                    { id: 'wallet', label: 'User Wallet', icon: 'account_balance_wallet', color: 'orange' },
+                    { id: 'cod', label: 'Cash on Delivery', icon: 'payments', color: 'gray' }
+                  ].map(opt => (
+                    <div
+                      key={opt.id}
+                      onClick={() => setPayment(opt.id as any)}
+                      className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${payment === opt.id ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
+                    >
+                      <span className={`material-icons-outlined text-${opt.color}-500`}>{opt.icon}</span>
+                      <span className="text-sm font-bold flex-1">{opt.label}</span>
+                      {payment === opt.id && <span className="material-icons-outlined text-primary text-sm">check_circle</span>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {payment === 'mpesa' && (
+                <section className="animate-in fade-in">
+                  <h3 className="text-[10px] font-black uppercase text-gray-400 mb-2">M-Pesa Number</h3>
+                  <input placeholder="254..." value={mpesaPhone} onChange={e => setMpesaPhone(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm font-bold" />
+                </section>
+              )}
             </div>
-            {totalSavings > 0 && (
-              <div className="text-right text-[10px] text-indigo-600 font-bold mt-0.5">
-                Total savings: {formatPrice(totalSavings, currency)}
-              </div>
-            )}
-            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
-              <span>Shipping</span>
-              <span className={deliveryFee === 0 ? 'text-green-600 font-bold' : 'font-bold'}>
-                {deliveryFee === 0 ? 'Free' : formatPrice(deliveryFee, currency)}
-              </span>
+          )}
+
+          {/* Step 3: Review */}
+          {step === 'review' && (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <section className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-3xl space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Order Summary</h3>
+                  <span className="text-xs font-bold text-primary">{items.length} items</span>
+                </div>
+                {items.slice(0, 3).map(item => (
+                  <div key={item.product.id} className="flex gap-3">
+                    <img src={item.product.image} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                    <div className="flex-1">
+                      <p className="text-[11px] font-bold line-clamp-1">{item.product.title}</p>
+                      <p className="text-[9px] text-gray-500">Qty {item.quantity}</p>
+                    </div>
+                  </div>
+                ))}
+                {items.length > 3 && <p className="text-[10px] text-gray-400 text-center font-bold">+ {items.length - 3} more items</p>}
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center gap-3 p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded-2xl">
+                  <span className="material-icons text-blue-500">local_shipping</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold">Delivery to {addressData.townCity}</p>
+                    <p className="text-[10px] text-gray-500">Scheduled: {getEstimatedDelivery(shipping === 'express')}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-4 bg-green-50/50 dark:bg-green-900/20 rounded-2xl">
+                  <span className="material-icons text-green-500">verified_user</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold">Payment via {payment.toUpperCase()}</p>
+                    <p className="text-[10px] text-gray-500">SSL Encrypted Transaction</p>
+                  </div>
+                </div>
+              </section>
             </div>
-            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
+          )}
+        </div>
+
+        {/* Sticky Footer */}
+        <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md">
+          <div className="space-y-3 mb-6">
+            <div className="flex justify-between text-xs text-gray-500">
               <span>Subtotal</span>
               <span>{formatPrice(subtotal, currency)}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-xs text-indigo-600 font-bold">
-                <span>Coupon discount</span>
+                <span>Coupon Applied</span>
                 <span>-{formatPrice(discountAmount, currency)}</span>
               </div>
             )}
-            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
-              <span>Fees & taxes</span>
-              <span>{formatPrice(fees, currency)}</span>
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>{taxName} ({taxPercentage}%)</span>
+              <span>{formatPrice(taxes, currency)}</span>
             </div>
-            <div className="flex justify-between text-sm font-bold text-black dark:text-white pt-2 border-t border-gray-100 dark:border-gray-800">
-              <span>Total</span>
-              <span>{formatPrice(total, currency)}</span>
+            <div className="flex justify-between text-sm font-black text-black dark:text-white pt-2 border-t border-gray-50 dark:border-gray-800">
+              <span>Total Amount</span>
+              <span className="text-primary text-lg">{formatPrice(total, currency)}</span>
             </div>
-            <button
-              className="w-full bg-primary hover:bg-orange-600 text-white font-black rounded-full py-4 text-sm shadow-xl shadow-primary/20 transition-all active:scale-[0.98] mt-2 group"
-              onClick={handlePlaceOrder}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <span>Place order ({items.reduce((s, i) => s + i.quantity, 0)})</span>
-                <span className="material-icons-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
-              </div>
-            </button>
-          </section>
+          </div>
+
+          <button
+            onClick={() => {
+              if (step === 'shipping') setStep('payment');
+              else if (step === 'payment') setStep('review');
+              else handlePlaceOrder();
+            }}
+            className="w-full bg-primary py-4 rounded-full font-black text-white shadow-xl shadow-primary/20 flex items-center justify-center gap-2 group transition-all active:scale-[0.98]"
+          >
+            <span>{step === 'review' ? 'Place Order Now' : 'Continue'}</span>
+            <span className="material-icons text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+          </button>
+
+          {step !== 'shipping' && (
+            <button onClick={() => {
+              if (step === 'payment') setStep('shipping');
+              if (step === 'review') setStep('payment');
+            }} className="w-full mt-3 py-2 text-xs font-bold text-gray-400">Go Back</button>
+          )}
         </div>
       </div>
     </div>
@@ -484,3 +625,4 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
 };
 
 export default CheckoutSheet;
+

@@ -23,6 +23,7 @@ import { SellerMessagesView } from './SellerMessagesView';
 import { SellerCreateAutomaticDiscountView } from './SellerCreateAutomaticDiscountView';
 import { SellerManageQuantityDiscountsView } from './SellerManageQuantityDiscountsView';
 import { SellerWalletView } from './SellerWalletView';
+import { SellerOrderDetailsSheet } from './SellerOrderDetailsSheet';
 
 interface SellerDashboardProps {
   sellerId: string;
@@ -61,6 +62,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
   const [showCreateAutomaticDiscount, setShowCreateAutomaticDiscount] = useState(false);
   const [selectedProductForDiscounts, setSelectedProductForDiscounts] = useState<Product | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<SellerOrder | null>(null);
 
   // Initial Data Load
   useEffect(() => {
@@ -75,7 +77,8 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             brand_ids: [],
             price_min: null,
             price_max: null,
-            attributes: {}
+            attributes: {},
+            delivery_locations: []
           }, sellerId),
           fetchSellerOrders(sellerId),
           getSellerUnreadCount(sellerId),
@@ -152,6 +155,10 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
           <SellerOrdersView
             orders={orders}
             loading={loading}
+            onOrderClick={(orderId) => {
+              const order = orders.find(o => o.id === orderId);
+              if (order) setSelectedOrder(order);
+            }}
           />
         );
       case 'promotions':
@@ -306,17 +313,16 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
                 </div>
                 <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
                   {lowStockItems.map(item => (
-                    <div key={item.product_id} className="min-w-[140px] bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
+                    <div key={item.product_id || item.id} className="min-w-[140px] bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
                       <div className="w-full aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden">
-                        {/* Placeholder for image if we had it in inventory item */}
-                        {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-200" />}
+                        {item.image ? <img src={item.image} className="w-full h-full object-cover" alt={item.title || item.product_title} /> : <div className="w-full h-full bg-gray-200" />}
                       </div>
-                      <div className="text-xs font-bold text-gray-800 truncate mb-1">{item.product_title}</div>
+                      <div className="text-xs font-bold text-gray-800 truncate mb-1">{item.title || item.product_title || 'Product'}</div>
                       <div className="flex justify-between items-end">
                         <div className="text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded">
-                          {item.current_stock} left
+                          {item.stock ?? item.current_stock ?? 0} left
                         </div>
-                        <div className="text-xs font-bold text-gray-900">${item.current_price}</div>
+                        <div className="text-xs font-bold text-gray-900">{formatCurrency(item.price ?? item.current_price ?? 0, item.currency || 'USD')}</div>
                       </div>
                     </div>
                   ))}
@@ -390,6 +396,20 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             }}
           />
         </div>,
+        document.body
+      )}
+
+      {selectedOrder && createPortal(
+        <SellerOrderDetailsSheet
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          onOrderUpdated={async () => {
+            setSelectedOrder(null);
+            // Refresh orders
+            const ordersData = await fetchSellerOrders(sellerId);
+            setOrders(ordersData);
+          }}
+        />,
         document.body
       )}
 

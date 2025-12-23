@@ -2,6 +2,7 @@ import React, { Suspense, useEffect, useState } from 'react';
 
 const DesktopApp = React.lazy(() => import('./App'));
 const MobileApp = React.lazy(() => import('./mobile ui/App'));
+import { NotificationProvider } from './components/NotificationContext';
 
 const MOBILE_QUERY = '(max-width: 900px)';
 
@@ -24,9 +25,11 @@ const ResponsiveApp: React.FC = () => {
   const isMobile = useIsMobile();
 
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading…</div>}>
-      {isMobile ? <MobileApp /> : <DesktopApp />}
-    </Suspense>
+    <NotificationProvider>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading…</div>}>
+        {isMobile ? <MobileApp /> : <DesktopApp />}
+      </Suspense>
+    </NotificationProvider>
   );
 };
 

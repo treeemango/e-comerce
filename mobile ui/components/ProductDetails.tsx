@@ -1,15 +1,20 @@
-import React, { useMemo, useState, useRef, useCallback } from 'react';
-import { Product, QuantityDiscountTier } from '@/types';
-import { fetchQuantityDiscounts } from '@/lib/api';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, RelatedProduct, fetchProductVariants, getFollowStatus, toggleFollowStore } from '@/lib/api';
+import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant } from '@/types';
+import { playWishlistAddSound, playWishlistRemoveSound, playFollowSound, playUnfollowSound } from '@/lib/sounds';
 import { ProductCard } from './ProductCard';
 
 interface ProductDetailsProps {
     product: Product;
     onBack: () => void;
     onProductClick: (product: Product) => void;
-    recommendations: Product[];
+    recommendations?: Product[];
     onAddToCart?: (product: Product) => void;
     onBuyNow?: (product: Product) => void;
+    onVisualSearch?: (product: Product) => void;
+    onMessageSeller?: (product: Product, initialMessage: string) => void;
+    onVisitStore?: (vendorId: string) => void;
+    user?: User | null;
 }
 
 interface TouchPosition {
@@ -18,13 +23,35 @@ interface TouchPosition {
     time: number;
 }
 
-export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack, onProductClick, recommendations, onAddToCart, onBuyNow }) => {
+export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack, onProductClick, recommendations, onAddToCart, onBuyNow, user, onVisualSearch, onMessageSeller, onVisitStore }) => {
     const [currentImage, setCurrentImage] = useState(0);
     const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [touchStart, setTouchStart] = useState<TouchPosition | null>(null);
     const [touchEnd, setTouchEnd] = useState<TouchPosition | null>(null);
     const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
+    const [isWishlisted, setIsWishlisted] = useState(false);
+    const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+    const [sameItems, setSameItems] = useState<RelatedProduct[]>([]);
+    const [similarItems, setSimilarItems] = useState<RelatedProduct[]>([]);
+    const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [isFollowLoading, setIsFollowLoading] = useState(false);
+    const [followerCount, setFollowerCount] = useState(0);
+
+    // Variants State
+    const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
+    const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
+    const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+    const [currentVariant, setCurrentVariant] = useState<ProductVariant | null>(null);
+    const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+    const [isVariationSheetOpen, setIsVariationSheetOpen] = useState(false);
+    const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
+
+    // Message Sheet State
+    const [isMessageSheetOpen, setIsMessageSheetOpen] = useState(false);
+    const [messageText, setMessageText] = useState('');
+    const [isSendingMessage, setIsSendingMessage] = useState(false);
 
     const imageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -107,6 +134,172 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         }
     }, [product.id, product.has_quantity_discount]);
 
+    // Check wishlist & follow status on mount
+    useEffect(() => {
+        const checkStatuses = async () => {
+            if (product.id && user?.id) {
+                const [inWishlist, followStatus] = await Promise.all([
+                    isInWishlist(user.id, product.id.toString()),
+                    product.vendor?.vendor_id ? getFollowStatus(user.id, product.vendor.vendor_id) : Promise.resolve(null)
+                ]);
+                setIsWishlisted(inWishlist);
+                if (followStatus) {
+                    setIsFollowing(followStatus.is_following);
+                    setFollowerCount(followStatus.follower_count);
+                }
+            } else {
+                setIsWishlisted(false);
+                setIsFollowing(false);
+            }
+        };
+        checkStatuses();
+    }, [product.id, user?.id, product.vendor?.vendor_id]);
+
+    useEffect(() => {
+        const loadVariants = async () => {
+            if (product.id) {
+                setIsLoadingVariants(true);
+                try {
+                    const { variants, options } = await fetchProductVariants(product.id.toString());
+                    setProductVariants(variants);
+                    setProductOptions(options);
+
+                    // Initialize defaults
+                    if (options.length > 0) {
+                        const defaults: Record<string, string> = {};
+                        options.forEach(opt => {
+                            defaults[opt.name] = opt.values[0];
+                        });
+                        setSelectedOptions(defaults);
+                    }
+                } catch (error) {
+                    console.error('Error loading variants:', error);
+                } finally {
+                    setIsLoadingVariants(false);
+                }
+            }
+        };
+        loadVariants();
+    }, [product.id]);
+
+    useEffect(() => {
+        if (productVariants.length > 0) {
+            const matched = productVariants.find(v =>
+                Object.entries(selectedOptions).every(([k, val]) => v.options && v.options[k] === val)
+            );
+            setCurrentVariant(matched || null);
+
+            // Update main image if variant has one
+            if (matched?.image) {
+                const variantImageIdx = images.indexOf(matched.image);
+                if (variantImageIdx !== -1) {
+                    setCurrentImage(variantImageIdx);
+                }
+            }
+        }
+    }, [selectedOptions, productVariants, images]);
+
+    useEffect(() => {
+        const loadRelated = async () => {
+            if (product?.id) {
+                setIsLoadingRelated(true);
+                try {
+                    const { same, similar } = await fetchRelatedProducts(product.id.toString());
+                    setSameItems(same);
+                    setSimilarItems(similar);
+                } catch (error) {
+                    console.error('Error loading related products:', error);
+                } finally {
+                    setIsLoadingRelated(false);
+                }
+            }
+        };
+        loadRelated();
+    }, [product.id]);
+
+    const handleWishlistToggle = async () => {
+        if (!user) {
+            alert('Please sign in to save items');
+            return;
+        }
+        if (!product.id) return;
+
+        setIsWishlistLoading(true);
+        try {
+            const result = await toggleWishlist(user.id, product.id.toString());
+            if (result.success) {
+                setIsWishlisted(result.inWishlist);
+                // Play appropriate sound based on action
+                if (result.inWishlist) {
+                    playWishlistAddSound();
+                } else {
+                    playWishlistRemoveSound();
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling wishlist:', error);
+        } finally {
+            setIsWishlistLoading(false);
+        }
+    };
+
+    const handleChatClick = () => {
+        if (!user) {
+            alert('Please sign in to message the seller');
+            return;
+        }
+        setMessageText(`Hi, I'm interested in your ${product.title}. Is it available?`);
+        setIsMessageSheetOpen(true);
+    };
+
+    const handleSendMessage = async () => {
+        if (!messageText.trim() || isSendingMessage) return;
+
+        setIsSendingMessage(true);
+        try {
+            if (onMessageSeller) {
+                await onMessageSeller(product, messageText);
+            }
+            setIsMessageSheetOpen(false);
+            setMessageText('');
+        } catch (error) {
+            console.error('Error sending message:', error);
+            alert('Failed to send message. Please try again.');
+        } finally {
+            setIsSendingMessage(false);
+        }
+    };
+
+    const handleFollowToggle = async () => {
+        const vendorId = product.vendor?.vendor_id || product.seller_id?.toString();
+        if (!vendorId) return;
+
+        if (!user) {
+            alert('Please sign in to follow stores');
+            return;
+        }
+
+        setIsFollowLoading(true);
+        try {
+            const result = await toggleFollowStore(user.id, vendorId);
+            if (result?.success) {
+                setIsFollowing(result.is_following);
+                setFollowerCount(result.follower_count);
+
+                // Play sound based on action
+                if (result.is_following) {
+                    playFollowSound();
+                } else {
+                    playUnfollowSound();
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling follow:', error);
+        } finally {
+            setIsFollowLoading(false);
+        }
+    };
+
     const formatPrice = (price: number, currency?: string) => {
         try {
             return new Intl.NumberFormat('en', {
@@ -187,8 +380,21 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 )}
 
                 {/* Share Icon */}
-                <button className="absolute top-4 right-4 w-9 h-9 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-colors z-10">
+                <button className="absolute top-4 right-14 w-9 h-9 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-colors z-10">
                     <span className="material-icons-outlined text-xl">ios_share</span>
+                </button>
+
+                {/* Wishlist Heart Icon */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleWishlistToggle(); }}
+                    disabled={isWishlistLoading}
+                    className={`absolute top-4 right-4 w-9 h-9 backdrop-blur-sm rounded-full flex items-center justify-center transition-all z-10 ${isWishlisted
+                        ? 'bg-red-500 text-white'
+                        : 'bg-black/40 text-white hover:bg-black/60'}`}
+                >
+                    <span className={`material-icons-outlined text-xl ${isWishlistLoading ? 'animate-pulse' : ''}`}>
+                        {isWishlisted ? 'favorite' : 'favorite_border'}
+                    </span>
                 </button>
 
                 {/* Swipe Indicators */}
@@ -301,26 +507,32 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             </div>
                         </>
                     )}
-                    <span className="w-px h-3 bg-gray-300"></span>
-                    <div className="flex items-center gap-0.5 font-bold text-black dark:text-white">
-                        {product.rating?.toFixed?.(1) ?? '4.0'}
-                        <div className="flex">
-                            {[1, 2, 3, 4, 5].map(i => (
-                                <span key={i} className={`material-icons-round text-[10px] ${i <= Math.round(product.rating ?? 0) ? 'text-black dark:text-white' : 'text-gray-300'}`}>star</span>
-                            ))}
-                        </div>
-                    </div>
-                    {product.reviews ? <span>({product.reviews} reviews)</span> : null}
+                    {((product.rating ?? 0) > 0 && (product.reviews ?? 0) > 0) && (
+                        <>
+                            <span className="w-px h-3 bg-gray-300"></span>
+                            <div className="flex items-center gap-1 text-black dark:text-white">
+                                <span className="material-icons !text-[14px]">star</span>
+                                <span className="font-bold">{product.rating?.toFixed(1)}</span>
+                            </div>
+                            <span>({product.reviews} reviews)</span>
+                        </>
+                    )}
                 </div>
 
                 {/* Price */}
                 <div className="flex items-end gap-2 mb-2">
-                    <span className="text-2xl font-bold text-price-red">{formatPrice(product.price, product.currency)}</span>
-                    {product.originalPrice && (
-                        <span className="text-sm text-gray-400 line-through mb-1">{formatPrice(product.originalPrice, product.currency)}</span>
+                    <span className="text-2xl font-black text-price-red">
+                        {formatPrice(currentVariant?.price || product.price, product.currency)}
+                    </span>
+                    {(currentVariant?.price || product.price) < (product.originalPrice || 0) && (
+                        <span className="text-sm text-gray-400 line-through mb-1">
+                            {formatPrice(product.originalPrice!, product.currency)}
+                        </span>
                     )}
                     {product.discountPercent && (
-                        <span className="text-xs text-price-red border border-price-red px-1 py-0.5 rounded mb-1 font-bold">-{product.discountPercent}%</span>
+                        <span className="text-[10px] text-price-red bg-red-50 dark:bg-red-900/20 border border-price-red/30 px-1.5 py-0.5 rounded font-black mb-1 uppercase tracking-tighter">
+                            -{product.discountPercent}%
+                        </span>
                     )}
                 </div>
 
@@ -375,29 +587,33 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 )}
             </div>
 
-            {/* Select Option Preview */}
-            <div className="bg-surface-light dark:bg-surface-dark p-3 mb-2 flex items-center justify-between cursor-pointer active:bg-gray-50 dark:active:bg-gray-800">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-black dark:text-white">Select Size</span>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <span className="material-icons-outlined text-sm">straighten</span>
-                    Size guide
-                    <span className="material-icons-outlined text-sm">chevron_right</span>
-                </div>
-            </div>
-
-            {/* Horizontal Scroll Images Preview (Variations) */}
-            <div className="bg-surface-light dark:bg-surface-dark p-3 mb-2">
-                <h3 className="text-sm font-bold text-black dark:text-white mb-2">Colour: <span className="font-normal text-gray-500">Multi</span></h3>
-                <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-                    {images.map((img, idx) => (
-                        <div key={idx} onClick={() => setCurrentImage(idx)} className={`w-16 h-16 flex-shrink-0 rounded border-2 overflow-hidden cursor-pointer ${currentImage % images.length === idx ? 'border-primary' : 'border-transparent'}`}>
-                            <img src={img} className="w-full h-full object-cover" alt="" />
+            {/* Variations Section - Trigger for Overlay */}
+            {productOptions.length > 0 && (
+                <div
+                    onClick={() => setIsVariationSheetOpen(true)}
+                    className="bg-surface-light dark:bg-surface-dark p-4 mb-2 space-y-4 cursor-pointer active:bg-gray-50 dark:active:bg-gray-800 transition-colors"
+                >
+                    <div className="flex justify-between items-center">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Select Variations</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-black text-black dark:text-white">
+                                    {Object.values(selectedOptions).join(' / ') || 'Choose Options'}
+                                </span>
+                            </div>
                         </div>
-                    ))}
+                        <span className="material-icons text-gray-400">chevron_right</span>
+                    </div>
+
+                    <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+                        {productVariants.filter(v => v.image).slice(0, 5).map((v, i) => (
+                            <div key={i} className="w-12 h-12 rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden flex-shrink-0">
+                                <img src={v.image!} className="w-full h-full object-cover" alt="" />
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* New Product Details & Tags Section */}
             <div className="bg-surface-light dark:bg-surface-dark p-3 mb-2 space-y-4">
@@ -481,22 +697,109 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             </div>
                         </div>
                     </div>
-                    <button className="border border-black dark:border-white rounded-full px-3 py-1 text-xs font-bold text-black dark:text-white">
-                        Visit store
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleFollowToggle}
+                            disabled={isFollowLoading}
+                            className={`rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-1.5 ${isFollowing
+                                ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                                : 'bg-black dark:bg-white text-white dark:text-black shadow-lg shadow-black/10'
+                                }`}
+                        >
+                            {isFollowLoading ? (
+                                <div className="w-3 h-3 border-2 border-current/20 border-t-current rounded-full animate-spin" />
+                            ) : (
+                                <span className={`material-icons text-sm ${isFollowing ? 'text-emerald-500' : ''}`}>{isFollowing ? 'check_circle' : 'add'}</span>
+                            )}
+                            {isFollowing ? 'Following' : 'Follow'}
+                        </button>
+                        <button
+                            onClick={() => onVisitStore?.(product.vendor?.vendor_id || product.seller_id?.toString() || '')}
+                            className="border border-black dark:border-white rounded-full px-4 py-1.5 text-xs font-black text-black dark:text-white uppercase tracking-widest active:scale-95 transition-all"
+                        >
+                            Visit store
+                        </button>
+                    </div>
                 </div>
             )}
 
-            {/* Recommendations */}
-            <div className="mt-2">
-                <div className="p-3 bg-surface-light dark:bg-surface-dark">
-                    <h3 className="font-bold text-black dark:text-white">You may also like</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-1 px-1">
-                    {recommendations.slice(0, 6).map(item => (
-                        <ProductCard key={item.id} product={item} onClick={() => onProductClick(item)} />
-                    ))}
-                </div>
+            {/* AI Recommendations */}
+            <div className="mt-2 space-y-4 pb-8">
+                {isLoadingRelated && (
+                    <div className="p-8 text-center">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-primary mb-2"></div>
+                        <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Finding matches...</p>
+                    </div>
+                )}
+
+                {/* Exact Matches SECTION */}
+                {sameItems.length > 0 && !isLoadingRelated && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="p-3 bg-surface-light dark:bg-surface-dark flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <h3 className="font-black text-black dark:text-white text-lg uppercase tracking-tight">Exact matches for you</h3>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="material-icons text-shop-red text-sm">auto_awesome</span>
+                                    <span className="text-[10px] font-black text-shop-red uppercase tracking-widest bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded">Looks just like yours</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 px-1">
+                            {sameItems.map(item => (
+                                <ProductCard
+                                    key={item.id}
+                                    product={item}
+                                    onProductClick={() => onProductClick(item)}
+                                    onVisualSearch={onVisualSearch}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* More to Discover SECTION */}
+                {similarItems.length > 0 && !isLoadingRelated && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
+                        <div className="p-3 bg-surface-light dark:bg-surface-dark flex items-center justify-between mt-4">
+                            <div className="flex flex-col">
+                                <h3 className="font-black text-black dark:text-white text-lg uppercase tracking-tight">More to discover</h3>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="material-icons text-blue-500 text-sm">style</span>
+                                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">Picked for your style</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 px-1">
+                            {similarItems.map(item => (
+                                <ProductCard
+                                    key={item.id}
+                                    product={item}
+                                    onProductClick={() => onProductClick(item)}
+                                    onVisualSearch={onVisualSearch}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Fallback Legacy Recommendations if same/similar are empty but we have generic ones */}
+                {!isLoadingRelated && sameItems.length === 0 && similarItems.length === 0 && recommendations && recommendations.length > 0 && (
+                    <div className="animate-in fade-in duration-500">
+                        <div className="p-3 bg-surface-light dark:bg-surface-dark">
+                            <h3 className="font-black text-black dark:text-white text-lg uppercase tracking-tight">You may also like</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 px-1">
+                            {recommendations.slice(0, 6).map(item => (
+                                <ProductCard
+                                    key={item.id}
+                                    product={item}
+                                    onProductClick={() => onProductClick(item)}
+                                    onVisualSearch={onVisualSearch}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Floating Cart Icon (Bottom Right) */}
@@ -509,34 +812,51 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 </div>
             </div>
 
-            {/* Bottom Action Bar */}
-            <div className="fixed bottom-0 left-0 right-0 bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 p-2 px-3 pb-safe z-50 flex items-center gap-3">
-                <div className="flex flex-col items-center gap-0.5 text-black dark:text-white px-2">
-                    <span className="material-icons-outlined text-xl">storefront</span>
-                    <span className="text-[10px]">Shop</span>
-                </div>
-                <div className="flex flex-col items-center gap-0.5 text-black dark:text-white px-2">
-                    <span className="material-icons-outlined text-xl">chat_bubble_outline</span>
-                    <span className="text-[10px]">Chat</span>
-                </div>
-                <button
-                    className="flex-1 bg-white dark:bg-black text-primary dark:text-white font-bold rounded-full py-3 text-sm shadow-md border border-primary/30 dark:border-gray-700 transition-colors"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onAddToCart?.(product);
-                    }}
+            {/* Bottom Action Bar - Exact Red Style with Variation Trigger */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-surface-dark border-t border-gray-100 dark:border-gray-800 p-2.5 px-4 pb-safe z-50 flex items-center gap-4">
+                <div
+                    className="flex flex-col items-center gap-1 text-gray-700 dark:text-gray-300 px-1 cursor-pointer active:scale-90 transition-transform"
+                    onClick={() => onVisitStore?.(product.vendor?.vendor_id || product.seller_id?.toString() || '')}
                 >
-                    Add to cart
-                </button>
-                <button
-                    className="flex-1 bg-primary hover:bg-orange-600 text-white font-bold rounded-full py-3 text-sm shadow-md transition-colors"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onBuyNow?.(product);
-                    }}
+                    <span className="material-icons-outlined text-[22px]">storefront</span>
+                    <span className="text-[10px] font-bold">Shop</span>
+                </div>
+                <div
+                    className="flex flex-col items-center gap-1 text-gray-700 dark:text-gray-300 px-1 cursor-pointer active:scale-90 transition-transform"
+                    onClick={handleChatClick}
                 >
-                    Buy now
-                </button>
+                    <span className="material-icons-outlined text-[22px]">chat_bubble_outline</span>
+                    <span className="text-[10px] font-bold">Chat</span>
+                </div>
+
+                <div className="flex-1 flex gap-2">
+                    <button
+                        className="flex-1 bg-white dark:bg-black text-red-500 font-bold rounded-full py-3.5 text-sm border-2 border-red-400/30 active:scale-[0.98] transition-all"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (productVariants.length > 0) {
+                                setIsVariationSheetOpen(true);
+                            } else {
+                                onAddToCart?.(product);
+                            }
+                        }}
+                    >
+                        Add to cart
+                    </button>
+                    <button
+                        className="flex-1 bg-red-600 text-white font-bold rounded-full py-3.5 text-sm shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98] transition-all"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (productVariants.length > 0) {
+                                setIsVariationSheetOpen(true);
+                            } else {
+                                onBuyNow?.(product);
+                            }
+                        }}
+                    >
+                        Buy now
+                    </button>
+                </div>
             </div>
 
             {/* Full Screen Image Viewer Overlay */}
@@ -677,6 +997,237 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     </div>
                 </div>
             )}
+            {/* Message Sheet Overlay */}
+            {isMessageSheetOpen && (
+                <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-surface-dark rounded-t-3xl p-6 pb-safe animate-in slide-in-from-bottom duration-300">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white">Message Seller</h3>
+                            <button
+                                onClick={() => setIsMessageSheetOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-full"
+                            >
+                                <span className="material-icons text-xl">close</span>
+                            </button>
+                        </div>
+
+                        <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl mb-6 border border-gray-100 dark:border-gray-700">
+                            <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0">
+                                <img src={product.image} alt="" className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-0.5">Inquiry About</div>
+                                <div className="text-sm font-bold text-gray-900 dark:text-white truncate">{product.title}</div>
+                            </div>
+                        </div>
+
+                        <div className="relative mb-6">
+                            <textarea
+                                value={messageText}
+                                onChange={(e) => setMessageText(e.target.value)}
+                                placeholder="Write your message here..."
+                                className="w-full h-32 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-orange-500/20 focus:bg-white dark:focus:bg-gray-900 rounded-2xl p-4 text-sm font-medium resize-none transition-all outline-none text-gray-800 dark:text-white"
+                            />
+                            <div className="absolute bottom-3 right-3 text-[10px] font-bold text-gray-400">
+                                {messageText.length} characters
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleSendMessage}
+                            disabled={!messageText.trim() || isSendingMessage}
+                            className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${!messageText.trim() || isSendingMessage
+                                ? 'bg-gray-100 text-gray-400 shadow-none'
+                                : 'bg-orange-500 text-white shadow-orange-500/20'
+                                }`}
+                        >
+                            {isSendingMessage ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <span>Sending...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="material-icons text-sm">send</span>
+                                    <span>Send Message</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Variations Bottom Sheet Overlay */}
+            {isVariationSheetOpen && (
+                <div className="fixed inset-0 z-[70] flex flex-col justify-end animate-in fade-in duration-300">
+                    <div
+                        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+                        onClick={() => setIsVariationSheetOpen(false)}
+                    />
+
+                    <div className="relative bg-white dark:bg-surface-dark rounded-t-2xl w-full max-h-[85vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-400 shadow-2xl">
+                        {/* Header */}
+                        <div className="px-4 py-4 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-surface-dark">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Variations</h3>
+                            <button
+                                onClick={() => setIsVariationSheetOpen(false)}
+                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                            >
+                                <span className="material-icons text-gray-400">close</span>
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                            {/* Product Info & Pricing Tiers */}
+                            <div className="p-4 flex gap-4">
+                                <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100">
+                                    <img src={currentVariant?.image || product.image} className="w-full h-full object-cover" alt="" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
+                                        <div className="flex-shrink-0">
+                                            <div className="text-lg font-bold text-price-red">{formatPrice(product.price, product.currency)}</div>
+                                            <div className="text-[10px] text-gray-500 font-medium">Min. order: 1 piece</div>
+                                        </div>
+                                        {quantityDiscounts.map((tier, idx) => (
+                                            <div key={idx} className="flex-shrink-0 opacity-80">
+                                                <div className="text-lg font-bold text-gray-900 dark:text-white">{formatPrice(tier.unit_price, product.currency)}</div>
+                                                <div className="text-[10px] text-gray-500 font-medium">{tier.min_quantity}+ pieces</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Options with exact Alibaba style */}
+                            <div className="px-4 pb-32 space-y-6">
+                                {productOptions.map((option, optIdx) => (
+                                    <div key={option.id} className="space-y-4">
+                                        <div className="flex items-center gap-1.5">
+                                            <h4 className="text-sm font-bold text-gray-900 dark:text-white capitalize">{option.name} ({option.values.length})</h4>
+                                            {selectedOptions[option.name] && <span className="text-sm text-gray-400">: {selectedOptions[option.name]}</span>}
+                                        </div>
+
+                                        {/* If it's the last option (usually Color/Style), show as list with quantity selectors */}
+                                        {optIdx === productOptions.length - 1 ? (
+                                            <div className="bg-gray-50/50 dark:bg-gray-900/30 rounded-xl overflow-hidden border border-gray-50 dark:border-gray-800">
+                                                {option.values.map((val) => {
+                                                    const qty = variantQuantities[val] || 0;
+                                                    const repImg = productVariants.find(v => v.options && v.options[option.name] === val && v.image)?.image;
+
+                                                    const updateQty = (delta: number) => {
+                                                        setVariantQuantities(prev => ({
+                                                            ...prev,
+                                                            [val]: Math.max(0, (prev[val] || 0) + delta)
+                                                        }));
+                                                    };
+
+                                                    return (
+                                                        <div key={val} className="flex items-center justify-between p-3 border-b border-white dark:border-gray-800 last:border-0">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                                                                    <img src={repImg || product.image} className="w-full h-full object-cover" alt="" />
+                                                                </div>
+                                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{val}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-4">
+                                                                <button
+                                                                    onClick={() => updateQty(-1)}
+                                                                    disabled={qty === 0}
+                                                                    className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${qty > 0 ? 'border-gray-300 text-gray-800 active:bg-gray-100' : 'border-gray-200 text-gray-300'}`}
+                                                                >
+                                                                    <span className="material-icons text-lg">remove</span>
+                                                                </button>
+                                                                <span className="text-sm font-bold min-w-[20px] text-center">{qty}</span>
+                                                                <button
+                                                                    onClick={() => updateQty(1)}
+                                                                    className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-800 active:bg-gray-100 shadow-sm transition-all"
+                                                                >
+                                                                    <span className="material-icons text-lg">add</span>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            /* Higher level options (like Model Number) shown as pills with red badge count */
+                                            <div className="flex flex-wrap gap-2.5">
+                                                {option.values.map((val) => {
+                                                    const isSelected = selectedOptions[option.name] === val;
+                                                    const totalForOption = Object.entries(variantQuantities).length > 0 ? '3' : null; // Mocking small red badge as in image
+
+                                                    return (
+                                                        <div key={val} className="relative">
+                                                            <button
+                                                                onClick={() => setSelectedOptions(prev => ({ ...prev, [option.name]: val }))}
+                                                                className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${isSelected
+                                                                    ? 'border-price-red text-price-red bg-red-50/50'
+                                                                    : 'border-gray-200 text-gray-500 bg-white'
+                                                                    }`}
+                                                            >
+                                                                {val}
+                                                            </button>
+                                                            {isSelected && (
+                                                                <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-price-red rounded-full flex items-center justify-center text-[9px] text-white font-bold border-2 border-white">
+                                                                    3
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Footer exactly as pictured */}
+                        <div className="bg-white dark:bg-surface-dark border-t border-gray-100 dark:border-gray-800">
+                            <div className="px-4 py-3 flex justify-between items-center text-sm">
+                                <span className="font-bold text-gray-900 dark:text-white">Item subtotal</span>
+                                <div className="flex items-center gap-1">
+                                    <span className="font-black text-gray-900 dark:text-white">
+                                        {formatPrice((Object.values(variantQuantities) as number[]).reduce((a, b) => a + b, 0) * (currentVariant?.price || product.price), product.currency)}
+                                    </span>
+                                    <span className="text-[10px] text-gray-400 font-medium">({formatPrice(currentVariant?.price || product.price, product.currency)}/piece)</span>
+                                    <span className="material-icons text-gray-400 text-lg">keyboard_arrow_up</span>
+                                </div>
+                            </div>
+
+                            <div className="p-4 pt-1 flex gap-3 items-center">
+                                <button
+                                    className="p-3 border border-gray-200 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+                                    onClick={handleChatClick}
+                                >
+                                    <span className="material-icons-outlined text-gray-600">chat_bubble_outline</span>
+                                </button>
+                                <button
+                                    className="flex-1 bg-white border border-gray-900 dark:border-white text-gray-900 dark:text-white font-black rounded-full py-3.5 text-sm active:scale-[0.98] transition-all"
+                                    onClick={() => {
+                                        onAddToCart?.(product);
+                                        setIsVariationSheetOpen(false);
+                                    }}
+                                >
+                                    Add to cart
+                                </button>
+                                <button
+                                    className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
+                                    onClick={() => {
+                                        onBuyNow?.(product);
+                                        setIsVariationSheetOpen(false);
+                                    }}
+                                >
+                                    Start order
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+

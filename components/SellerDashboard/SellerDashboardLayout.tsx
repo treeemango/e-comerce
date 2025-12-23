@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getSellerUnreadCount } from '@/lib/api';
 
 
@@ -23,16 +23,6 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
     const [expandedMenus, setExpandedMenus] = useState<string[]>(['products']);
     const [unreadCount, setUnreadCount] = useState(0);
 
-    // Load unread message count
-    useEffect(() => {
-        if (user?.id) {
-            loadUnreadCount();
-            // Poll every 30 seconds for new messages
-            const interval = setInterval(loadUnreadCount, 30000);
-            return () => clearInterval(interval);
-        }
-    }, [user?.id]);
-
     const loadUnreadCount = async () => {
         if (user?.id) {
             try {
@@ -43,6 +33,22 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
             }
         }
     };
+
+    const loadUnreadCountRef = useRef(loadUnreadCount);
+
+    useEffect(() => {
+        loadUnreadCountRef.current = loadUnreadCount;
+    }, [loadUnreadCount]);
+
+    // Load unread message count
+    useEffect(() => {
+        if (user?.id) {
+            loadUnreadCountRef.current();
+            // Poll every 60 seconds for new messages (increased from 30s for performance)
+            const interval = setInterval(() => loadUnreadCountRef.current(), 60000);
+            return () => clearInterval(interval);
+        }
+    }, [user?.id]);
 
     const menuItems: MenuItem[] = [
         { id: 'overview', label: 'Homepage', icon: 'home' },

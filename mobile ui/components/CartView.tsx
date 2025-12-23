@@ -15,9 +15,10 @@ interface CartViewProps {
     onUpdateQuantity: (productId: string | number | undefined, quantity: number) => void;
     onRemove: (productId: string | number | undefined) => void;
     onCheckout: () => void;
+    onVisualSearch?: (product: Product) => void;
 }
 
-export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, onProductClick, onUpdateQuantity, onRemove, onCheckout }) => {
+export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, onProductClick, onUpdateQuantity, onRemove, onCheckout, onVisualSearch }) => {
     const [promoResult, setPromoResult] = React.useState<PromotionsResult | null>(null);
 
     React.useEffect(() => {
@@ -242,7 +243,12 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                 </div>
                 <div className="grid grid-cols-2 gap-1 p-1 bg-background-light dark:bg-background-dark">
                     {recommendations.slice(0, 4).map(product => (
-                        <ProductCard key={product.id} product={product} onClick={() => onProductClick(product)} />
+                        <ProductCard
+                            key={product.id}
+                            product={product}
+                            onProductClick={onProductClick}
+                            onVisualSearch={onVisualSearch}
+                        />
                     ))}
                 </div>
             </div>

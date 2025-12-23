@@ -14,7 +14,9 @@ import { AccountOverlay } from './components/AccountOverlay';
 import { CartView } from './components/CartView';
 import { MobileDealsPage } from './components/MobileDealsPage'; // Import new page
 import { CheckoutSheet } from './components/CheckoutSheet';
+import { OrderSuccessSheet } from './components/OrderSuccessSheet';
 import { ProductDetails } from './components/ProductDetails';
+import SimilarItemsView from './components/SimilarItemsView';
 import { AccountSection } from './components/AccountSection';
 import { SellerAccess } from './components/SellerAccess';
 import { SellerDashboard } from './components/SellerDashboard';
@@ -22,13 +24,22 @@ import { DriverAccess } from './components/DriverAccess';
 import { DriverDashboard } from './components/DriverDashboard';
 import { DriverOnboardingView } from './components/DriverOnboardingView';
 import { BuyerMessagesView } from './components/BuyerMessagesView';
+import { WishlistView } from './components/WishlistView';
+import { FollowedStoresView } from './components/FollowedStoresView';
 import { SellerOnboardingView } from './components/SellerOnboardingView';
 import { ProductCard } from './components/ProductCard';
-import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews } from '@/lib/api';
+import { VendorProfileView } from './components/VendorProfileView';
+import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders } from '@/lib/api';
 import { Product } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
+import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
+import { UserCoupon, BuyerOrder } from '@/types';
+import { formatPrice } from '@/lib/currency';
+import { useNotifications } from '@/components/NotificationContext';
+import NotificationSystem from '@/components/NotificationSystem';
+import NotificationInbox from '@/components/NotificationInbox';
 
-type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access';
+type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications';
 
 type CartItem = {
     product: Product;
@@ -58,6 +69,14 @@ const App: React.FC = () => {
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [buyerMessageCount, setBuyerMessageCount] = useState(0);
     const [onboardingType, setOnboardingType] = useState<'seller' | 'driver' | null>(null);
+    const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
+    const [visualSearchProduct, setVisualSearchProduct] = useState<Product | null>(null);
+    const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+
+    // Modern Notification & Data Sync State
+    const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
+    const [recentOrders, setRecentOrders] = useState<BuyerOrder[]>([]);
+    const { history } = useNotifications();
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -105,6 +124,8 @@ const App: React.FC = () => {
         loadRecentViews();
     }, [userProfile?.id]);
 
+    // Load buyer orders - Moved to MobileNotificationWrapper for background sync
+
     useEffect(() => {
         refreshUserProfile();
     }, [refreshUserProfile]);
@@ -145,6 +166,10 @@ const App: React.FC = () => {
                 setOnboardingType(null);
                 return;
             }
+            if (isOrderSuccessOpen) {
+                setIsOrderSuccessOpen(false);
+                return;
+            }
             if (typeof view === 'string') {
                 setActiveTab(view);
             }
@@ -163,19 +188,43 @@ const App: React.FC = () => {
                 return (
                     <AccountSection title="Your orders" description="Track and manage your recent purchases" onBack={() => setActiveAccountSection(null)}>
                         <div className="flex flex-col gap-3">
-                            {products.slice(0, 4).map((item, idx) => (
-                                <div key={item.id ?? idx} className="flex gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
-                                    <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                                        <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                            {recentOrders.length > 0 ? (
+                                recentOrders.map((order, idx) => (
+                                    <div key={order.id || idx} className="flex gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+                                        <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0">
+                                            {order.items?.[0]?.image_url ? (
+                                                <img src={order.items[0].image_url} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
+                                                    <span className="material-icons text-gray-400">inventory_2</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-start">
+                                                <div className="text-sm font-semibold text-black dark:text-white truncate">Order #{order.id.slice(0, 8)}</div>
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${order.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
+                                                    order.status === 'shipped' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                                                    }`}>
+                                                    {order.status?.toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                                {order.items?.[0]?.product_title || 'Order items'}
+                                                {order.items && order.items.length > 1 && ` +${order.items.length - 1} more`}
+                                            </div>
+                                            <div className="text-sm font-bold text-price-red mt-1">
+                                                {formatPrice(order.total_amount, order.currency || 'USD')}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-semibold text-black dark:text-white line-clamp-2">{item.title}</div>
-                                        <div className="text-xs text-gray-500 mt-1">Arriving soon</div>
-                                        <div className="text-sm font-bold text-price-red mt-1">{new Intl.NumberFormat('en', { style: 'currency', currency: item.currency || 'USD' }).format(item.price)}</div>
-                                    </div>
-                                    <button className="text-xs font-bold text-primary">Details</button>
+                                ))
+                            ) : (
+                                <div className="p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
+                                    <span className="material-icons text-gray-300 text-4xl mb-2">local_shipping</span>
+                                    <p className="text-sm text-gray-500">No recent orders found</p>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </AccountSection>
                 );
@@ -184,18 +233,40 @@ const App: React.FC = () => {
                 return (
                     <AccountSection title="Coupons" description="View and apply your coupons" onBack={() => setActiveAccountSection(null)}>
                         <div className="flex flex-col gap-3">
-                            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-4 bg-white dark:bg-surface-dark text-center text-sm text-gray-600 dark:text-gray-300">
-                                No coupons yet. Check deals and promotions to earn rewards.
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                {['New User', 'Flash Sale', 'Loyalty'].map((label, idx) => (
-                                    <div key={label} className="rounded-xl p-3 bg-gradient-to-br from-primary/90 to-orange-500 text-white shadow-md">
-                                        <div className="text-xs uppercase tracking-wide">{label}</div>
-                                        <div className="text-lg font-black">${idx === 0 ? '5' : idx === 1 ? '10' : '15'} off</div>
-                                        <div className="text-[11px] opacity-90">Apply at checkout</div>
-                                    </div>
-                                ))}
-                            </div>
+                            {userCoupons.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {userCoupons.map((userCoupon, idx) => (
+                                        <div key={userCoupon.id || idx} className="relative overflow-hidden group">
+                                            <div className="flex bg-gradient-to-br from-orange-500 to-primary text-white rounded-2xl shadow-lg border border-primary/20">
+                                                <div className="flex-1 p-4 border-r border-dashed border-white/30">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest opacity-80">{userCoupon.coupon.name}</div>
+                                                    <div className="text-2xl font-black mt-1">
+                                                        {userCoupon.coupon.discount_percentage
+                                                            ? `${userCoupon.coupon.discount_percentage}% OFF`
+                                                            : formatPrice(userCoupon.coupon.discount_amount || 0, 'USD') + ' OFF'
+                                                        }
+                                                    </div>
+                                                    <div className="text-[10px] mt-2 bg-white/20 inline-block px-1.5 py-0.5 rounded backdrop-blur-sm">
+                                                        Code: {userCoupon.coupon.code}
+                                                    </div>
+                                                </div>
+                                                <div className="w-20 flex flex-col items-center justify-center p-2 bg-black/5 hover:bg-black/10 transition">
+                                                    <span className="material-icons text-xl mb-1">qr_code_2</span>
+                                                    <div className="text-[9px] font-bold uppercase">USE</div>
+                                                </div>
+                                            </div>
+                                            {/* Decorative punch holes */}
+                                            <div className="absolute top-1/2 -left-2 w-4 h-4 rounded-full bg-background-light dark:bg-background-dark -translate-y-1/2"></div>
+                                            <div className="absolute top-1/2 -right-2 w-4 h-4 rounded-full bg-background-light dark:bg-background-dark -translate-y-1/2"></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-8 bg-white dark:bg-surface-dark text-center">
+                                    <span className="material-icons text-gray-300 text-4xl mb-2">confirmation_number</span>
+                                    <p className="text-sm text-gray-500">No coupons yet. Check deals and promotions to earn rewards.</p>
+                                </div>
+                            )}
                         </div>
                     </AccountSection>
                 );
@@ -233,21 +304,29 @@ const App: React.FC = () => {
                     </AccountSection>
                 );
             }
-            case 'stores': {
+            case 'wishlist': {
+                if (!userProfile?.id) return null;
                 return (
-                    <AccountSection title="Followed stores" description="Your saved shops" onBack={() => setActiveAccountSection(null)}>
-                        <div className="grid grid-cols-2 gap-3">
-                            {products.slice(0, 4).map((p, idx) => (
-                                <div key={p.id ?? idx} className="bg-white dark:bg-surface-dark rounded-xl p-3 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col gap-2">
-                                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-700 dark:text-gray-200">
-                                        {(p.vendor?.business_name || 'Store').slice(0, 2).toUpperCase()}
-                                    </div>
-                                    <div className="text-sm font-semibold text-black dark:text-white truncate">{p.vendor?.business_name || 'Store name'}</div>
-                                    <button className="text-xs font-bold text-primary text-left">Visit store</button>
-                                </div>
-                            ))}
-                        </div>
-                    </AccountSection>
+                    <WishlistView
+                        userId={userProfile.id}
+                        onBack={() => setActiveAccountSection(null)}
+                        onProductClick={handleProductClick}
+                        onAddToCart={addToCart}
+                        onVisualSearch={setVisualSearchProduct}
+                    />
+                );
+            }
+            case 'stores': {
+                if (!userProfile?.id) return null;
+                return (
+                    <FollowedStoresView
+                        userId={userProfile.id}
+                        onBack={() => setActiveAccountSection(null)}
+                        onVisitStore={(vendorId) => {
+                            setSelectedVendorId(vendorId);
+                            setActiveAccountSection(null);
+                        }}
+                    />
                 );
             }
             case 'history': {
@@ -259,7 +338,8 @@ const App: React.FC = () => {
                                     <ProductCard
                                         key={p.id ?? idx}
                                         product={p}
-                                        onClick={() => handleProductClick(p)}
+                                        onProductClick={handleProductClick}
+                                        onVisualSearch={setVisualSearchProduct}
                                     />
                                 ))}
                             </div>
@@ -344,6 +424,20 @@ const App: React.FC = () => {
                             getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
                         }}
                     />
+                );
+            }
+            case 'notifications': {
+                return (
+                    <AccountSection
+                        title="Notifications"
+                        description="Your activity and alerts"
+                        onBack={() => setActiveAccountSection(null)}
+                        accent="bg-blue-500/10 text-blue-500"
+                    >
+                        <div className="bg-white dark:bg-surface-dark rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 h-[60vh]">
+                            <NotificationInbox compact />
+                        </div>
+                    </AccountSection>
                 );
             }
             default:
@@ -465,9 +559,57 @@ const App: React.FC = () => {
         setActiveTab('home');
     };
 
+    const handleMessageSeller = async (product: Product, initialMessage: string) => {
+        if (!userProfile) {
+            alert('Please sign in to message the seller');
+            return;
+        }
+
+        try {
+            const sellerId = product.seller_id || product.vendor?.vendor_id;
+            if (!sellerId) {
+                alert('Seller information not found');
+                return;
+            }
+
+            const conversationId = await createConversation(
+                sellerId.toString(),
+                userProfile.id,
+                product.id.toString(),
+                `Inquiry: ${product.title}`,
+                initialMessage
+            );
+
+            if (conversationId) {
+                alert('Message sent successfully!');
+                // Close PDP and navigate to messages
+                setSelectedProduct(null);
+                setActiveAccountSection('messages');
+            } else {
+                alert('Failed to start conversation. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error messaging seller:', error);
+            alert('An error occurred while sending your message.');
+        }
+    };
+
     const renderContent = () => {
         if (activeAccountSection) {
             return renderAccountSection(activeAccountSection);
+        }
+
+        if (selectedVendorId) {
+            return (
+                <VendorProfileView
+                    vendorId={selectedVendorId}
+                    onBack={() => {
+                        setSelectedVendorId(null);
+                        // Optional: trigger refresh or something if needed
+                    }}
+                    onProductClick={handleProductClick}
+                />
+            );
         }
 
         if (searchQuery) {
@@ -478,6 +620,7 @@ const App: React.FC = () => {
                     onBack={handleBackFromSearch}
                     onUserClick={() => setIsAccountOpen(true)}
                     onProductClick={handleProductClick}
+                    onVisualSearch={setVisualSearchProduct}
                 />
             );
         }
@@ -492,6 +635,7 @@ const App: React.FC = () => {
                         onUpdateQuantity={updateCartQuantity}
                         onRemove={removeFromCart}
                         onCheckout={openCheckout}
+                        onVisualSearch={setVisualSearchProduct}
                     />
                 );
             case 'deals':
@@ -499,7 +643,7 @@ const App: React.FC = () => {
                     <MobileDealsPage
                         onBack={() => setActiveTab('home')}
                         onProductClick={handleProductClick}
-                        onAddToCart={addToCart}
+                        onVisualSearch={setVisualSearchProduct}
                     />
                 );
             case 'categories':
@@ -601,9 +745,9 @@ const App: React.FC = () => {
                                 <HomeView
                                     products={filteredProducts}
                                     onProductClick={handleProductClick}
-                                    onAddToCart={addToCart}
                                     showPromotions={activeCategoryId === 'all' && (!selectedCategoryForSubs || activeSubcategoryId === 'all')}
                                     onViewAllDeals={() => setActiveTab('deals')}
+                                    onVisualSearch={setVisualSearchProduct}
                                 />
                             )}
                         </main>
@@ -614,6 +758,14 @@ const App: React.FC = () => {
 
     return (
         <div className="mobile-shell flex flex-col min-h-screen h-screen overflow-hidden relative bg-background-light dark:bg-background-dark">
+            <NotificationSystem />
+            <MobileNotificationWrapper
+                user={userProfile as any}
+                onDataUpdate={useCallback((coupons: UserCoupon[], orders: BuyerOrder[]) => {
+                    setUserCoupons(coupons);
+                    setRecentOrders(orders);
+                }, [])}
+            />
             {/* Category View Overlay - Full Screen */}
             {categoryViewOpen && (
                 <div className="absolute inset-0 z-50 bg-background-light dark:bg-background-dark flex flex-col">
@@ -626,7 +778,7 @@ const App: React.FC = () => {
                     />
 
                     {/* Category View Header */}
-                    <div className="flex-shrink-0 bg-white dark:bg-surface-dark border-b border-gray-200 dark:border-gray-700 px-3 py-3">
+                    <div className="flex-shrink-0 bg-white dark:bg-surface-dark border-b border-gray-200 dark:border-gray-700 px-3 py-1.5">
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={() => {
@@ -659,8 +811,8 @@ const App: React.FC = () => {
                         <HomeView
                             products={filteredProducts}
                             onProductClick={handleProductClick}
-                            onAddToCart={addToCart}
                             showPromotions={false}
+                            onVisualSearch={setVisualSearchProduct}
                         />
                     </div>
                 </div>
@@ -671,11 +823,17 @@ const App: React.FC = () => {
                     product={selectedProduct}
                     onBack={() => setSelectedProduct(null)}
                     onProductClick={handleProductClick}
-                    recommendations={products.slice(0, 4)}
+                    onVisualSearch={setVisualSearchProduct}
                     onAddToCart={() => addToCart(selectedProduct)}
                     onBuyNow={() => {
                         addToCart(selectedProduct);
                         openCheckout();
+                    }}
+                    onMessageSeller={handleMessageSeller}
+                    user={userProfile as any}
+                    onVisitStore={(vendorId) => {
+                        setSelectedProduct(null);
+                        setSelectedVendorId(vendorId);
                     }}
                 />
             )}
@@ -687,7 +845,9 @@ const App: React.FC = () => {
                     userName={userProfile?.name || userProfile?.email}
                     avatarUrl={userProfile?.avatar_url}
                     messageCount={userProfile ? buyerMessageCount : undefined}
-                    couponCount={userProfile ? 0 : undefined}
+                    notificationCount={history.length}
+                    userCoupons={userCoupons}
+                    recentOrders={recentOrders}
                     onSignIn={async () => {
                         await signInWithGoogle({ view: 'buyer-auth' });
                         await refreshUserProfile();
@@ -710,12 +870,16 @@ const App: React.FC = () => {
             {isSearchOpen && <SearchOverlay onClose={() => setIsSearchOpen(false)} onSearch={handleSearch} />}
 
             {/* Main Header - Hidden when product details or certain overlays are active */}
-            {!selectedProduct && !searchQuery && activeTab !== 'cart' && (
+            {!selectedProduct && !selectedVendorId && !searchQuery && activeTab !== 'cart' && (
                 <div className="flex-shrink-0 z-30 bg-white dark:bg-surface-dark">
                     <TopAppBanner />
                     <Header
                         onSearchClick={() => setIsSearchOpen(true)}
                         onUserClick={() => setIsAccountOpen(true)}
+                        userAvatar={userProfile?.avatar_url}
+                        userName={userProfile?.name || userProfile?.email}
+                        cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+                        notificationCount={history.length + userCoupons.length}
                     />
                 </div>
             )}
@@ -726,7 +890,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Bottom Navigation - Hidden when product details is active */}
-            {!selectedProduct && (
+            {!selectedProduct && !selectedVendorId && (
                 <BottomNav
                     activeTab={activeTab}
                     onTabChange={(tab) => {
@@ -745,7 +909,7 @@ const App: React.FC = () => {
                         window.history.pushState({ view: tab }, '', window.location.href);
                     }}
                     cartCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
-                    notificationCount={0} // TODO: Add notification count from API
+                    notificationCount={userCoupons.length}
                 />
             )}
 
@@ -755,8 +919,17 @@ const App: React.FC = () => {
                     userId={userProfile?.id}
                     onClose={closeCheckout}
                     onPlaceOrder={() => {
-                        handlePlaceOrder();
+                        setCartItems([]);
+                        closeCheckout();
+                        setIsOrderSuccessOpen(true);
                     }}
+                />
+            )}
+
+            {isOrderSuccessOpen && (
+                <OrderSuccessSheet
+                    email={userProfile?.email || 'customer@example.com'}
+                    onClose={() => setIsOrderSuccessOpen(false)}
                 />
             )}
 
@@ -780,6 +953,18 @@ const App: React.FC = () => {
                         setDriverView('dashboard');
                     }}
                     onCancel={() => setOnboardingType(null)}
+                />
+            )}
+
+            {/* Visual Search Results View */}
+            {visualSearchProduct && (
+                <SimilarItemsView
+                    product={visualSearchProduct}
+                    onClose={() => setVisualSearchProduct(null)}
+                    onProductClick={(p) => {
+                        setVisualSearchProduct(null);
+                        handleProductClick(p);
+                    }}
                 />
             )}
         </div>

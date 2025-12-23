@@ -65,7 +65,11 @@ const BuyerReviewsView: React.FC<BuyerReviewsViewProps> = ({ user }) => {
                         </div>
                         <div>
                             <div className="text-sm font-semibold text-slate-900 line-clamp-2">{review.product_title || 'Product'}</div>
-                            <div className="text-xs text-gray-500">Rated {review.rating}★ · {formatDate(review.created_at)}</div>
+                            <div className="text-xs text-gray-500 flex items-center gap-1">
+                                Rated {review.rating}
+                                <span className="material-icons text-[12px] text-slate-900 dark:text-slate-100">star</span>
+                                · {formatDate(review.created_at)}
+                            </div>
                         </div>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}`}>

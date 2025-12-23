@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION public.calculate_cart_delivery_fee(
-    p_user_id BIGINT,
+    p_user_id UUID,
     p_express_delivery BOOLEAN DEFAULT FALSE
 )
 RETURNS NUMERIC AS $$

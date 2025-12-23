@@ -10,9 +10,10 @@ interface SearchResultsProps {
     onBack: () => void;
     onUserClick?: () => void;
     onProductClick: (product: Product) => void;
+    onVisualSearch?: (product: Product) => void;
 }
 
-export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onUserClick, onProductClick }) => {
+export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onUserClick, onProductClick, onVisualSearch }) => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchResults, setSearchResults] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
@@ -155,7 +156,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onU
                         ) : searchResults.length > 0 ? (
                             <div className="grid grid-cols-2 gap-2">
                                 {searchResults.map(product => (
-                                    <ProductCard key={product.id} product={product} onClick={() => onProductClick(product)} />
+                                    <ProductCard
+                                        key={product.id}
+                                        product={product}
+                                        onProductClick={onProductClick}
+                                        onVisualSearch={onVisualSearch}
+                                    />
                                 ))}
                             </div>
                         ) : (

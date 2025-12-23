@@ -214,15 +214,40 @@ const HeroSection: React.FC = () => {
                       </span>
                     )}
                     {(deal.discountPercent || 0) > 0 && (
-                      <span className={`text-sm font-bold px-3 py-1 rounded-lg bg-red-500 text-white ml-2 animate-bounce flex items-center gap-1`}>
+                      <span className={`text-sm font-bold px-3 py-1 rounded-lg bg-red-500 text-white animate-bounce flex items-center gap-1`}>
                         <span className="material-icons text-xs">trending_down</span>
                         -{deal.discountPercent}%
                       </span>
                     )}
+
+                    {(deal.rating || 0) > 0 && (
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 backdrop-blur-md border border-amber-500/30">
+                        <span className="material-icons text-amber-400 text-sm">star</span>
+                        <span className="text-white font-bold text-sm">{(deal.rating || 0).toFixed(1)}</span>
+                        {(deal.reviews || 0) > 0 && (
+                          <span className="text-white/40 text-xs font-medium">({deal.reviews})</span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <p className={`text-lg md:text-xl text-white/70 max-w-md line-clamp-2 transition-all duration-700 delay-900 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-                    Premium selection with elite ratings. Experience performance and value in one package.
+                  <p className={`text-lg md:text-xl text-white/70 max-w-md line-clamp-3 transition-all duration-700 delay-900 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                    {deal.description || deal.metaDescription || (() => {
+                      // Smart contextual fallback based on available data
+                      const categoryText = deal.category_name || 'premium products';
+                      const hasDiscount = (deal.discountPercent || 0) > 0;
+                      const hasHighRating = (deal.rating || 0) >= 4.5;
+
+                      if (hasDiscount && hasHighRating) {
+                        return `Save ${deal.discountPercent}% on this top-rated ${categoryText}. Exceptional quality at an exclusive price.`;
+                      } else if (hasDiscount) {
+                        return `Exclusive ${deal.discountPercent}% discount on ${categoryText}. Limited time offer.`;
+                      } else if (hasHighRating) {
+                        return `Highly rated ${categoryText} with ${deal.rating?.toFixed(1)} stars. Premium quality guaranteed.`;
+                      } else {
+                        return `Discover the best of ${categoryText} at exclusive prices.`;
+                      }
+                    })()}
                   </p>
 
                   <div className={`pt-6 transition-all duration-700 delay-1000 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
@@ -256,7 +281,7 @@ const HeroSection: React.FC = () => {
                     <div className="absolute -top-6 -right-6 md:-top-10 md:-right-10 bg-white shadow-2xl rotate-12 group-hover:rotate-0 transition-all duration-500 p-4 md:p-6 rounded-[30px] border border-white">
                       <div className="text-[10px] text-black/40 font-black uppercase tracking-widest mb-1">Elite Rank</div>
                       <div className="flex items-center gap-1.5">
-                        <span className="material-icons text-yellow-500 text-xl md:text-2xl">star</span>
+                        <span className="material-icons text-slate-900 dark:text-slate-100 text-xl md:text-2xl">star</span>
                         <span className="text-xl md:text-3xl font-black text-black">4.9</span>
                       </div>
                     </div>

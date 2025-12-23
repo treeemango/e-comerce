@@ -14,9 +14,10 @@ interface Category {
 interface CategoryViewProps {
   category: Category;
   onProductClick: (product: Product) => void;
+  onVisualSearch?: (product: Product) => void;
 }
 
-export const CategoryView: React.FC<CategoryViewProps> = ({ category, onProductClick }) => {
+export const CategoryView: React.FC<CategoryViewProps> = ({ category, onProductClick, onVisualSearch }) => {
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark">
       {/* Value Props Bar */}
@@ -44,7 +45,12 @@ export const CategoryView: React.FC<CategoryViewProps> = ({ category, onProductC
       <div className="p-2">
         <div className="grid grid-cols-2 gap-2">
           {category.products.map(product => (
-            <ProductCard key={product.id} product={product} onClick={() => onProductClick(product)} />
+            <ProductCard
+              key={product.id}
+              product={product}
+              onProductClick={onProductClick}
+              onVisualSearch={onVisualSearch}
+            />
           ))}
         </div>
       </div>

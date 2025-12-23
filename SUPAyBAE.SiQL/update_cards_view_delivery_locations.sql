@@ -195,6 +195,7 @@ SELECT
 
     -- Seller Info
     p.seller_id,
+    vd.id AS vendor_id,                    -- ✅ ADD: Actual vendor table ID for follow operations
     vd.business_name,
     vd.website_url,
     vd.is_active AS vendor_active,
@@ -313,6 +314,7 @@ SELECT
     brand_name,
     brand_description,
     seller_id,
+    vendor_id,                 -- ✅ ADD: Actual vendor table ID for follow operations
     business_name,
     website_url,
     vendor_active,

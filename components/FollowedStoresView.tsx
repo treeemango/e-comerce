@@ -85,7 +85,10 @@ const FollowedStoresView: React.FC<FollowedStoresViewProps> = ({ userId, onProdu
                                 )}
 
                                 <div className="flex gap-6 text-sm text-gray-500 mb-4">
-                                    <span>★ {store.vendor_rating?.toFixed(1)} ({store.review_count} reviews)</span>
+                                    <span className="flex items-center gap-1 font-bold text-slate-900 dark:text-white">
+                                        <span className="material-icons text-[14px] text-slate-900 dark:text-slate-100">star</span>
+                                        {store.vendor_rating?.toFixed(1)} ({store.review_count} reviews)
+                                    </span>
                                     <span>{store.total_products} products</span>
                                     <span>{store.business_country}</span>
                                 </div>

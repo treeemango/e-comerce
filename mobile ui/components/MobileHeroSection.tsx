@@ -110,7 +110,7 @@ export const MobileHeroSection: React.FC = () => {
                             <div className="flex-1 flex flex-col justify-center h-full z-10 space-y-2">
                                 <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20 w-fit">
                                     <span className="flex h-1.5 w-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                                    <span className="text-[8px] font-black text-white/90 uppercase tracking-tighter">Elite Deal</span>
+                                    <span className="text-[8px] font-black text-white/90 uppercase tracking-tighter">{deal.tag || 'Elite Deal'}</span>
                                 </div>
 
                                 <h2 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-lg">
@@ -146,11 +146,12 @@ export const MobileHeroSection: React.FC = () => {
                                     />
                                 </div>
 
-                                {/* Rating Badge */}
-                                <div className="absolute -top-2 -right-2 bg-white shadow-xl p-2 rounded-xl rotate-12 flex items-center gap-0.5 border border-white">
-                                    <span className="material-icons-round text-yellow-500 text-[10px]">star</span>
-                                    <span className="text-[10px] font-black">4.9</span>
-                                </div>
+                                {((deal.rating ?? 0) > 0 && (deal.reviews ?? 0) > 0) && (
+                                    <div className="absolute -top-2 -right-2 bg-white shadow-xl p-2 rounded-xl rotate-12 flex items-center gap-0.5 border border-white">
+                                        <span className="material-icons-round text-slate-900 dark:text-slate-100 text-[10px]">star</span>
+                                        <span className="text-[10px] font-black">{deal.rating?.toFixed(1)}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
