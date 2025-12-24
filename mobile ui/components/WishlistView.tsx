@@ -102,9 +102,9 @@ export const WishlistView: React.FC<WishlistViewProps> = ({
                         </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-1 pb-20">
+                    <div className="grid grid-cols-2 gap-1 pb-20 w-full">
                         {wishlistItems.map((product) => (
-                            <div key={product.id} className="relative group">
+                            <div key={product.id} className="relative group w-full min-w-0">
                                 <ProductCard
                                     product={product}
                                     onProductClick={() => onProductClick(product)}

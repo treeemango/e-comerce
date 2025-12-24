@@ -95,14 +95,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
       )}
 
       {/* Grid */}
-      <div className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-black p-1">
+      <div className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-black p-1 w-full">
         {products.map((item, idx) => (
-          <ProductCard
-            key={idx}
-            product={item}
-            onProductClick={onProductClick}
-            onVisualSearch={onVisualSearch}
-          />
+          <div key={idx} className="w-full min-w-0">
+            <ProductCard
+              product={item}
+              onProductClick={onProductClick}
+              onVisualSearch={onVisualSearch}
+            />
+          </div>
         ))}
       </div>
     </div>

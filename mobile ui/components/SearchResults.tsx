@@ -22,7 +22,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onU
         brand_ids: [],
         price_min: null,
         price_max: null,
-        attributes: {}
+        attributes: {},
+        delivery_locations: [],
+        vendor_countries: []
     });
 
     React.useEffect(() => {
@@ -154,14 +156,15 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onU
                         {loading ? (
                             <div className="flex justify-center items-center h-40 text-sm">Searching...</div>
                         ) : searchResults.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-2 w-full">
                                 {searchResults.map(product => (
-                                    <ProductCard
-                                        key={product.id}
-                                        product={product}
-                                        onProductClick={onProductClick}
-                                        onVisualSearch={onVisualSearch}
-                                    />
+                                    <div key={product.id} className="w-full min-w-0">
+                                        <ProductCard
+                                            product={product}
+                                            onProductClick={onProductClick}
+                                            onVisualSearch={onVisualSearch}
+                                        />
+                                    </div>
                                 ))}
                             </div>
                         ) : (

@@ -6,14 +6,15 @@ import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 interface CartItem {
     product: Product;
     quantity: number;
+    variant_id?: string;
 }
 
 interface CartViewProps {
     cartItems: CartItem[];
     recommendations: Product[];
     onProductClick: (product: Product) => void;
-    onUpdateQuantity: (productId: string | number | undefined, quantity: number) => void;
-    onRemove: (productId: string | number | undefined) => void;
+    onUpdateQuantity: (productId: string | number | undefined, quantity: number, variantId?: string) => void;
+    onRemove: (productId: string | number | undefined, variantId?: string) => void;
     onCheckout: () => void;
     onVisualSearch?: (product: Product) => void;
 }
@@ -94,7 +95,7 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                     <div>
                                         <div className="flex justify-between items-start mb-1">
                                             <p className="text-xs text-black dark:text-white line-clamp-1 leading-tight">{item.product.title}</p>
-                                            <button className="text-gray-400 hover:text-red-500" onClick={() => onRemove(item.product.id)}>
+                                            <button className="text-gray-400 hover:text-red-500" onClick={() => onRemove(item.product.id, item.variant_id)}>
                                                 <span className="material-icons-outlined text-lg">delete</span>
                                             </button>
                                         </div>
@@ -153,7 +154,7 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                                 <button
                                                     aria-label="Decrease quantity"
                                                     className="text-gray-500 text-sm"
-                                                    onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
+                                                    onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1, item.variant_id)}
                                                 >
                                                     -
                                                 </button>
@@ -161,7 +162,7 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                                 <button
                                                     aria-label="Increase quantity"
                                                     className="text-gray-500 text-sm"
-                                                    onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+                                                    onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1, item.variant_id)}
                                                     disabled={typeof stock === 'number' && item.quantity >= stock}
                                                 >
                                                     +

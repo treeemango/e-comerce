@@ -102,9 +102,9 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
                             <span className="w-1 h-1 rounded-full bg-primary animate-pulse"></span>
                         </div>
                         <div className="flex gap-3 px-4 overflow-x-auto no-scrollbar scroll-smooth pb-2">
-                            {userCoupons.map((coupon) => (
+                            {userCoupons.map((coupon, idx) => (
                                 <div
-                                    key={coupon.id}
+                                    key={`coupon-${coupon.id || idx}`}
                                     onClick={() => onNavigate?.('coupons')}
                                     className="shrink-0 w-[180px] p-3 rounded-xl bg-gradient-to-br from-orange-500/10 to-primary/10 border border-orange-200/50 dark:border-orange-500/20 flex flex-col gap-1 cursor-pointer active:scale-95 transition-transform"
                                 >
@@ -118,9 +118,9 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
                                     <div className="text-[9px] text-gray-500 font-medium">Click to use code</div>
                                 </div>
                             ))}
-                            {recentOrders.slice(0, 1).map((order) => (
+                            {recentOrders.slice(0, 1).map((order, idx) => (
                                 <div
-                                    key={order.id}
+                                    key={`order-${order.id || idx}`}
                                     onClick={() => onNavigate?.('orders')}
                                     className="shrink-0 w-[180px] p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-500/20 flex flex-col gap-1 cursor-pointer active:scale-95 transition-transform"
                                 >
@@ -129,7 +129,9 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
                                         <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Latest Order</span>
                                     </div>
                                     <div className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                                        {order.status === 'delivered' ? 'Delivered!' : `Status: ${order.status}`}
+                                        {order.status === 'delivered' ? 'Delivered!' :
+                                            ((order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && order.status === 'shipped') ? 'Ready for Collection' :
+                                                `Status: ${order.status}`}
                                     </div>
                                     <div className="text-[9px] text-gray-500 font-medium">Order #{order.id.slice(0, 8)}</div>
                                 </div>

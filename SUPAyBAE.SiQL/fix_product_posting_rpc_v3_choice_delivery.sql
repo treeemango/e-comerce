@@ -3,6 +3,26 @@ ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_choice BOOLEAN DEFAULT F
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS delivery_locations TEXT[] DEFAULT '{}';
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sale_unit TEXT;
 
+-- Listing Type Enum and Column
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'listing_type_enum') THEN
+        CREATE TYPE public.listing_type_enum AS ENUM ('direct_purchase', 'inquiry', 'reservation');
+    END IF;
+END $$;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS listing_type public.listing_type_enum DEFAULT 'direct_purchase';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS has_quantity_discount BOOLEAN DEFAULT FALSE;
+
+-- Quantity Discounts Table
+CREATE TABLE IF NOT EXISTS public.quantity_discounts (
+    id                         UUID      DEFAULT uuid_generate_v4() PRIMARY KEY,
+    product_id                 UUID      NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+    variant_id                 UUID      REFERENCES public.product_variants(id) ON DELETE CASCADE,
+    min_quantity               INT       NOT NULL, 
+    unit_price                 DECIMAL(10, 2) NOT NULL, 
+    created_at                 TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Update description length constraint
 ALTER TABLE public.products DROP CONSTRAINT IF EXISTS chk_description_length;
 ALTER TABLE public.products ADD CONSTRAINT chk_description_length CHECK (char_length(description) <= 3000);
@@ -13,7 +33,8 @@ CREATE OR REPLACE FUNCTION public.fn_create_new_product_full(
     p_product_data jsonb,
     p_variants_data jsonb,
     p_media_data jsonb,
-    p_attributes_data jsonb
+    p_attributes_data jsonb,
+    p_quantity_discounts_data jsonb DEFAULT '[]'::jsonb
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -23,6 +44,7 @@ DECLARE
     v_variant_data jsonb;
     v_media_item jsonb;
     v_attribute_item jsonb;
+    v_discount_item jsonb;
     v_media_id uuid;
     v_slug text;
     v_media_type text;
@@ -80,10 +102,13 @@ BEGIN
         use_case_tags,
         occasion_tags,
 
-        -- NEW FIELDS
         is_choice,
         delivery_locations,
         sale_unit,
+
+        -- NEW FIELDS
+        listing_type,
+        has_quantity_discount,
 
         -- ADMIN-CONTROLLED/PROMOTIONAL FIELDS
         is_featured, is_new, is_on_sale, 
@@ -125,6 +150,9 @@ BEGIN
         COALESCE((p_product_data->>'is_choice')::boolean, false),
         CASE WHEN p_product_data->'delivery_locations' IS NOT NULL THEN (SELECT array_agg(elem) FROM jsonb_array_elements_text(p_product_data->'delivery_locations') AS elem) ELSE '{}'::text[] END,
         p_product_data->>'sale_unit',
+
+        COALESCE((p_product_data->>'listing_type')::public.listing_type_enum, 'direct_purchase'),
+        jsonb_array_length(p_quantity_discounts_data) > 0,
 
         -- ADMIN/PROMOTIONAL DEFAULTS
         FALSE, -- is_featured
@@ -204,6 +232,12 @@ BEGIN
             (v_attribute_item->>'value_option_id')::uuid,
             v_attribute_item->>'value_text'
         );
+    END LOOP;
+
+    -- 7. NEW: INSERT into quantity_discounts
+    FOR v_discount_item IN SELECT * FROM jsonb_array_elements(p_quantity_discounts_data) LOOP
+        INSERT INTO public.quantity_discounts (product_id, min_quantity, unit_price)
+        VALUES (v_product_id, (v_discount_item->>'min_quantity')::integer, (v_discount_item->>'unit_price')::numeric);
     END LOOP;
 
     RETURN v_product_id;

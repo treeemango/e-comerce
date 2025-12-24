@@ -320,6 +320,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                                 </span>
                             </span>
                         )}
+
+                        {/* Vendor Country */}
+                        {product.vendor?.business_country && (
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
+                                <span className="material-icons !text-[13px] leading-none">public</span>
+                                <span className="leading-none">{product.vendor.business_country}</span>
+                            </span>
+                        )}
                     </div>
                 )}
 
@@ -337,7 +345,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                             </span>
                         )}
                     </div>
-                    {onAddToCart && (
+                    {onAddToCart && (!product.listing_type || product.listing_type === 'direct_purchase') && (
                         <button
                             className="absolute -right-2 top-0 h-10 w-10 flex items-center justify-center rounded-full bg-red-600 text-white shadow-lg active:scale-90 transition-transform z-10"
                             onClick={(e) => {

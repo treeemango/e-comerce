@@ -6,8 +6,8 @@ import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CartViewProps {
     cartItems: Product[];
-    onRemoveFromCart: (productId: number) => void;
-    onUpdateQuantity: (productId: number, delta: number) => void;
+    onRemoveFromCart: (productId: number | string, variantId?: string) => void;
+    onUpdateQuantity: (productId: number | string, delta: number, variantId?: string) => void;
     onCheckoutClick: () => void;
     onHomeClick: () => void;
     userId?: string;
@@ -22,12 +22,13 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
 
     // Group items to track quantities
     const groupedItems = cartItems.reduce((acc, item) => {
-        if (!acc[item.id]) {
-            acc[item.id] = { ...item, quantity: 0 };
+        const key = `${item.id}:${item.variant_id || 'default'}`;
+        if (!acc[key]) {
+            acc[key] = { ...item, quantity: 0 };
         }
-        acc[item.id].quantity += 1;
+        acc[key].quantity += 1;
         return acc;
-    }, {} as Record<number, Product & { quantity: number }>);
+    }, {} as Record<string, Product & { quantity: number }>);
 
     const items = Object.values(groupedItems) as (Product & { quantity: number })[];
 
@@ -173,7 +174,7 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                             const barPct = maxStock === Infinity ? 100 : Math.max((remaining ?? 0) / barDenominator * 100, 0);
 
                             return (
-                                <div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex gap-4 hover:shadow-md transition-shadow">
+                                <div key={`${item.id}:${item.variant_id || 'default'}`} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex gap-4 hover:shadow-md transition-shadow">
                                     <div className="w-24 h-24 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden flex-shrink-0">
                                         <img src={item.image} alt={item.title} className="w-full h-full object-contain" />
                                     </div>
@@ -221,7 +222,7 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                         <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
                                             <div className="flex items-center gap-2 bg-gray-50 rounded-full px-2 py-1 border border-gray-100">
                                                 <button
-                                                    onClick={() => onUpdateQuantity(item.id, -1)}
+                                                    onClick={() => onUpdateQuantity(item.id, -1, item.variant_id)}
                                                     className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:border-gray-300 disabled:opacity-50"
                                                     disabled={item.quantity <= 1}
                                                     aria-label="Decrease quantity"
@@ -230,7 +231,7 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                                 </button>
                                                 <span className="font-semibold w-8 text-center text-gray-900">{item.quantity}</span>
                                                 <button
-                                                    onClick={() => onUpdateQuantity(item.id, 1)}
+                                                    onClick={() => onUpdateQuantity(item.id, 1, item.variant_id)}
                                                     className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:border-gray-300 disabled:opacity-50"
                                                     disabled={maxed}
                                                     aria-label="Increase quantity"
@@ -241,7 +242,7 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
 
                                             <div className="flex items-center gap-3 text-sm text-gray-600">
                                                 <button
-                                                    onClick={() => onRemoveFromCart(item.id)}
+                                                    onClick={() => onRemoveFromCart(item.id, item.variant_id)}
                                                     className="flex items-center gap-1 text-red-500 hover:text-red-600 font-semibold"
                                                 >
                                                     <span className="material-icons text-base">delete_outline</span>

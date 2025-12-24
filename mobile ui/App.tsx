@@ -44,6 +44,7 @@ type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist
 type CartItem = {
     product: Product;
     quantity: number;
+    variant_id?: string;
 };
 
 const App: React.FC = () => {
@@ -216,6 +217,82 @@ const App: React.FC = () => {
                                             <div className="text-sm font-bold text-price-red mt-1">
                                                 {formatPrice(order.total_amount, order.currency || 'USD')}
                                             </div>
+
+                                            {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && order.status === 'shipped' && (
+                                                <div className="mt-4 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-orange-900/20 dark:via-amber-900/20 dark:to-yellow-900/20 rounded-2xl border border-orange-200 dark:border-orange-800 overflow-hidden shadow-lg">
+                                                    {/* Header */}
+                                                    <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 flex items-center gap-3">
+                                                        <div className="w-9 h-9 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+                                                            <span className="material-icons text-white text-lg">directions_bus</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-white font-bold text-xs">📦 Parcel Ready for Collection</p>
+                                                            <p className="text-orange-100 text-[10px]">Show the OTP code to collect</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Content */}
+                                                    <div className="p-4 space-y-3">
+                                                        {/* OTP Display - Prominent */}
+                                                        <div className="bg-white dark:bg-black/20 rounded-xl p-4 border-2 border-dashed border-orange-200 dark:border-orange-700 text-center">
+                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">
+                                                                Collection Code (OTP)
+                                                            </p>
+                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                {(order.delivery_otp || '----').split('').map((digit, i) => (
+                                                                    <span key={i} className="w-11 h-12 bg-gradient-to-b from-orange-500 to-orange-600 text-white rounded-lg flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/30">
+                                                                        {digit}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                            <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium mt-2">
+                                                                🔐 Share only with parcel agent
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Parcel Details */}
+                                                        <div className="space-y-2">
+                                                            <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="material-icons text-gray-400 text-sm">local_shipping</span>
+                                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Service</span>
+                                                                </div>
+                                                                <p className="text-xs font-bold text-gray-900 dark:text-white">
+                                                                    {order.parcel_details?.company || order.carrier || 'Standard Parcel'}
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="material-icons text-gray-400 text-sm">confirmation_number</span>
+                                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Waybill</span>
+                                                                </div>
+                                                                <p className="text-xs font-bold text-gray-900 dark:text-white font-mono">
+                                                                    {order.parcel_details?.waybill_number || order.tracking_number || 'N/A'}
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="material-icons text-gray-400 text-sm">location_on</span>
+                                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Pickup</span>
+                                                                </div>
+                                                                <p className="text-xs font-bold text-gray-900 dark:text-white text-right max-w-[50%]">
+                                                                    {order.parcel_details?.collection_point || order.shipping_additional_info || 'Contact carrier'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Help Note */}
+                                                        <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-100 dark:border-amber-800">
+                                                            <span className="material-icons text-amber-500 text-sm mt-0.5">info</span>
+                                                            <p className="text-[10px] text-amber-700 dark:text-amber-300">
+                                                                Visit collection point with your OTP. Agent will verify before handover.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))
@@ -456,26 +533,36 @@ const App: React.FC = () => {
         setActiveTab('home');
     };
 
-    const addToCart = (product: Product) => {
+    const addToCart = (product: Product, quantity: number = 1) => {
         setCartItems((prev) => {
-            const existingIndex = prev.findIndex((item) => item.product.id === product.id);
+            const variant_id = product.variant_id;
+            const existingIndex = prev.findIndex((item) =>
+                item.product.id === product.id && item.variant_id === variant_id
+            );
+
             if (existingIndex >= 0) {
                 const next = [...prev];
-                next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + 1 };
+                next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + quantity };
                 return next;
             }
-            return [...prev, { product, quantity: 1 }];
+            return [...prev, { product, quantity, variant_id }];
         });
     };
 
-    const updateCartQuantity = (productId: string | number | undefined, quantity: number) => {
+    const updateCartQuantity = (productId: string | number | undefined, quantity: number, variantId?: string) => {
         setCartItems((prev) => prev
-            .map((item) => item.product.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item)
+            .map((item) =>
+                (item.product.id === productId && item.variant_id === variantId)
+                    ? { ...item, quantity: Math.max(1, quantity) }
+                    : item
+            )
             .filter((item) => item.quantity > 0));
     };
 
-    const removeFromCart = (productId: string | number | undefined) => {
-        setCartItems((prev) => prev.filter((item) => item.product.id !== productId));
+    const removeFromCart = (productId: string | number | undefined, variantId?: string) => {
+        setCartItems((prev) => prev.filter((item) =>
+            !(item.product.id === productId && item.variant_id === variantId)
+        ));
     };
 
     const openCheckout = () => setIsCheckoutOpen(true);

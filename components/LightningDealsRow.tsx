@@ -319,29 +319,31 @@ const LightningDealCard: React.FC<{
             <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">RRP {formatPrice(deal.rrp)}</p>
           )}
         </div>
-        <button
-          className={`relative h-10 rounded-lg px-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAdded
-            ? 'bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-600'
-            : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (loading || !onAddToCart) return;
-            onAddToCart(deal);
-            setIsAdded(true);
-            if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
-            addedTimerRef.current = setTimeout(() => setIsAdded(false), 1800);
-          }}
-          disabled={loading || !onAddToCart}
-          type="button"
-        >
-          {loading ? '...' : isAdded ? (
-            <span className="inline-flex items-center gap-1">
-              <span className="material-icons text-[16px] leading-none">check_circle</span>
-              Added
-              <span className="absolute inset-0 rounded-lg ring-2 ring-emerald-400/60 animate-ping" aria-hidden />
-            </span>
-          ) : 'Add'}
-        </button>
+        {(!deal.listing_type || deal.listing_type === 'direct_purchase') && (
+          <button
+            className={`relative h-10 rounded-lg px-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAdded
+              ? 'bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-600'
+              : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (loading || !onAddToCart) return;
+              onAddToCart(deal);
+              setIsAdded(true);
+              if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+              addedTimerRef.current = setTimeout(() => setIsAdded(false), 1800);
+            }}
+            disabled={loading || !onAddToCart}
+            type="button"
+          >
+            {loading ? '...' : isAdded ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="material-icons text-[16px] leading-none">check_circle</span>
+                Added
+                <span className="absolute inset-0 rounded-lg ring-2 ring-emerald-400/60 animate-ping" aria-hidden />
+              </span>
+            ) : 'Add'}
+          </button>
+        )}
       </div>
     </article>
   );

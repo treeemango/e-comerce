@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { SellerOrder } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
-import { fulfillOrder } from '../../lib/api';
+import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP } from '../../lib/api';
+import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
 
 interface SellerOrderDetailsSheetProps {
     order: SellerOrder;
@@ -15,8 +16,21 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
     onOrderUpdated
 }) => {
     const [showTrackingInput, setShowTrackingInput] = useState(false);
+    const [fulfillmentMethod, setFulfillmentMethod] = useState<'courier' | 'parcel'>('courier');
+
+    // Courier Fields
     const [trackingNumber, setTrackingNumber] = useState('');
-    const [isShipping, setIsShipping] = useState(false);
+
+    // Parcel Fields
+    const [parcelService, setParcelService] = useState('');
+    const [waybillNo, setWaybillNo] = useState('');
+    const [collectionPoint, setCollectionPoint] = useState('');
+
+    // OTP Field for Verification
+    const [otpCode, setOtpCode] = useState('');
+    const [showOTPInput, setShowOTPInput] = useState(false);
+
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const getStatusColor = (status?: string) => {
         const s = status?.toLowerCase();
@@ -33,22 +47,63 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
     };
 
     const handleShipOrder = async () => {
-        setIsShipping(true);
+        setIsProcessing(true);
         try {
-            const success = await fulfillOrder(order.id, trackingNumber || undefined);
-            if (success) {
-                onOrderUpdated?.();
-                onClose();
+            if (fulfillmentMethod === 'courier') {
+                const success = await fulfillOrder(order.id, trackingNumber || undefined);
+                if (success) {
+                    onOrderUpdated?.();
+                    onClose();
+                } else {
+                    alert('Failed to ship order. Please try again.');
+                }
             } else {
-                alert('Failed to ship order. Please try again.');
+                if (!parcelService || !waybillNo) {
+                    alert('Please provide Parcel Service and Waybill Number');
+                    setIsProcessing(false);
+                    return;
+                }
+                console.log('Calling fulfillParcelOrder with:', { orderId: order.id, parcelService, waybillNo, collectionPoint });
+                const result = await fulfillParcelOrder(order.id, parcelService, waybillNo, collectionPoint);
+                console.log('fulfillParcelOrder result:', result);
+                if (result.success) {
+                    alert(`✅ Parcel shipped! Collection OTP: ${result.otp}\n\nBuyer will see this code in their app.`);
+                    onOrderUpdated?.();
+                    onClose();
+                } else {
+                    alert(`❌ Failed: ${result.message || 'Unknown error'}`);
+                }
             }
         } catch (error) {
             console.error('Error shipping order:', error);
             alert('An error occurred while shipping the order.');
         } finally {
-            setIsShipping(false);
+            setIsProcessing(false);
         }
     };
+
+    const handleVerifyOTP = async () => {
+        if (!otpCode || otpCode.length !== 4) {
+            alert('Please enter a valid 4-digit code');
+            return;
+        }
+        setIsProcessing(true);
+        try {
+            const result = await verifyParcelOTP(order.id, otpCode);
+            if (result.success) {
+                onOrderUpdated?.();
+                onClose();
+            } else {
+                alert(result.message);
+            }
+        } catch (error) {
+            console.error('Error verifying OTP:', error);
+            alert('Failed to verify code.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
 
     const orderDate = new Date(order.created_at).toLocaleDateString('en-US', {
         weekday: 'short',
@@ -198,22 +253,107 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                         </div>
                     </div>
 
-                    {/* Tracking Input */}
-                    {showTrackingInput && canShip && (
-                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 animate-in fade-in duration-200">
-                            <label className="block text-sm font-bold text-blue-900 mb-2">
-                                Enter Tracking Number
-                            </label>
+                    {/* Fulfillment Selection */}
+                    {canShip && showTrackingInput && (
+                        <div className="space-y-4 animate-in slide-in-from-top duration-300">
+                            <div className="flex bg-gray-100 p-1 rounded-xl">
+                                <button
+                                    onClick={() => setFulfillmentMethod('courier')}
+                                    className={cn(
+                                        "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
+                                        fulfillmentMethod === 'courier' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                                    )}
+                                >
+                                    Official Courier
+                                </button>
+                                <button
+                                    onClick={() => setFulfillmentMethod('parcel')}
+                                    className={cn(
+                                        "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
+                                        fulfillmentMethod === 'parcel' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                                    )}
+                                >
+                                    Local Parcel
+                                </button>
+                            </div>
+
+                            {fulfillmentMethod === 'courier' ? (
+                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                                    <label className="block text-sm font-bold text-blue-900 mb-2">
+                                        Tracking Number
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={trackingNumber}
+                                        onChange={(e) => setTrackingNumber(e.target.value)}
+                                        placeholder="e.g., 1Z999AA101234..."
+                                        className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <p className="text-[10px] text-blue-600 mt-2 font-medium italic">
+                                        * Leave blank if not available yet
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-orange-900 mb-1">
+                                            Parcel Service / Shuttle Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={parcelService}
+                                            onChange={(e) => setParcelService(e.target.value)}
+                                            placeholder="e.g., EasyCoach, North Rift"
+                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-orange-900 mb-1">
+                                            Waybill Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={waybillNo}
+                                            onChange={(e) => setWaybillNo(e.target.value)}
+                                            placeholder="Enter waybill ID"
+                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-orange-900 mb-1">
+                                            Collection Office (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={collectionPoint}
+                                            onChange={(e) => setCollectionPoint(e.target.value)}
+                                            placeholder="e.g., Nairobi Office, Meru Stage"
+                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* OTP Verification for Parcel Orders */}
+                    {order.status?.toLowerCase() === 'shipped' && showOTPInput && (
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 animate-in zoom-in duration-300">
+                            <h3 className="text-sm font-black text-emerald-900 mb-3 flex items-center gap-2">
+                                <span className="material-icons text-lg">verified_user</span>
+                                Verify Collection
+                            </h3>
+                            <p className="text-xs text-emerald-700 mb-4 font-medium">
+                                Ask the buyer for their 4-digit collection code to finalize this delivery.
+                            </p>
                             <input
                                 type="text"
-                                value={trackingNumber}
-                                onChange={(e) => setTrackingNumber(e.target.value)}
-                                placeholder="e.g., 1Z999AA10123456784"
-                                className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                maxLength={4}
+                                value={otpCode}
+                                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                placeholder="####"
+                                className="w-full text-center text-2xl tracking-[1em] font-black py-4 bg-white border-2 border-emerald-200 rounded-2xl focus:outline-none focus:border-emerald-500 text-emerald-900"
                             />
-                            <p className="text-xs text-blue-600 mt-2">
-                                Optional: Leave blank if not available yet
-                            </p>
                         </div>
                     )}
                 </div>
@@ -221,7 +361,14 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                 {/* Actions */}
                 <div className="px-6 py-4 border-t border-gray-100 bg-white pb-safe space-y-3">
                     {canShip && (
-                        <>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => window.print()}
+                                className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-black text-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                <span className="material-icons text-lg">print</span>
+                                Print Receipt
+                            </button>
                             {!showTrackingInput ? (
                                 <button
                                     onClick={() => setShowTrackingInput(true)}
@@ -231,33 +378,75 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                     Ship This Order
                                 </button>
                             ) : (
-                                <button
-                                    onClick={handleShipOrder}
-                                    disabled={isShipping}
-                                    className="w-full bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                >
-                                    {isShipping ? (
-                                        <>
-                                            <span className="material-icons animate-spin text-lg">sync</span>
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="material-icons text-lg">check_circle</span>
-                                            Confirm Shipment
-                                        </>
-                                    )}
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowTrackingInput(false)}
+                                        className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
+                                    >
+                                        <span className="material-icons">close</span>
+                                    </button>
+                                    <button
+                                        onClick={handleShipOrder}
+                                        disabled={isProcessing}
+                                        className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isProcessing ? (
+                                            <>
+                                                <span className="material-icons animate-spin text-lg">sync</span>
+                                                Processing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-icons text-lg">check_circle</span>
+                                                Confirm {fulfillmentMethod === 'courier' ? 'Shipment' : 'Parcel Pickup'}
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             )}
-                        </>
+                        </div>
                     )}
 
                     {order.status?.toLowerCase() === 'shipped' && (
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
-                            <span className="material-icons text-emerald-500 text-2xl mb-1">done_all</span>
-                            <p className="text-sm font-bold text-emerald-700">Order has been shipped</p>
+                        <div className="space-y-3">
+                            {!showOTPInput ? (
+                                <button
+                                    onClick={() => setShowOTPInput(true)}
+                                    className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <span className="material-icons text-lg">task_alt</span>
+                                    Complete Delivery (OTP)
+                                </button>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowOTPInput(false)}
+                                        className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
+                                    >
+                                        <span className="material-icons">close</span>
+                                    </button>
+                                    <button
+                                        onClick={handleVerifyOTP}
+                                        disabled={isProcessing}
+                                        className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isProcessing ? (
+                                            <>
+                                                <span className="material-icons animate-spin text-lg">sync</span>
+                                                Verifying...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-icons text-lg">verified</span>
+                                                Verify & Complete
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
+
 
                     <button
                         onClick={onClose}
@@ -267,6 +456,9 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                     </button>
                 </div>
             </div>
+
+            {/* Print-only Receipt Component */}
+            <BuyerReceipt order={order} />
         </div>
     );
 };

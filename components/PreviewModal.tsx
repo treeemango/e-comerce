@@ -7,9 +7,11 @@ import { fetchProductVariants, fetchProductReviewSummary } from '@/lib/api';
 interface PreviewModalProps {
   product: Product;
   onClose: () => void;
+  onProductClick?: (product: Product) => void;
+  onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
 }
 
-const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose }) => {
+const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProductClick, onAddToCart }) => {
   // Prevent scrolling on body when modal is open
   React.useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -376,8 +378,27 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose }) => {
             {/* Footer Actions */}
             <div className="border-t border-gray-200 dark:border-gray-700 mt-6 pt-6">
               <div className="flex flex-col gap-3">
-                <button className="w-full bg-primary text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30">
-                  Add to cart
+                <button
+                  className={`w-full text-white font-bold py-3 rounded-lg transition-colors shadow-lg flex items-center justify-center gap-2 ${product.listing_type === 'inquiry'
+                    ? "bg-blue-600 hover:bg-blue-700 shadow-blue-500/30"
+                    : product.listing_type === 'reservation'
+                      ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/30"
+                      : "bg-primary hover:bg-red-700 shadow-red-500/30"
+                    }`}
+                  onClick={() => {
+                    if (product.listing_type === 'inquiry' || product.listing_type === 'reservation') {
+                      onClose();
+                      if (onProductClick) onProductClick(product);
+                    } else {
+                      if (onAddToCart) onAddToCart(product);
+                      onClose();
+                    }
+                  }}
+                >
+                  <span className="material-icons text-lg">
+                    {product.listing_type === 'inquiry' ? 'chat' : product.listing_type === 'reservation' ? 'event_available' : 'shopping_cart'}
+                  </span>
+                  {product.listing_type === 'inquiry' ? 'Send Inquiry' : product.listing_type === 'reservation' ? 'Reserve Now' : 'Add to cart'}
                 </button>
                 <div className="flex items-center gap-3">
                   <button className="flex-1 text-center py-3 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors">

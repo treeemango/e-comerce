@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier } from '../types';
 import ProductCard from './ProductCard';
 import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist } from '../lib/api';
@@ -10,6 +12,10 @@ import { useSEO } from '../lib/useSEO';
 import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
 import { formatPrice, getCurrencySymbol } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
+
+function cn(...inputs: ClassValue[]) {
+   return twMerge(clsx(inputs));
+}
 
 interface ProductDetailViewProps {
    product: Product;
@@ -79,6 +85,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
    const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
+
+   // Variant Overlay State
+   const [isVariantOverlayOpen, setIsVariantOverlayOpen] = useState(false);
+   const [overlayVariant, setOverlayVariant] = useState<ProductVariant | null>(null);
+   const [overlayQuantity, setOverlayQuantity] = useState(1);
+   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
+   const [isImageFocusView, setIsImageFocusView] = useState(false);
 
    useEffect(() => {
       const loadCoupons = async () => {
@@ -277,6 +290,66 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          || productVariants.find(v => Object.entries(overrides).every(([k, val]) => v.options?.[k] === val));
    };
 
+   const openVariantOverlay = (variant: ProductVariant | null, overrides?: Record<string, string>, focusImage: boolean = false) => {
+      if (overrides && Object.keys(overrides).length > 0) {
+         setSelectedOptions(prev => ({ ...prev, ...overrides }));
+      }
+      setOverlayVariant(variant || findVariantFor(overrides || {}) || currentVariant);
+      setOverlayQuantity(1);
+      setIsVariantOverlayOpen(true);
+      if (focusImage) {
+         setIsImageFocusView(true);
+      } else {
+         setIsImageFocusView(false);
+      }
+   };
+
+   const closeVariantOverlay = () => setIsVariantOverlayOpen(false);
+
+   const adjustOverlayQuantity = (delta: number) => {
+      const maxQty = overlayVariant?.stock ?? product.stock ?? 999;
+      setOverlayQuantity(prev => {
+         const next = Math.max(1, prev + delta);
+         return Math.min(next, maxQty > 0 ? maxQty : next);
+      });
+   };
+
+   const handleOverlayAddToCart = () => {
+      if (!onAddToCart) return;
+
+      const itemsToAdd: Product[] = [];
+
+      // Check if we use multiple quantity selection
+      if (Object.keys(variantQuantities).length > 0) {
+         Object.entries(variantQuantities).forEach(([val, qty]: [string, any]) => {
+            if (qty > 0) {
+               // Find the variant for this value
+               const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
+               if (variant) {
+                  itemsToAdd.push({
+                     ...product,
+                     // Keep product.id, store variant.id separately
+                     variant_id: variant.id,
+                     price: variant.price,
+                     title: `${product.title} - ${Object.values(variant.options || {}).join('/')}`,
+                     quantity: qty
+                  } as any);
+               }
+            }
+         });
+      } else {
+         const variant = overlayVariant || currentVariant;
+         const productToAdd = variant
+            ? { ...product, variant_id: variant.id, price: variant.price, title: `${product.title} - ${Object.values(variant.options || {}).join('/')}` }
+            : product;
+         itemsToAdd.push({ ...productToAdd, quantity: overlayQuantity } as any);
+      }
+
+      itemsToAdd.forEach(item => onAddToCart(item));
+      setIsVariantOverlayOpen(false);
+      setVariantQuantities({});
+   };
+
    const displayedOptions = useMemo(() => productOptions.filter(opt => opt.name !== colorOptionName), [productOptions, colorOptionName]);
    // Reset user selection when product changes
    useEffect(() => {
@@ -365,7 +438,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          return;
       }
       setIsMessageModalOpen(true);
-      setInitialMessage(`Hi, I'm interested in your ${product.title}...`);
+      if (product.listing_type === 'reservation') {
+         setInitialMessage(`Hi, I'd like to reserve ${product.title}. Could you let me know the process?`);
+      } else if (product.listing_type === 'inquiry') {
+         setInitialMessage(`Hi, I have an inquiry about ${product.title}. Could you provide more details?`);
+      } else {
+         setInitialMessage(`Hi, I'm interested in your ${product.title}...`);
+      }
    };
 
    const handleConfirmSendMessage = () => {
@@ -772,6 +851,10 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  </div>
                                  <button
                                     onClick={() => {
+                                       if (productVariants.length > 1) {
+                                          openVariantOverlay(currentVariant);
+                                          return;
+                                       }
                                        if (product.activeCoupon) {
                                           navigator.clipboard.writeText(product.activeCoupon.code);
                                           alert('Coupon code copied!');
@@ -910,7 +993,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  return (
                                     <button
                                        key={label}
-                                       onClick={() => setSelectedOptions(prev => ({ ...prev, [colorOptionName]: label }))}
+                                       onClick={() => openVariantOverlay(previewVariant || variant, { [colorOptionName]: label }, true)}
                                        onMouseEnter={() => {
                                           if (previewMedia) {
                                              setHoverPreviewMedia(previewMedia);
@@ -1007,18 +1090,37 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   </div>
 
                   <button
-                     className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-orange-500/20 transition-all active:scale-[0.99] mb-6"
+                     className={cn(
+                        "w-full text-white font-bold text-lg py-4 rounded-full shadow-lg transition-all active:scale-[0.99] mb-6 flex items-center justify-center gap-2",
+                        product.listing_type === 'inquiry'
+                           ? "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20"
+                           : product.listing_type === 'reservation'
+                              ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20"
+                              : "bg-orange-500 hover:bg-orange-600 shadow-orange-500/20"
+                     )}
                      onClick={() => {
+                        if (product.listing_type === 'inquiry' || product.listing_type === 'reservation') {
+                           handleMessageClick();
+                           return;
+                        }
+
+                        if (productVariants.length > 1) {
+                           openVariantOverlay(currentVariant);
+                           return;
+                        }
                         if (onAddToCart) {
-                           // Pass the specific variant if selected
+                           // Pass both product and variant IDs to ensure correct syncing and checkout
                            const productToAdd = currentVariant
-                              ? { ...product, id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
+                              ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
                               : product;
                            onAddToCart(productToAdd);
                         }
                      }}
                   >
-                     Add to Cart
+                     <span className="material-icons">
+                        {product.listing_type === 'inquiry' ? 'chat' : product.listing_type === 'reservation' ? 'event_available' : 'shopping_cart'}
+                     </span>
+                     {product.listing_type === 'inquiry' ? 'Send Inquiry' : product.listing_type === 'reservation' ? 'Reserve Now' : 'Add to Cart'}
                   </button>
                </div>
             </div>
@@ -1366,6 +1468,237 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                </div>
             )
          }
+
+         {/* Modern Variant Quick Add Overlay - Alibaba Style Drawer */}
+         {isVariantOverlayOpen && (
+            <div className={`fixed inset-0 z-[120] flex justify-end transition-opacity duration-300 ${isVariantOverlayOpen ? 'opacity-100' : 'opacity-0'}`}>
+               <div
+                  className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300"
+                  onClick={closeVariantOverlay}
+               />
+
+               {/* Large Image Preview (Image 2 style) */}
+               {isImageFocusView && (
+                  <div className="absolute inset-0 flex items-center justify-center p-4 md:p-12 pointer-events-none z-[121]">
+                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-4 shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in duration-300 pointer-events-auto w-full max-w-xl relative group">
+                        {/* Close/Collapse Button */}
+                        <button
+                           onClick={() => setIsImageFocusView(false)}
+                           className="absolute top-4 right-4 z-10 bg-slate-100/50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 p-2 rounded-full transition-all text-slate-500"
+                        >
+                           <span className="material-icons text-sm">close</span>
+                        </button>
+
+                        {/* Navigation Arrows */}
+                        <button
+                           onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMediaIndex(prev => (prev - 1 + variantShowcaseMedia.length) % variantShowcaseMedia.length);
+                           }}
+                           className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/90 dark:bg-slate-800/90 shadow-md text-slate-600 dark:text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-105"
+                        >
+                           <span className="material-icons">chevron_left</span>
+                        </button>
+                        <button
+                           onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMediaIndex(prev => (prev + 1) % variantShowcaseMedia.length);
+                           }}
+                           className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/90 dark:bg-slate-800/90 shadow-md text-slate-600 dark:text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-105"
+                        >
+                           <span className="material-icons">chevron_right</span>
+                        </button>
+
+                        <div className="aspect-square w-full relative overflow-hidden rounded-2xl bg-white flex items-center justify-center">
+                           {effectiveActiveMedia.type === 'youtube' ? (
+                              <iframe
+                                 src={`${effectiveActiveMedia.video_url}?mute=1&autoplay=1`}
+                                 className="w-full h-full"
+                                 frameBorder="0"
+                                 allow="autoplay; encrypted-media"
+                              />
+                           ) : effectiveActiveMedia.type === 'video' ? (
+                              <video src={effectiveActiveMedia.video_url} autoPlay muted playsInline loop className="w-full h-full object-contain" />
+                           ) : (
+                              <img
+                                 src={effectiveActiveMedia.image_url || product.image}
+                                 alt={product.title}
+                                 className="w-full h-full object-contain max-h-full"
+                              />
+                           )}
+                        </div>
+                     </div>
+                  </div>
+               )}
+
+               <div className="relative w-full max-w-md md:max-w-lg bg-white dark:bg-slate-900 shadow-2xl h-full flex flex-col animate-in slide-in-from-right duration-500 border-l border-slate-200 dark:border-slate-800">
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">Select variations and quantity</h3>
+                     <button
+                        onClick={closeVariantOverlay}
+                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500"
+                     >
+                        <span className="material-icons">close</span>
+                     </button>
+                  </div>
+
+                  {/* Body - Scrollable Content */}
+                  <div className="flex-1 overflow-y-auto px-6 py-4 space-y-8 scrollbar-hide">
+                     {/* Wholesale Price Tiers (Image 1 style) */}
+                     {quantityDiscounts.length > 0 && (
+                        <div className="space-y-4">
+                           <div className="flex items-center gap-2">
+                              <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm">25% off</span>
+                              <span className="text-[10px] font-bold text-red-600">Lower priced than similar</span>
+                           </div>
+                           <div className="flex gap-6 overflow-x-auto pb-2 scrollbar-hide">
+                              <div className="flex-shrink-0">
+                                 <div className="text-[10px] text-slate-500 mb-1">2 - 99 pieces</div>
+                                 <div className="text-lg font-bold text-slate-900 dark:text-white">{formatPrice(product.price, currencyCode)}</div>
+                                 <div className="text-[10px] text-slate-400 line-through">{formatPrice(displayRRP || product.price * 1.25, currencyCode)}</div>
+                              </div>
+                              {quantityDiscounts.map((tier, idx) => (
+                                 <div key={idx} className="flex-shrink-0 opacity-80">
+                                    <div className="text-[10px] text-slate-500 mb-1">{tier.min_quantity}+ pieces</div>
+                                    <div className="text-lg font-bold text-slate-900 dark:text-white">{formatPrice(tier.unit_price, currencyCode)}</div>
+                                    <div className="text-[10px] text-slate-400 line-through">{formatPrice(tier.unit_price * 1.3, currencyCode)}</div>
+                                 </div>
+                              ))}
+                           </div>
+                        </div>
+                     )}
+
+                     {/* Options with Quantity Selectors (Alibaba style) */}
+                     {productOptions.map((option, optIdx) => (
+                        <div key={option.id} className="space-y-4">
+                           <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                                 {option.name}: <span className="font-normal text-slate-500">{selectedOptions[option.name]}</span>
+                              </h4>
+                           </div>
+
+                           {/* Show higher-level options (e.g. Model Number) as chips */}
+                           {optIdx < productOptions.length - 1 ? (
+                              <div className="flex flex-wrap gap-2">
+                                 {option.values.map(val => (
+                                    <button
+                                       key={val}
+                                       onClick={() => {
+                                          setSelectedOptions(prev => ({ ...prev, [option.name]: val }));
+                                          const v = productVariants.find(v => v.options && v.options[option.name] === val);
+                                          if (v) {
+                                             setOverlayVariant(v);
+                                             setActiveMediaIndex(0);
+                                          }
+                                       }}
+                                       className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${selectedOptions[option.name] === val
+                                          ? 'border-orange-500 text-orange-600 bg-orange-50 dark:bg-orange-900/10'
+                                          : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                                          }`}
+                                    >
+                                       {val}
+                                    </button>
+                                 ))}
+                              </div>
+                           ) : (
+                              /* Show the last option (usually Color) as a list with quantity selectors */
+                              <div className="space-y-3">
+                                 {option.values.map(val => {
+                                    const variant = productVariants.find(v => v.options && v.options[option.name] === val);
+                                    const qty = variantQuantities[val] || 0;
+                                    const updateQty = (delta: number) => {
+                                       setVariantQuantities(prev => ({
+                                          ...prev,
+                                          [val]: Math.max(0, (Number(prev[val]) || 0) + delta)
+                                       }));
+                                    };
+
+                                    const isSelected = overlayVariant?.id === variant?.id;
+
+                                    return (
+                                       <div
+                                          key={val}
+                                          onClick={() => {
+                                             if (variant) {
+                                                setOverlayVariant(variant);
+                                                setActiveMediaIndex(0);
+                                             }
+                                             setSelectedOptions(prev => ({ ...prev, [option.name]: val }));
+                                          }}
+                                          className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'border-orange-500 bg-orange-50/50 dark:bg-orange-900/10' : 'border-slate-100 dark:border-slate-800 hover:border-orange-200'}`}
+                                       >
+                                          <div className="flex items-center gap-3">
+                                             <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                                                <img src={variant?.image || product.image} className="w-full h-full object-cover" alt={val} />
+                                             </div>
+                                             <div>
+                                                <p className="text-sm font-bold text-slate-800 dark:text-white">{val}</p>
+                                                <p className="text-xs text-slate-500">{formatPrice(variant?.price || product.price, currencyCode)}</p>
+                                             </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
+                                             <button
+                                                onClick={() => updateQty(-1)}
+                                                disabled={qty === 0}
+                                                className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all ${qty > 0 ? 'border-slate-300 text-slate-800 active:bg-slate-100' : 'border-slate-100 text-slate-300'}`}
+                                             >
+                                                <span className="material-icons text-sm">remove</span>
+                                             </button>
+                                             <span className="text-sm font-bold min-w-[20px] text-center dark:text-white">{qty}</span>
+                                             <button
+                                                onClick={() => updateQty(1)}
+                                                className="h-8 w-8 rounded-full border border-slate-300 text-slate-800 dark:text-white active:bg-slate-100 flex items-center justify-center shadow-sm"
+                                             >
+                                                <span className="material-icons text-sm">add</span>
+                                             </button>
+                                          </div>
+                                       </div>
+                                    );
+                                 })}
+                              </div>
+                           )}
+                        </div>
+                     ))}
+                  </div>
+
+                  {/* Footer - Order/Add to Cart */}
+                  <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+                     <div className="flex justify-between items-center mb-6">
+                        <span className="text-sm font-bold text-slate-500">Subtotal</span>
+                        <div className="text-right">
+                           <div className="flex items-center gap-2 justify-end">
+                              <span className="text-xs text-slate-400 font-medium">
+                                 {Object.values(variantQuantities).reduce((a: number, b: any) => a + Number(b), 0)} pieces
+                              </span>
+                              <span className="text-xl font-bold text-slate-900 dark:text-white">
+                                 {formatPrice(
+                                    Object.entries(variantQuantities).reduce((total: number, [val, qty]: [string, any]) => {
+                                       const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
+                                       const price = variant?.price || product.price || 0;
+                                       return total + (Number(qty) * price);
+                                    }, 0) || (overlayQuantity * (overlayVariant?.price || displayPrice)),
+                                    currencyCode
+                                 )}
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="flex gap-3">
+                        <button
+                           onClick={handleOverlayAddToCart}
+                           className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-full shadow-lg shadow-orange-600/20 active:scale-[0.98] transition-all"
+                        >
+                           Add to cart
+                        </button>
+                        {/* Hidden buy now for now to keep it clean */}
+                     </div>
+                  </div>
+               </div>
+            </div>
+         )}
 
          {/* Message Modal */}
          {

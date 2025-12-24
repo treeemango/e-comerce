@@ -50,7 +50,8 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
         delivery_time_days: deal.delivery_time_days,
         delivery_scope: deal.delivery_scope,
         stock: 50,
-        in_stock: deal.in_stock ?? true
+        in_stock: deal.in_stock ?? true,
+        listing_type: deal.listing_type
     } as Product);
 
     return (
@@ -76,20 +77,21 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
             {/* Content */}
             <div className="flex-grow p-2">
                 {loading ? (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2 w-full">
                         {[1, 2, 3, 4, 5, 6].map(i => (
                             <div key={i} className="aspect-[4/5] bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse"></div>
                         ))}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2 w-full">
                         {deals.map(deal => (
-                            <ProductCard
-                                key={deal.id}
-                                product={mapDealToProduct(deal)}
-                                onProductClick={onProductClick}
-                                onVisualSearch={onVisualSearch}
-                            />
+                            <div key={deal.id} className="w-full min-w-0">
+                                <ProductCard
+                                    product={mapDealToProduct(deal)}
+                                    onProductClick={onProductClick}
+                                    onVisualSearch={onVisualSearch}
+                                />
+                            </div>
                         ))}
                     </div>
                 )}

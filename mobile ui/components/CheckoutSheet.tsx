@@ -6,6 +6,7 @@ import { fetchUserCoupons, applyCoupon, checkout, fetchCartDeliveryFee, syncCart
 interface CartItem {
   product: Product;
   quantity: number;
+  variant_id?: string;
 }
 
 interface CheckoutSheetProps {
@@ -300,15 +301,23 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
       const flatItems: Product[] = [];
       items.forEach(item => {
         for (let i = 0; i < item.quantity; i++) {
-          flatItems.push(item.product);
+          flatItems.push({
+            ...item.product,
+            // Prioritize item.variant_id, then fall back to product.variant_id
+            variant_id: item.variant_id || item.product.variant_id
+          });
         }
       });
+
+      console.log('[Checkout] Syncing cart with items:', flatItems.map(i => ({ id: i.id, variant_id: i.variant_id })));
 
       const syncSuccess = await syncCart(userId || null, flatItems);
       if (!syncSuccess) {
         alert('Failed to synchronize cart.');
         return;
       }
+
+      console.log('[Checkout] Cart synced successfully, calling checkout RPC...');
 
       const orderId = await checkout(
         userId || null,

@@ -386,7 +386,9 @@ const App: React.FC = () => {
   // One Tap disabled for now: keep sign-in user-initiated
 
   const addToCart = (product: Product, event?: React.MouseEvent | React.TouchEvent) => {
-    const currentQty = cartItems.filter(item => item.id.toString() === product.id.toString()).length;
+    const currentQty = cartItems.filter(item =>
+      item.id.toString() === product.id.toString() && item.variant_id === product.variant_id
+    ).length;
     const maxStock = product.stock ?? Infinity;
     if (currentQty >= maxStock) {
       alert('Only ' + maxStock + ' in stock for this item.');
@@ -442,39 +444,47 @@ const App: React.FC = () => {
             document.body.removeChild(flyingBadge);
           }
           setCartItems(prev => {
-            const qty = prev.filter(item => item.id.toString() === product.id.toString()).length;
+            const qty = prev.filter(item =>
+              item.id.toString() === product.id.toString() && item.variant_id === product.variant_id
+            ).length;
             if (qty >= maxStock) return prev;
             return [...prev, product];
           });
         }, 1400);
       } else {
         setCartItems(prev => {
-          const qty = prev.filter(item => item.id.toString() === product.id.toString()).length;
+          const qty = prev.filter(item =>
+            item.id.toString() === product.id.toString() && item.variant_id === product.variant_id
+          ).length;
           if (qty >= maxStock) return prev;
           return [...prev, product];
         });
       }
     } else {
       setCartItems(prev => {
-        const qty = prev.filter(item => item.id.toString() === product.id.toString()).length;
+        const qty = prev.filter(item =>
+          item.id.toString() === product.id.toString() && item.variant_id === product.variant_id
+        ).length;
         if (qty >= maxStock) return prev;
         return [...prev, product];
       });
     }
   };
 
-  const handleRemoveFromCart = (productId: number) => {
-    setCartItems(prev => prev.filter(item => item.id !== productId));
+  const handleRemoveFromCart = (productId: number | string, variantId?: string) => {
+    setCartItems(prev => prev.filter(item =>
+      !(item.id === productId && item.variant_id === variantId)
+    ));
   };
 
-  const handleUpdateQuantity = (productId: number, delta: number) => {
+  const handleUpdateQuantity = (productId: number | string, delta: number, variantId?: string) => {
     setCartItems(prev => {
       const newItems = [...prev];
       if (delta > 0) {
-        const itemToAdd = prev.find(item => item.id === productId);
+        const itemToAdd = prev.find(item => item.id === productId && item.variant_id === variantId);
         if (itemToAdd) newItems.push(itemToAdd);
       } else {
-        const indexToRemove = newItems.findIndex(item => item.id === productId);
+        const indexToRemove = newItems.findIndex(item => item.id === productId && item.variant_id === variantId);
         if (indexToRemove !== -1) newItems.splice(indexToRemove, 1);
       }
       return newItems;

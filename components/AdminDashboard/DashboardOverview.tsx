@@ -244,17 +244,17 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ permissions }) =>
                         ) : revenueData.map((item, idx) => (
                             <div key={idx} className="flex-1 flex flex-col items-center group relative h-full">
                                 <div className="absolute -top-12 scale-0 group-hover:scale-100 transition-all duration-300 bg-slate-900 text-white text-[10px] font-black px-3 py-2 rounded-xl shadow-2xl z-20 whitespace-nowrap">
-                                    Commission: ${(item.platform_commission).toLocaleString()}
+                                    Commission: ${(item.platform_commission || 0).toLocaleString()}
                                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 rotate-45"></div>
                                 </div>
                                 <div className="w-full h-full flex flex-col justify-end gap-1 px-1">
                                     <div
                                         className="w-full bg-indigo-100 rounded-t-lg group-hover:bg-indigo-200 transition-all duration-300 shadow-sm"
-                                        style={{ height: `${(item.total_revenue / Math.max(...revenueData.map(r => r.total_revenue))) * 100}%` }}
+                                        style={{ height: `${((item.total_revenue || 0) / Math.max(...revenueData.map(r => r.total_revenue || 1))) * 100}%` }}
                                     ></div>
                                     <div
                                         className="w-full bg-indigo-600 rounded-t-lg group-hover:bg-indigo-500 transition-all duration-300 shadow-lg"
-                                        style={{ height: `${(item.platform_commission / Math.max(...revenueData.map(r => r.total_revenue))) * 100}%` }}
+                                        style={{ height: `${((item.platform_commission || 0) / Math.max(...revenueData.map(r => r.total_revenue || 1))) * 100}%` }}
                                     ></div>
                                 </div>
                                 <span className="text-[9px] font-black text-slate-400 mt-4 uppercase tracking-tighter whitespace-nowrap">

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SellerOrder } from '@/types';
 import { cn, formatCurrency } from '@/lib/utils';
+import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
 
 interface SellerOrdersViewProps {
     orders: SellerOrder[];
@@ -15,6 +16,12 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
 }) => {
     // aligning with ManageOrdersView.tsx statuses: unshipped (paid), pending, canceled, shipped
     const [activeTab, setActiveTab] = useState<'all' | 'unshipped' | 'pending' | 'shipped' | 'canceled'>('unshipped');
+    const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+
+    const printingOrder = useMemo(() => {
+        if (!printingOrderId) return null;
+        return orders.find(o => o.id === printingOrderId);
+    }, [printingOrderId, orders]);
 
     const filteredOrders = useMemo(() => {
         let result = orders;
@@ -146,6 +153,21 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                                 <button className="flex-1 bg-orange-500 text-white text-xs font-black py-3 rounded-xl shadow-lg shadow-orange-500/20 active:bg-orange-600 transition-all">
                                     {(order.status?.toLowerCase() === 'paid' || order.status?.toLowerCase() === 'unshipped') ? 'SHIP ORDER' : 'VIEW DETAILS'}
                                 </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPrintingOrderId(order.id);
+                                        // Wait for state to apply and component to render
+                                        setTimeout(() => {
+                                            window.print();
+                                            // Optional: reset after print
+                                            setTimeout(() => setPrintingOrderId(null), 100);
+                                        }, 100);
+                                    }}
+                                    className="w-12 flex items-center justify-center border border-gray-100 rounded-xl bg-gray-50 text-gray-400 active:bg-gray-100 transition-all"
+                                >
+                                    <span className="material-icons-outlined text-lg">print</span>
+                                </button>
                                 <button className="w-12 flex items-center justify-center border border-gray-100 rounded-xl bg-gray-50 text-gray-400 active:bg-gray-100 transition-all">
                                     <span className="material-icons-outlined text-lg">more_horiz</span>
                                 </button>
@@ -154,6 +176,9 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                     ))
                 )}
             </div>
+
+            {/* Print-only Receipt Component - Only render the one being printed */}
+            {printingOrder && <BuyerReceipt order={printingOrder} />}
         </div>
     );
 };

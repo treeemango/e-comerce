@@ -248,7 +248,13 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
             alert('Please sign in to message the seller');
             return;
         }
-        setMessageText(`Hi, I'm interested in your ${product.title}. Is it available?`);
+        if (product.listing_type === 'reservation') {
+            setMessageText(`Hi, I'd like to reserve ${product.title}. Could you let me know the process?`);
+        } else if (product.listing_type === 'inquiry') {
+            setMessageText(`Hi, I have an inquiry about ${product.title}. Could you provide more details?`);
+        } else {
+            setMessageText(`Hi, I'm interested in your ${product.title}. Is it available?`);
+        }
         setIsMessageSheetOpen(true);
     };
 
@@ -830,32 +836,58 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 </div>
 
                 <div className="flex-1 flex gap-2">
-                    <button
-                        className="flex-1 bg-white dark:bg-black text-red-500 font-bold rounded-full py-3.5 text-sm border-2 border-red-400/30 active:scale-[0.98] transition-all"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (productVariants.length > 0) {
-                                setIsVariationSheetOpen(true);
-                            } else {
-                                onAddToCart?.(product);
-                            }
-                        }}
-                    >
-                        Add to cart
-                    </button>
-                    <button
-                        className="flex-1 bg-red-600 text-white font-bold rounded-full py-3.5 text-sm shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98] transition-all"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (productVariants.length > 0) {
-                                setIsVariationSheetOpen(true);
-                            } else {
-                                onBuyNow?.(product);
-                            }
-                        }}
-                    >
-                        Buy now
-                    </button>
+                    {product.listing_type === 'inquiry' ? (
+                        <button
+                            className="flex-1 bg-blue-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-blue-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleChatClick();
+                            }}
+                        >
+                            <span className="material-icons text-sm">chat</span>
+                            SEND INQUIRY
+                        </button>
+                    ) : product.listing_type === 'reservation' ? (
+                        <button
+                            className="flex-1 bg-emerald-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-emerald-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleChatClick();
+                            }}
+                        >
+                            <span className="material-icons text-sm">event_available</span>
+                            RESERVE NOW
+                        </button>
+                    ) : (
+                        <>
+                            <button
+                                className="flex-1 bg-white dark:bg-black text-red-500 font-bold rounded-full py-3.5 text-sm border-2 border-red-400/30 active:scale-[0.98] transition-all"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (productVariants.length > 0) {
+                                        setIsVariationSheetOpen(true);
+                                    } else {
+                                        onAddToCart?.(product);
+                                    }
+                                }}
+                            >
+                                Add to cart
+                            </button>
+                            <button
+                                className="flex-1 bg-red-600 text-white font-bold rounded-full py-3.5 text-sm shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98] transition-all"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (productVariants.length > 0) {
+                                        setIsVariationSheetOpen(true);
+                                    } else {
+                                        onBuyNow?.(product);
+                                    }
+                                }}
+                            >
+                                Buy now
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1204,24 +1236,90 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 >
                                     <span className="material-icons-outlined text-gray-600">chat_bubble_outline</span>
                                 </button>
-                                <button
-                                    className="flex-1 bg-white border border-gray-900 dark:border-white text-gray-900 dark:text-white font-black rounded-full py-3.5 text-sm active:scale-[0.98] transition-all"
-                                    onClick={() => {
-                                        onAddToCart?.(product);
-                                        setIsVariationSheetOpen(false);
-                                    }}
-                                >
-                                    Add to cart
-                                </button>
-                                <button
-                                    className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
-                                    onClick={() => {
-                                        onBuyNow?.(product);
-                                        setIsVariationSheetOpen(false);
-                                    }}
-                                >
-                                    Start order
-                                </button>
+                                {product.listing_type === 'inquiry' ? (
+                                    <button
+                                        className="flex-1 bg-blue-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-blue-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                        onClick={() => {
+                                            handleChatClick();
+                                            setIsVariationSheetOpen(false);
+                                        }}
+                                    >
+                                        <span className="material-icons text-sm">chat</span>
+                                        SEND INQUIRY
+                                    </button>
+                                ) : product.listing_type === 'reservation' ? (
+                                    <button
+                                        className="flex-1 bg-emerald-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-emerald-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                        onClick={() => {
+                                            handleChatClick();
+                                            setIsVariationSheetOpen(false);
+                                        }}
+                                    >
+                                        <span className="material-icons text-sm">event_available</span>
+                                        RESERVE NOW
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button
+                                            className="flex-1 bg-white border border-gray-900 dark:border-white text-gray-900 dark:text-white font-black rounded-full py-3.5 text-sm active:scale-[0.98] transition-all"
+                                            onClick={() => {
+                                                const selectedVariants = (Object.entries(variantQuantities) as [string, number][]).filter(([_, qty]) => qty > 0);
+
+                                                if (selectedVariants.length > 0) {
+                                                    selectedVariants.forEach(([val, qty]) => {
+                                                        const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
+                                                        if (variant) {
+                                                            onAddToCart?.({
+                                                                ...product,
+                                                                variant_id: variant.id,
+                                                                price: variant.price,
+                                                                title: `${product.title} - ${val}`,
+                                                                image: variant.image || product.image
+                                                            }, qty);
+                                                        }
+                                                    });
+                                                } else {
+                                                    // Fallback to current variant or main product
+                                                    const productToAdd = currentVariant
+                                                        ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
+                                                        : product;
+                                                    onAddToCart?.(productToAdd, 1);
+                                                }
+                                                setIsVariationSheetOpen(false);
+                                            }}
+                                        >
+                                            Add to cart
+                                        </button>
+                                        <button
+                                            className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
+                                            onClick={() => {
+                                                const selectedVariants = (Object.entries(variantQuantities) as [string, number][]).filter(([_, qty]) => qty > 0);
+                                                if (selectedVariants.length > 0) {
+                                                    selectedVariants.forEach(([val, qty]) => {
+                                                        const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
+                                                        if (variant) {
+                                                            onBuyNow?.({
+                                                                ...product,
+                                                                variant_id: variant.id,
+                                                                price: variant.price,
+                                                                title: `${product.title} - ${val}`,
+                                                                image: variant.image || product.image
+                                                            }, qty);
+                                                        }
+                                                    });
+                                                } else {
+                                                    const productToAdd = currentVariant
+                                                        ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
+                                                        : product;
+                                                    onBuyNow?.(productToAdd, 1);
+                                                }
+                                                setIsVariationSheetOpen(false);
+                                            }}
+                                        >
+                                            Start order
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

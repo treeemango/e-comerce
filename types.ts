@@ -90,7 +90,9 @@ export interface Product {
     free_delivery?: boolean;
     delivery_time_estimate?: string;
     seller_rating?: number;
-    has_quantity_discount?: boolean; // Flag indicating bulk pricing tiers are available
+    has_quantity_discount?: boolean;
+    listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
+    quantity_discounts?: QuantityDiscountTier[];
     auto_discount_type?: 'percentage' | 'fixed_amount' | 'buy_x_get_y';
     auto_discount_value?: number;
     auto_discount_buy_qty?: number;
@@ -103,6 +105,7 @@ export interface Product {
     features?: string[];
     bestSellingText?: string;
     cartOverlay?: boolean;
+    variant_id?: string; // Track specific variation if selected
 }
 
 
@@ -226,12 +229,18 @@ export interface DeliveryLocationFilter {
     product_count: number;
 }
 
+export interface VendorCountryFilter {
+    country: string;
+    product_count: number;
+}
+
 export interface SearchFilters {
     categories: CategoryFilter[];
     brands: BrandFilter[];
     price_range: PriceRange;
     attributes: Record<string, AttributeValue[]>;
     delivery_locations: DeliveryLocationFilter[];
+    vendor_countries: VendorCountryFilter[];
     visual_match_count: number;
     total_products: number;
     has_visual_search: boolean;
@@ -245,7 +254,8 @@ export interface AppliedFilters {
     price_min: number | null;
     price_max: number | null;
     attributes: Record<string, string[]>;
-    delivery_locations: string[]; // ✅ Added
+    delivery_locations: string[];
+    vendor_countries: string[];
 }
 
 // Review System Types
@@ -725,6 +735,13 @@ export interface CreateProductPayload {
     attributes: ProductAttributeData[];
     variants: ProductVariantData[];
     media: MediaUploadData[];
+    listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
+    quantity_discounts?: QuantityDiscountTier[];
+}
+
+export interface QuantityDiscountTier {
+    min_quantity: number;
+    unit_price: number;
 }
 
 export interface SellerOrder {
@@ -739,6 +756,14 @@ export interface SellerOrder {
     tax_amount?: number;
     tax_rate?: number;
     delivery_fee?: number;
+    fulfillment_type?: 'official_courier' | 'local_parcel';
+    parcel_details?: {
+        company: string;
+        waybill_number: string;
+        collection_point?: string;
+        phone?: string;
+    } | null;
+    delivery_otp?: string | null;
     items: {
         product_title: string;
         variant_sku: string | null;
@@ -765,8 +790,19 @@ export interface BuyerOrder {
     status: string;
     total_amount: number;
     currency?: string;
-    tracking_code?: string;
+    tracking_code?: string; // legacy or used for trackings
+    tracking_number?: string;
+    carrier?: string;
     shipping_method?: string;
+    shipping_additional_info?: string;
+    fulfillment_type?: 'official_courier' | 'local_parcel';
+    parcel_details?: {
+        company: string;
+        waybill_number: string;
+        collection_point?: string;
+        phone?: string;
+    } | null;
+    delivery_otp?: string | null;
     items: BuyerOrderItem[];
 }
 
@@ -1102,6 +1138,7 @@ export interface PendingProduct {
     seller_name: string;
     category_name: string;
     price: number;
+    currency?: string;
     status: 'pending' | 'approved' | 'rejected';
     submitted_at: string;
     image_url?: string;
@@ -1116,6 +1153,24 @@ export interface PendingProduct {
         media_id?: string;
         image_embedding?: number[];
     };
+    // New seller-configurable fields
+    listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
+    has_quantity_discount?: boolean;
+    quantity_discounts?: { min_quantity: number; unit_price: number }[];
+    delivery_locations?: string[];
+    free_delivery?: boolean;
+    is_express_delivery?: boolean;
+    sale_unit?: string;
+    // Additional seller fields
+    tags?: string[];
+    seo_title?: string;
+    seo_description?: string;
+    use_case_tags?: string[];
+    occasion_tags?: string[];
+    min_order_quantity?: number;
+    delivery_scope?: string;
+    stock?: number;
+    sku?: string;
 }
 
 // Seller Verification
@@ -1170,14 +1225,28 @@ export interface HeroSlide {
 }
 
 export interface SellerStats {
-    seller_id: string;
+    seller_id?: string;
     total_sales: number;
-    sales_7d: number;
-    sales_30d: number;
-    total_orders: number;
+    sales_7d?: number;
+    sales_30d?: number;
+    total_orders?: number;
+    pending_orders: number;
+    pending_returns?: number;
+    active_coupons?: number;
+    balance?: number;
     total_products: number;
     low_stock_count: number;
-    last_updated: string;
+    last_updated?: string;
+}
+
+export interface SellerOrderSummary {
+    order_id: string;
+    total_price: number;
+    order_status: string;
+    order_date: string;
+    customer_id: string;
+    item_count: number;
+    return_status: string | null;
 }
 
 // ==========================================

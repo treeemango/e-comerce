@@ -298,20 +298,22 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
               <span className="text-sm ml-0.5">.{(product.price || 0).toFixed(2).split('.')[1]}</span>
               {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">/{product.sale_unit}</span>}
             </div>
-            <button
-              className={`h-8 w-8 flex items-center justify-center rounded-full border transition-all shadow-sm ${product.deal_type === 'coupon'
-                ? 'border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white dark:border-orange-400 dark:text-orange-400'
-                : product.deal_type === 'hot_discount'
-                  ? 'border-red-500 text-red-600 hover:bg-red-500 hover:text-white dark:border-red-400 dark:text-red-400'
-                  : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-shop-red hover:text-white hover:border-shop-red dark:hover:bg-shop-red'
-                }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onAddToCart) onAddToCart(product, e);
-              }}
-            >
-              <span className="material-symbols-outlined !text-xl">add_shopping_cart</span>
-            </button>
+            {(!product.listing_type || product.listing_type === 'direct_purchase') && (
+              <button
+                className={`h-8 w-8 flex items-center justify-center rounded-full border transition-all shadow-sm ${product.deal_type === 'coupon'
+                  ? 'border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white dark:border-orange-400 dark:text-orange-400'
+                  : product.deal_type === 'hot_discount'
+                    ? 'border-red-500 text-red-600 hover:bg-red-500 hover:text-white dark:border-red-400 dark:text-red-400'
+                    : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-shop-red hover:text-white hover:border-shop-red dark:hover:bg-shop-red'
+                  }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onAddToCart) onAddToCart(product, e);
+                }}
+              >
+                <span className="material-symbols-outlined !text-xl">add_shopping_cart</span>
+              </button>
+            )}
           </div>
 
           {(hasStrikePrice || product.activeCoupon) && (
@@ -456,7 +458,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
           </div>
         </div>
 
-        {activeModal === 'preview' && <PreviewModal product={product} onClose={closeModal} />}
+        {activeModal === 'preview' && <PreviewModal product={product} onClose={closeModal} onProductClick={onProductClick} onAddToCart={onAddToCart} />}
         {activeModal === 'similar' && <SimilarItemsModal product={product} onClose={closeModal} />}
       </div>
     </>

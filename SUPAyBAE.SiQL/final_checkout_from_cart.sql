@@ -103,7 +103,13 @@ BEGIN
 
     -- 6. Process Cart Items: Create order details and DEDUCT STOCK
     FOR v_cart_item IN 
-        SELECT ci.product_id, ci.quantity, pv.price, pv.stock, pv.id as variant_id
+        SELECT 
+            ci.product_id, 
+            ci.quantity, 
+            pv.price, 
+            pv.stock, 
+            pv.id as variant_id,
+            public.calculate_product_delivery_fee(ci.product_id, ci.quantity::BIGINT, p_express_delivery) as item_delivery_fee
         FROM cart_items ci
         JOIN product_variants pv ON ci.product_id = pv.product_id
         WHERE ci.user_id = p_user_id
@@ -113,9 +119,9 @@ BEGIN
             RAISE EXCEPTION 'Insufficient stock for product % (Requested: %, Available: %)', v_cart_item.product_id, v_cart_item.quantity, v_cart_item.stock;
         END IF;
 
-        -- Create Order Item (Fix table name to order_items if that's what's used)
-        INSERT INTO order_items (order_id, product_id, variant_id, quantity, price)
-        VALUES (v_order_id, v_cart_item.product_id, v_cart_item.variant_id, v_cart_item.quantity, v_cart_item.price);
+        -- Create Order Item with delivery_fee
+        INSERT INTO order_items (order_id, product_id, variant_id, quantity, price, delivery_fee)
+        VALUES (v_order_id, v_cart_item.product_id, v_cart_item.variant_id, v_cart_item.quantity, v_cart_item.price, v_cart_item.item_delivery_fee);
 
         -- Deduct Stock
         UPDATE product_variants

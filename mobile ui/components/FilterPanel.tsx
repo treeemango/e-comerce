@@ -48,6 +48,15 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
         }));
     };
 
+    const toggleCountry = (country: string) => {
+        setLocalFilters(prev => ({
+            ...prev,
+            vendor_countries: prev.vendor_countries.includes(country)
+                ? prev.vendor_countries.filter(c => c !== country)
+                : [...prev.vendor_countries, country]
+        }));
+    };
+
     const handleApply = () => {
         onApplyFilters(localFilters);
         onClose();
@@ -59,7 +68,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
             brand_ids: [],
             price_min: null,
             price_max: null,
-            attributes: {}
+            attributes: {},
+            delivery_locations: [],
+            vendor_countries: []
         };
         setLocalFilters(resetFilters);
         onApplyFilters(resetFilters);
@@ -69,7 +80,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
     const sections = [
         { id: 'categories', name: 'Categories', count: filters?.categories?.length || 0 },
         { id: 'brands', name: 'Brands', count: filters?.brands?.length || 0 },
-        { id: 'price', name: 'Price Range', count: 0 }
+        { id: 'price', name: 'Price Range', count: 0 },
+        { id: 'countries', name: 'Countries', count: filters?.vendor_countries?.length || 0 }
     ];
 
     return (
@@ -170,6 +182,26 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                             onChange={(e) => setLocalFilters({ ...localFilters, price_max: e.target.value ? Number(e.target.value) : null })}
                                             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm"
                                         />
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedSection === 'countries' && (
+                                <div>
+                                    <h3 className="font-bold text-sm mb-3 text-black dark:text-white">Countries</h3>
+                                    <div className="flex flex-col gap-2">
+                                        {filters?.vendor_countries?.map((vc) => (
+                                            <label key={vc.country} className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={localFilters.vendor_countries.includes(vc.country)}
+                                                    onChange={() => toggleCountry(vc.country)}
+                                                    className="w-4 h-4 rounded border-gray-300"
+                                                />
+                                                <span className="text-sm text-black dark:text-white">{vc.country}</span>
+                                                <span className="text-xs text-gray-400 ml-auto">({vc.product_count})</span>
+                                            </label>
+                                        ))}
                                     </div>
                                 </div>
                             )}

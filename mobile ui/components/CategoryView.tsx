@@ -43,14 +43,15 @@ export const CategoryView: React.FC<CategoryViewProps> = ({ category, onProductC
 
       {/* Product Grid */}
       <div className="p-2">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 w-full">
           {category.products.map(product => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onProductClick={onProductClick}
-              onVisualSearch={onVisualSearch}
-            />
+            <div key={product.id} className="w-full min-w-0">
+              <ProductCard
+                product={product}
+                onProductClick={onProductClick}
+                onVisualSearch={onVisualSearch}
+              />
+            </div>
           ))}
         </div>
       </div>

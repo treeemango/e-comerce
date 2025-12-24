@@ -223,6 +223,13 @@ SELECT
     p.view_count,
     p.popularity,
     p.orders_last_week,
+    p.has_quantity_discount,
+    p.is_lightning_deal,
+    p.lightning_ends_at,
+    p.is_choice,
+    p.delivery_locations,
+    p.use_case_tags,
+    p.occasion_tags,
 
     -- AI / Price Intelligence
     p.ai_recommendation,
@@ -244,6 +251,7 @@ SELECT
     p.min_order_value,
     p.min_order_for_free_delivery,
     p.delivery_scope,
+    p.sale_unit,
 
     -- SEO & Tech
     p.url_slug,
@@ -277,6 +285,7 @@ SELECT
     p.rejection_reason,
     p.created_at,
     p.updated_at,
+    p.listing_type,
     p.updated_at AS metrics_updated_at
 
 FROM public.products p
@@ -343,6 +352,7 @@ SELECT
     min_order_for_free_delivery,
     is_express_delivery,
     delivery_scope,
+    sale_unit,
     seller_rating,
     seller_total_orders,
     seller_experience_years,
@@ -358,12 +368,20 @@ SELECT
     "activeCoupon",
     deal_type,                 -- ✅ Now included
     coupon_expires_at,         -- ✅ Now included
+    has_quantity_discount,
+    is_lightning_deal,
+    lightning_ends_at,
+    is_choice,
+    delivery_locations,
+    use_case_tags,
+    occasion_tags,
     auto_discount_type,
     auto_discount_value,
     auto_discount_buy_qty,
     auto_discount_get_qty,
     auto_discount_min_requirement,
     auto_discount_name,
+    listing_type,
     stock_state,
     variants
 FROM public.product_unified_view;

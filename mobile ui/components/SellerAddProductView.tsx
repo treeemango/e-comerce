@@ -19,7 +19,8 @@ import {
     ShopifyAttribute,
     MediaUploadData,
     ProductAttributeData,
-    ProductVariantData
+    ProductVariantData,
+    QuantityDiscountTier
 } from '../../types';
 import { SearchableSelect } from './SearchableSelect';
 
@@ -106,6 +107,8 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [deliveryLocations, setDeliveryLocations] = useState<string[]>([]);
     const [deliveryLocationInput, setDeliveryLocationInput] = useState('');
     const [isChoice, setIsChoice] = useState(false);
+    const [listingType, setListingType] = useState<'direct_purchase' | 'inquiry' | 'reservation'>('direct_purchase');
+    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
 
 
     // Step 4: Media & SEO
@@ -571,10 +574,12 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 is_choice: isChoice,
                 delivery_locations: deliveryLocations,
                 sale_unit: pricingUnit,
-                is_active: true
+                is_active: true,
+                listing_type: listingType,
+                quantity_discounts: quantityDiscounts
             };
 
-            const pid = await createProductFull(sellerId, payload, preparedVariants, payload.media, finalAttributes);
+            const pid = await createProductFull(sellerId, payload, preparedVariants, payload.media, finalAttributes, quantityDiscounts);
             if (pid) {
                 alert("Published! Your product is now pending approval.");
                 onSuccess();
@@ -788,6 +793,47 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                 placeholder="Add occasion + Enter"
                                 className="w-full border p-3 rounded-lg text-sm"
                             />
+                        </div>
+
+                        {/* Purchase Mode / Listing Type */}
+                        <div className="pt-6 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-4">
+                                <label className="text-xs font-bold uppercase text-gray-900 tracking-wider">Purchase Mode</label>
+                                <div className="px-2 py-0.5 bg-orange-100 text-orange-600 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
+                            </div>
+                            <div className="space-y-3">
+                                {[
+                                    { id: 'direct_purchase', icon: 'shopping_cart', title: 'Add to Cart', desc: 'Standard checkout', color: 'orange' },
+                                    { id: 'inquiry', icon: 'chat', title: 'Inquiry Only', desc: 'Cars, Land, Services', color: 'blue' },
+                                    { id: 'reservation', icon: 'event_available', title: 'Reservation', desc: 'Book now, pay later', color: 'green' }
+                                ].map((mode) => (
+                                    <button
+                                        key={mode.id}
+                                        type="button"
+                                        onClick={() => setListingType(mode.id as any)}
+                                        className={cn(
+                                            "relative flex items-center p-4 rounded-xl border-2 transition-all text-left group overflow-hidden",
+                                            listingType === mode.id
+                                                ? `border-${mode.color}-400 bg-${mode.color}-50/50 shadow-sm`
+                                                : "border-gray-100 bg-white"
+                                        )}
+                                    >
+                                        <div className={cn(
+                                            "w-10 h-10 rounded-full flex items-center justify-center mr-4 transition-colors",
+                                            listingType === mode.id ? `bg-${mode.color}-500 text-white` : "bg-gray-100 text-gray-400"
+                                        )}>
+                                            <span className="material-icons text-xl">{mode.icon}</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className={cn("font-bold text-sm", listingType === mode.id ? `text-${mode.color}-900` : "text-gray-900")}>{mode.title}</div>
+                                            <div className="text-[10px] text-gray-500 uppercase font-black mt-0.5 leading-tight">{mode.desc}</div>
+                                        </div>
+                                        {listingType === mode.id && (
+                                            <span className={`material-icons text-${mode.color}-500`}>check_circle</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1189,6 +1235,74 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">inventory_2</span></span>
                                     <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full border p-3 pl-12 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold" />
                                 </div>
+                            </div>
+
+                            {/* Wholesale Tiers */}
+                            <div className="pt-6 border-t border-gray-100">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h3 className="text-sm font-bold uppercase text-gray-900 tracking-wider">Wholesale Tiers</h3>
+                                        <p className="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Bulk discounts for large orders</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setQuantityDiscounts([...quantityDiscounts, { min_quantity: 0, unit_price: 0 }])}
+                                        className="bg-orange-600 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-full flex items-center gap-1 shadow-md active:scale-95 transition-transform"
+                                    >
+                                        <span className="material-icons text-xs">add</span> Add Tier
+                                    </button>
+                                </div>
+
+                                {quantityDiscounts.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {quantityDiscounts.map((tier, idx) => (
+                                            <div key={idx} className="bg-white p-4 rounded-2xl border-2 border-orange-100 shadow-sm animate-in slide-in-from-right-4">
+                                                <div className="flex items-end gap-3">
+                                                    <div className="flex-1 space-y-1">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase">Min. Qty</label>
+                                                        <input
+                                                            type="number"
+                                                            value={tier.min_quantity}
+                                                            onChange={(e) => {
+                                                                const n = [...quantityDiscounts];
+                                                                n[idx].min_quantity = parseInt(e.target.value) || 0;
+                                                                setQuantityDiscounts(n);
+                                                            }}
+                                                            placeholder="e.g. 100"
+                                                            className="w-full bg-gray-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-orange-500"
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1 space-y-1">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase">Unit Price ({getCurrencySymbol(currency)})</label>
+                                                        <input
+                                                            type="number"
+                                                            value={tier.unit_price}
+                                                            onChange={(e) => {
+                                                                const n = [...quantityDiscounts];
+                                                                n[idx].unit_price = parseFloat(e.target.value) || 0;
+                                                                setQuantityDiscounts(n);
+                                                            }}
+                                                            placeholder="0.00"
+                                                            className="w-full bg-gray-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 text-orange-600"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setQuantityDiscounts(quantityDiscounts.filter((_, i) => i !== idx))}
+                                                        className="h-9 w-9 flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <span className="material-icons text-lg">delete</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-8 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
+                                        <span className="material-icons text-gray-200 text-3xl mb-1">loyalty</span>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No bulk pricing tiers yet</p>
+                                    </div>
+                                )}
                             </div>
                             {/* Promotions Info Note */}
                             <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 mt-2">

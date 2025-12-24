@@ -61,7 +61,7 @@ AS $$
         v.created_at as seller_since
     FROM products p
     INNER JOIN vendors v ON v.user_id = p.seller_id
-    LEFT JOIN products p2 ON p2.seller_id = v.user_id AND p2.status = 'active'
+    LEFT JOIN products p2 ON p2.seller_id = v.user_id AND p2.status = 'approved'
     LEFT JOIN order_items oi ON oi.product_id = p2.id
     LEFT JOIN orders o ON o.id = oi.order_id
     LEFT JOIN badge_2030_seller_badges sb ON sb.seller_id = v.user_id

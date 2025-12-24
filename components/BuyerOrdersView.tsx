@@ -241,6 +241,84 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                                         </div>
                                     ))}
                                 </div>
+                                {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && order.status === 'shipped' && (
+                                    <div className="mt-8 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 rounded-[2rem] border border-orange-100 overflow-hidden shadow-lg shadow-orange-100/50">
+                                        {/* Header */}
+                                        <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4 flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+                                                <span className="material-icons text-white text-xl">directions_bus</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-white font-black text-sm">📦 Parcel Ready for Collection</p>
+                                                <p className="text-orange-100 text-xs">Show the OTP code to collect your order</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Content */}
+                                        <div className="p-6 space-y-4">
+                                            {/* OTP Display - Prominent */}
+                                            <div className="bg-white rounded-2xl p-6 border-2 border-dashed border-orange-200 text-center">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2">
+                                                    Collection Code (OTP)
+                                                </p>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    {(order.delivery_otp || '----').split('').map((digit, i) => (
+                                                        <span key={i} className="w-14 h-16 bg-gradient-to-b from-orange-500 to-orange-600 text-white rounded-xl flex items-center justify-center text-3xl font-black shadow-lg shadow-orange-500/30">
+                                                            {digit}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                <p className="text-xs text-orange-600 font-medium mt-3">
+                                                    🔐 Keep this code secure. Share only with parcel agent.
+                                                </p>
+                                            </div>
+
+                                            {/* Parcel Details Grid */}
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="material-icons text-slate-400 text-lg">local_shipping</span>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Parcel Service</span>
+                                                    </div>
+                                                    <p className="text-sm font-bold text-slate-900">
+                                                        {order.parcel_details?.company || order.carrier || 'Standard Parcel'}
+                                                    </p>
+                                                </div>
+
+                                                <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="material-icons text-slate-400 text-lg">confirmation_number</span>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Waybill Number</span>
+                                                    </div>
+                                                    <p className="text-sm font-bold text-slate-900 font-mono">
+                                                        {order.parcel_details?.waybill_number || order.tracking_number || 'N/A'}
+                                                    </p>
+                                                </div>
+
+                                                <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="material-icons text-slate-400 text-lg">location_on</span>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Collection Point</span>
+                                                    </div>
+                                                    <p className="text-sm font-bold text-slate-900">
+                                                        {order.parcel_details?.collection_point || order.shipping_additional_info || 'Contact carrier'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Help Note */}
+                                            <div className="flex items-start gap-3 bg-amber-50 rounded-xl p-4 border border-amber-100">
+                                                <span className="material-icons text-amber-500 text-lg mt-0.5">info</span>
+                                                <div>
+                                                    <p className="text-xs font-bold text-amber-900 mb-1">How to collect your parcel</p>
+                                                    <p className="text-xs text-amber-700">
+                                                        Visit the collection point with your OTP code. The parcel agent will verify your code before handover. Keep this page open or screenshot the code.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {expandedOrder === order.id ? (
                                     <div className="mt-8 pt-8 border-t border-slate-50 animate-in fade-in slide-in-from-top-4 duration-300">

@@ -44,7 +44,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     price_min: null,
     price_max: null,
     attributes: {},
-    delivery_locations: []
+    delivery_locations: [],
+    vendor_countries: []
   });
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -70,6 +71,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     appliedFilters.brand_ids.length +
     (appliedFilters.price_min !== null || appliedFilters.price_max !== null ? 1 : 0) +
     appliedFilters.delivery_locations.length +
+    appliedFilters.vendor_countries.length +
     Object.values(appliedFilters.attributes).reduce((acc: number, curr) => acc + (curr as string[]).length, 0);
 
 
@@ -101,7 +103,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       price_min: null,
       price_max: null,
       attributes: {},
-      delivery_locations: []
+      delivery_locations: [],
+      vendor_countries: []
     });
     setActiveFilter(null);
     setShowVerticalFilters(false);
@@ -155,7 +158,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
           price_min: null,
           price_max: null,
           attributes: {},
-          delivery_locations: []
+          delivery_locations: [],
+          vendor_countries: []
         });
       }
     }
@@ -242,6 +246,15 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     }));
   };
 
+  const toggleVendorCountry = (country: string) => {
+    setAppliedFilters(prev => ({
+      ...prev,
+      vendor_countries: prev.vendor_countries.includes(country)
+        ? prev.vendor_countries.filter(c => c !== country)
+        : [...prev.vendor_countries, country]
+    }));
+  };
+
   const clearAllFilters = () => {
     setAppliedFilters({
       category_ids: [],
@@ -249,7 +262,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       price_min: null,
       price_max: null,
       attributes: {},
-      delivery_locations: []
+      delivery_locations: [],
+      vendor_countries: []
     });
   };
 
@@ -301,7 +315,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
         price_min: null,
         price_max: null,
         attributes: {},
-        delivery_locations: []
+        delivery_locations: [],
+        vendor_countries: []
       });
     }
   };
@@ -628,6 +643,25 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                   </button>
                 )}
 
+                {/* Vendor Country Filter Pill */}
+                {searchFilters && searchFilters.vendor_countries && searchFilters.vendor_countries.length > 0 && (
+                  <button
+                    onClick={() => setActiveFilter(activeFilter === 'country' ? null : 'country')}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'country' || appliedFilters.vendor_countries.length > 0
+                      ? 'bg-black text-white border-black shadow-sm'
+                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                      }`}
+                  >
+                    Country
+                    {appliedFilters.vendor_countries.length > 0 && (
+                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                        {appliedFilters.vendor_countries.length}
+                      </span>
+                    )}
+                    <span className="material-icons text-base">expand_more</span>
+                  </button>
+                )}
+
                 {/* Dynamic Attribute Filter Pills */}
                 {searchFilters && Object.keys(searchFilters.attributes).length > 0 &&
                   Object.entries(searchFilters.attributes).map(([attributeName, attributeValues]: [string, AttributeValue[]]) => {
@@ -758,6 +792,27 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                       </div>
                     )}
 
+                    {/* Country Content */}
+                    {activeFilter === 'country' && searchFilters && searchFilters.vendor_countries && (
+                      <div className="flex flex-wrap gap-2">
+                        {searchFilters.vendor_countries.map((vc) => {
+                          const isSelected = appliedFilters.vendor_countries.includes(vc.country);
+                          return (
+                            <button
+                              key={vc.country}
+                              onClick={() => toggleVendorCountry(vc.country)}
+                              className={`px-4 py-2 rounded-full text-sm border transition-all ${isSelected
+                                ? 'bg-black border-black text-white'
+                                : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-gray-400'
+                                }`}
+                            >
+                              {vc.country} <span className="opacity-60 text-xs ml-1">({vc.product_count})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Attribute Content */}
                     {activeFilter && searchFilters?.attributes[activeFilter] && (
                       <div className="flex flex-wrap gap-3">
@@ -829,6 +884,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                         else if (activeFilter === 'brand') setAppliedFilters(prev => ({ ...prev, brand_ids: [] }));
                         else if (activeFilter === 'price') setPriceRange(null, null);
                         else if (activeFilter === 'delivery') setAppliedFilters(prev => ({ ...prev, delivery_locations: [] }));
+                        else if (activeFilter === 'country') setAppliedFilters(prev => ({ ...prev, vendor_countries: [] }));
                         else if (activeFilter) setAppliedFilters(prev => {
                           const newAttrs = { ...prev.attributes };
                           delete newAttrs[activeFilter];

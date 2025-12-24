@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences, SellerStats, SellerOrderSummary } from '@/types';
 
 export type { NavbarCategory, PersonalizedNavbarCategory };
 
@@ -38,6 +38,7 @@ export interface LightningDealItem {
     reviews?: number;
     soldCount?: number;
     stock?: number;
+    listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
 }
 
 export interface DealCategoryNavItem {
@@ -135,7 +136,8 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             rating: item.rating || 0,
             reviews: item.review_count || item.reviews || 0,
             soldCount: item.sales_count || item.sold_count || 0,
-            stock: item.stock || 0
+            stock: item.stock || 0,
+            listing_type: item.listing_type || 'direct_purchase'
         };
     });
 
@@ -234,7 +236,8 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
             auto_discount_min_requirement: item.auto_discount_min_requirement,
             auto_discount_name: item.auto_discount_name,
             soldCount: item.sales_count || item.sold_count || 0,
-            stock: item.stock || 0
+            stock: item.stock || 0,
+            listing_type: item.listing_type || 'direct_purchase'
         };
     });
 
@@ -340,7 +343,8 @@ export const fetchDealsProducts = async (
                 auto_discount_buy_qty: item.auto_discount_buy_qty,
                 auto_discount_get_qty: item.auto_discount_get_qty,
                 auto_discount_min_requirement: item.auto_discount_min_requirement,
-                auto_discount_name: item.auto_discount_name
+                auto_discount_name: item.auto_discount_name,
+                listing_type: item.listing_type || 'direct_purchase'
             };
         });
 
@@ -527,6 +531,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
                     is_verified: item.vendor_active,
                 }
                 : undefined,
+            listing_type: item.listing_type || 'direct_purchase',
         } as Product;
     });
 };
@@ -639,7 +644,8 @@ export const fetchSearchFilters = async (
         brands: data?.brands || [],
         price_range: priceRange,
         attributes: data?.attributes || {},
-        delivery_locations: data?.delivery_locations || [], // ✅ Added
+        delivery_locations: data?.delivery_locations || [],
+        vendor_countries: data?.vendor_countries || [],
         visual_match_count: data?.visual_match_count || 0,
         total_products: data?.total_products || 0,
         has_visual_search: data?.has_visual_search || false,
@@ -921,7 +927,8 @@ export const fetchFilteredProducts = async (
         score: item.score || undefined,
         personalization_score: item.personalization_score || undefined,
         in_stock: typeof item.in_stock === 'boolean' ? item.in_stock : (item.stock ?? 0) > 0,
-        has_quantity_discount: item.has_quantity_discount ?? false
+        has_quantity_discount: item.has_quantity_discount ?? false,
+        listing_type: item.listing_type || 'direct_purchase'
     }));
 
     // Fetch vendor information for filtered products
@@ -1303,7 +1310,8 @@ export const fetchRecentViews = async (currentProductId?: string): Promise<Recen
                 coupon_end: item.coupon_expires_at || undefined,
                 coupon_discount_percent: item.activeCoupon?.percent || undefined,
                 in_stock: typeof item.in_stock === 'boolean' ? item.in_stock : (item.stock ?? 0) > 0,
-                has_quantity_discount: item.has_quantity_discount ?? false
+                has_quantity_discount: item.has_quantity_discount ?? false,
+                listing_type: item.listing_type || 'direct_purchase'
             } as RecentViewProduct;
         })
         .filter(Boolean) as RecentViewProduct[];
@@ -1605,29 +1613,105 @@ export const syncCart = async (userId: string | null, cartItems: Product[]): Pro
 
         if (cartItems.length === 0) return true;
 
-        // 2. Group items by ID to handle quantities
+        // 2. Group items by ID and Variant to handle quantities correctly
+        // We use a composite key to ensure different variations of the same product stay separate
         const grouped = cartItems.reduce((acc, item) => {
-            const id = item.id.toString();
-            acc[id] = (acc[id] || 0) + 1;
+            const pid = item.id.toString();
+            const vid = item.variant_id || 'default';
+            const key = `${pid}:${vid}`;
+
+            if (!acc[key]) {
+                acc[key] = {
+                    product_id: pid,
+                    variant_id: item.variant_id || null,
+                    quantity: 0
+                };
+            }
+            acc[key].quantity += 1;
             return acc;
-        }, {} as Record<string, number>);
+        }, {} as Record<string, { product_id: string; variant_id: string | null; quantity: number }>);
 
-        // 3. Insert new cart items
-        const cartRows = Object.entries(grouped).map(([productId, quantity]) => ({
-            user_id: userId,
-            product_id: productId,
-            quantity: quantity
-        }));
+        const groupEntries = Object.values(grouped);
 
-        const { error: insertError } = await supabase
-            .from('cart_items')
-            .insert(cartRows);
+        // 3. Validate that all product IDs exist in the products table
+        const productIds = Array.from(new Set(groupEntries.map(g => g.product_id)));
+        const { data: validProducts, error: validationError } = await supabase
+            .from('products')
+            .select('id')
+            .in('id', productIds);
 
-        if (insertError) {
-            console.error('Error inserting cart items:', insertError);
+        if (validationError) {
+            console.error('Error validating product IDs:', validationError);
             return false;
         }
 
+        const validProductIdsSet = new Set((validProducts || []).map(p => p.id));
+        console.log('[syncCart] Valid products:', validProductIdsSet.size, 'of', productIds.length);
+
+        // 4. Fetch default variant IDs for products that need them
+        // This fixes the "Cart is empty" error by ensuring all cart items have resolvable variant_id values
+        const productIdsNeedingVariants = groupEntries
+            .filter(g => validProductIdsSet.has(g.product_id) && !g.variant_id)
+            .map(g => g.product_id);
+
+        console.log('[syncCart] Products needing variant resolution:', productIdsNeedingVariants.length);
+
+        const defaultVariantMap = new Map<string, string>();
+        if (productIdsNeedingVariants.length > 0) {
+            const { data: defaultVariants, error: variantError } = await supabase
+                .from('product_variants')
+                .select('id, product_id, is_default')
+                .in('product_id', productIdsNeedingVariants)
+                .order('is_default', { ascending: false }); // is_default=true first
+
+            if (variantError) {
+                console.warn('Error fetching default variants:', variantError);
+            } else if (defaultVariants) {
+                console.log('[syncCart] Found variants for resolution:', defaultVariants.length);
+                // Build a map: product_id -> first variant ID (prioritizing is_default)
+                defaultVariants.forEach(v => {
+                    if (!defaultVariantMap.has(v.product_id)) {
+                        defaultVariantMap.set(v.product_id, v.id);
+                    }
+                });
+            }
+        }
+
+        // 5. Filter to only valid products and prepare rows with resolved variant_id
+        // We still include items with null variant_id - the DB RPC will handle the fallback
+        const cartRows = groupEntries
+            .filter(g => validProductIdsSet.has(g.product_id))
+            .map(g => ({
+                user_id: userId,
+                product_id: g.product_id,
+                variant_id: g.variant_id || defaultVariantMap.get(g.product_id) || null,
+                quantity: g.quantity
+            }));
+
+        console.log('[syncCart] Cart rows to insert:', cartRows.length, cartRows.map(r => ({ product_id: r.product_id, variant_id: r.variant_id })));
+
+        if (cartRows.length === 0) {
+            const invalidIds = productIds.filter(id => !validProductIdsSet.has(id));
+            console.error('[syncCart] CRITICAL: No valid products to sync. Invalid IDs:', invalidIds);
+            // Return false because we deleted the cart but couldn't insert anything
+            return false;
+        }
+
+        const { data: insertedData, error: insertError } = await supabase
+            .from('cart_items')
+            .insert(cartRows)
+            .select('id, product_id, variant_id');
+
+        if (insertError) {
+            console.error('[syncCart] Error inserting cart items:', insertError);
+            // If this fails with a missing column error, it means the migration hasn't been run
+            if (insertError.message?.includes('variant_id') || insertError.code === '42703') {
+                console.error('CRITICAL: variant_id column missing. Please run database migration SUPAyBAE.SiQL/fix_cart_variants_schema.sql');
+            }
+            return false;
+        }
+
+        console.log('[syncCart] Successfully inserted:', insertedData?.length || 0, 'items');
         return true;
     } catch (err) {
         console.error('Unexpected error in syncCart:', err);
@@ -1765,7 +1849,8 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
             review_count,
             featured_image_url,
             gallery_media,
-            status
+            status,
+            listing_type
         `)
         .in('id', productIds);
 
@@ -1866,6 +1951,7 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
             is_new: richData?.is_new || item.is_new,
             is_lightning_deal: richData?.is_lightning_deal ?? item.is_lightning_deal,
             lightning_ends_at: richData?.lightning_ends_at || item.lightning_ends_at,
+            listing_type: richData?.listing_type || item.listing_type || 'direct_purchase',
             badges: (() => {
                 const b: string[] = [];
                 const dType = richData?.deal_type || item.deal_type;
@@ -1976,15 +2062,7 @@ export const fetchProductReviews = async (
 // Seller Dashboard API Functions
 // ------------------------------------------------------------------
 
-export interface SellerStats {
-    pending_orders: number;
-    pending_returns: number;
-    active_coupons: number;
-    balance: number;
-    total_products: number;
-    low_stock_count: number;
-    total_sales: number;
-}
+// SellerStats moved to types.ts
 
 export const fetchSellerStats = async (sellerId: string): Promise<SellerStats | null> => {
     const { data, error } = await supabase
@@ -2089,15 +2167,7 @@ export const fetchCouponPerformance = async (sellerId: string): Promise<CouponPe
     return data || [];
 };
 
-export interface SellerOrderSummary {
-    order_id: string;
-    total_price: number;
-    order_status: string;
-    order_date: string;
-    customer_id: string;
-    item_count: number;
-    return_status: string | null;
-}
+// SellerOrderSummary moved to types.ts
 
 export const fetchSellerOrdersSummary = async (sellerId: string): Promise<SellerOrderSummary[]> => {
     const { data, error } = await supabase
@@ -2324,6 +2394,9 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             delivery_fee,
             tracking_number,
             shipping_method,
+            carrier,
+            shipping_additional_info,
+            fulfillment_type,
             items:order_items!order_items_order_id_fkey (
                 id,
                 price,
@@ -2345,8 +2418,33 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
         return [];
     }
 
-    console.log('Raw orders data:', data);
-    console.log('First order items:', data?.[0]?.items);
+    // Get order IDs that are local_parcel to fetch their OTPs
+    const parcelOrderIds = (data || [])
+        .filter((o: any) => o.fulfillment_type === 'local_parcel' || o.shipping_method === 'local_parcel')
+        .map((o: any) => o.id);
+
+    // Fetch OTPs for parcel orders separately (bypasses nested join issues)
+    let otpMap: Record<string, string> = {};
+    if (parcelOrderIds.length > 0) {
+        const { data: proofsData, error: proofsError } = await supabase
+            .from('delivery_proofs')
+            .select('order_id, proof_data, proof_type, verification_status')
+            .in('order_id', parcelOrderIds)
+            .eq('proof_type', 'otp');
+
+        if (proofsError) {
+            console.error('Error fetching delivery proofs:', proofsError);
+        } else {
+            console.log('Fetched OTP proofs:', proofsData);
+            (proofsData || []).forEach((p: any) => {
+                if (p.verification_status === 'pending' || p.verification_status === 'verified') {
+                    otpMap[p.order_id] = p.proof_data;
+                }
+            });
+        }
+    }
+
+    console.log('OTP Map:', otpMap);
 
     // Flatten nested structure to match BuyerOrder interface
     return (data || []).map((order: any) => {
@@ -2366,6 +2464,13 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
         // Use DB total if > 0, otherwise calculate from items + tax + delivery
         const finalTotal = (order.total && order.total > 0) ? order.total : totalFromItems;
 
+        // Get OTP from our separate fetch
+        const delivery_otp = otpMap[order.id] || null;
+
+        // Determine fulfillment type (fallback to shipping_method for older orders)
+        const fulfillment_type = order.fulfillment_type ||
+            (order.shipping_method === 'local_parcel' ? 'local_parcel' : 'official_courier');
+
         return {
             id: order.id,
             order_number: order.order_number,
@@ -2374,7 +2479,17 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             total_amount: finalTotal,
             currency: order.items?.[0]?.product?.currency || 'USD',
             tracking_code: order.tracking_number || null,
+            tracking_number: order.tracking_number,
+            carrier: order.carrier,
             shipping_method: order.shipping_method,
+            shipping_additional_info: order.shipping_additional_info,
+            fulfillment_type,
+            parcel_details: fulfillment_type === 'local_parcel' ? {
+                company: order.carrier || 'Standard Parcel',
+                waybill_number: order.tracking_number || '',
+                collection_point: order.shipping_additional_info || undefined
+            } : null,
+            delivery_otp,
             items
         };
     }) as BuyerOrder[];
@@ -3827,13 +3942,14 @@ export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats | 
             supabase.from('orders').select('*', { count: 'exact', head: true }),
 
             // Total Revenue (sum of completed orders)
-            supabase.from('orders').select('total_amount').eq('status', 'completed')
+            supabase.from('orders').select('total').eq('status', 'completed')
         ]);
 
         // Calculate total revenue
-        const totalRevenue = revenueData?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+        const totalRevenue = revenueData?.reduce((sum, order) => sum + (order.total || 0), 0) || 0;
 
         const stats: AdminDashboardStats = {
+
             total_users: totalUsers || 0,
             total_sellers: totalSellers || 0,
             total_drivers: totalDrivers || 0,
@@ -4094,7 +4210,11 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                 brands:brand_id (name),
                 media:media!media_product_fk (id, image_url, is_main, media_type, images(image_embedding)),
                 product_variants (id, price, stock, sku, image_url, options, is_default),
-                description, status
+                quantity_discounts (min_quantity, unit_price),
+                description, status, currency, tags,
+                seo_title, meta_description, use_case_tags, occasion_tags,
+                delivery_scope,
+                listing_type, has_quantity_discount, free_delivery, is_express_delivery, delivery_locations, sale_unit
             `)
             .eq('status', 'pending')
             .order('created_at', { ascending: false });
@@ -4163,7 +4283,26 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                     image_url: mainMedia?.image_url,
                     media_id: mainMedia?.id,
                     image_embedding: embeddingData
-                }
+                },
+                // New seller-configurable fields
+                listing_type: p.listing_type,
+                has_quantity_discount: p.has_quantity_discount,
+                quantity_discounts: p.quantity_discounts || [],
+                free_delivery: p.free_delivery,
+                is_express_delivery: p.is_express_delivery,
+                delivery_locations: p.delivery_locations,
+                sale_unit: p.sale_unit,
+                // Additional fields for complete review
+                currency: p.currency || 'USD',
+                tags: p.tags || [],
+                seo_title: p.seo_title,
+                seo_description: p.meta_description,
+                use_case_tags: p.use_case_tags || [],
+                occasion_tags: p.occasion_tags || [],
+                delivery_scope: p.delivery_scope,
+                // Derive stock and sku from the default variant
+                stock: variants.find(v => v.is_default)?.stock ?? variants[0]?.stock,
+                sku: variants.find(v => v.is_default)?.sku ?? variants[0]?.sku
             };
         });
     } catch (error) {
@@ -4748,9 +4887,10 @@ export const saveProductImageEmbedding = async (productId: string, mediaId: stri
 export const createProductFull = async (
     sellerId: string,
     payload: CreateProductPayload,
-    variants: any[], // Type as needed
-    media: any[],    // Type as needed
-    attributes: any[] // Type as needed
+    variants: any[],
+    media: any[],
+    attributes: any[],
+    quantityDiscounts: QuantityDiscountTier[] = []
 ): Promise<string | null> => {
     console.log('Creating product full with:', { sellerId, payload });
 
@@ -4759,7 +4899,8 @@ export const createProductFull = async (
         p_product_data: payload,
         p_variants_data: variants,
         p_media_data: media,
-        p_attributes_data: attributes
+        p_attributes_data: attributes,
+        p_quantity_discounts_data: quantityDiscounts
     });
 
     if (error) {
@@ -5016,6 +5157,115 @@ export const fulfillOrder = async (orderId: string, trackingNumber?: string) => 
 
     return true;
 };
+
+/**
+ * Modern Local Parcel Fulfillment
+ * Used for regional bus/shuttle parcel services.
+ * Generates an OTP for secure collection.
+ */
+export const fulfillParcelOrder = async (
+    orderId: string,
+    parcelService: string,
+    waybillNumber: string,
+    collectionPoint?: string
+) => {
+    console.log('[fulfillParcelOrder] Starting...', { orderId, parcelService, waybillNumber, collectionPoint });
+
+    // 1. Generate a 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    console.log('[fulfillParcelOrder] Generated OTP:', otp);
+
+    // 2. Update order status and details
+    const { error: updateError, data: updateData } = await supabase
+        .from('orders')
+        .update({
+            status: 'shipped',
+            shipping_method: 'local_parcel',
+            carrier: parcelService,
+            tracking_number: waybillNumber,
+            shipping_additional_info: collectionPoint || '',
+            fulfillment_type: 'local_parcel'
+        })
+        .eq('id', orderId)
+        .select();
+
+    console.log('[fulfillParcelOrder] Order update result:', { updateData, updateError });
+
+    if (updateError) {
+        console.error('Error updating order for parcel fulfillment:', updateError);
+        return { success: false, message: `Order update failed: ${updateError.message}` };
+    }
+
+    // 3. Insert Delivery Proof (OTP type)
+    const { error: proofError, data: proofData } = await supabase
+        .from('delivery_proofs')
+        .insert({
+            order_id: orderId,
+            proof_type: 'otp',
+            proof_data: otp,
+            verification_status: 'pending',
+            notes: `Waybill: ${waybillNumber} via ${parcelService}. Collection Point: ${collectionPoint || 'N/A'}`
+        })
+        .select();
+
+    console.log('[fulfillParcelOrder] OTP insert result:', { proofData, proofError });
+
+    if (proofError) {
+        console.error('Error creating delivery proof OTP:', proofError);
+        return { success: false, message: `OTP generation failed: ${proofError.message}` };
+    }
+
+    // 4. Add tracking event
+    await supabase.from('order_tracking_events').insert({
+        order_id: orderId,
+        event_type: 'shipped',
+        event_description: `Parcel sent via ${parcelService} (Waybill: ${waybillNumber}). Collection Point: ${collectionPoint || 'N/A'}`
+    });
+
+    // 5. Release transport fees to seller initially
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user?.id) {
+        await supabase.rpc('release_transport_fees', {
+            p_order_id: orderId,
+            p_seller_id: userData.user.id
+        });
+    }
+
+    return { success: true, otp };
+};
+
+/**
+ * Verify Parcel Collection via OTP
+ */
+/**
+ * Verify Parcel Collection via OTP and Release Funds to Escrow
+ */
+export const verifyParcelOTP = async (orderId: string, otpCode: string) => {
+    console.log('[verifyParcelOTP] Verifying OTP and releasing funds...', { orderId, otpCode });
+
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user?.id) {
+        return { success: false, message: 'You must be logged in to verify collection.' };
+    }
+
+    // Call the unified RPC that handles OTP verification, status update, and escrow payout
+    const { data, error } = await supabase.rpc('confirm_parcel_delivery', {
+        p_order_id: orderId,
+        p_otp: otpCode,
+        p_seller_id: userData.user.id
+    });
+
+    if (error) {
+        console.error('[verifyParcelOTP] RPC error:', error);
+        return { success: false, message: `Verification failed: ${error.message}` };
+    }
+
+    return {
+        success: data.success,
+        message: data.message
+    };
+};
+
 
 export const fetchSellerOrders = async (sellerId: string) => {
     // Seller orders are linked via products.seller_id (auth.uid) → order_items.product_id
@@ -5413,31 +5663,61 @@ export const fetchOrderFileUploads = async (sellerId: string): Promise<OrderFile
 // ==========================================
 
 export const fetchSellerBalance = async (sellerId: string): Promise<SellerBalanceSummary | null> => {
-    const { data, error } = await supabase
-        .from('seller_balance_summary')
-        .select('*')
-        .eq('seller_id', sellerId)
-        .single();
+    const { data: stats, error } = await supabase.rpc('get_seller_stats', { p_seller_id: sellerId });
 
     if (error) {
-        console.error('Error fetching seller balance:', error);
+        console.error('Error fetching seller balance stats:', error);
         return null;
     }
-    return data;
+
+    return {
+        seller_id: sellerId,
+        total_available: stats.balance || 0,
+        total_escrow: stats.pending_balance || 0,
+        pending_clearance: 0,
+        last_updated: new Date().toISOString()
+    } as SellerBalanceSummary;
 };
 
 export const fetchSellerPayouts = async (sellerId: string): Promise<SellerPayout[]> => {
-    const { data, error } = await supabase
+    // 1. Fetch actual payout requests
+    const { data: payouts, error: payoutError } = await supabase
         .from('seller_payouts')
         .select('*, orders(order_number)')
         .eq('seller_id', sellerId)
         .order('created_at', { ascending: false });
 
-    if (error) {
-        console.error('Error fetching seller payouts:', error);
-        return [];
-    }
-    return data || [];
+    // 2. Fetch "held" transactions (escrow)
+    const { data: transactions, error: transError } = await supabase
+        .from('seller_transactions')
+        .select('*, orders(order_number)')
+        .eq('seller_id', sellerId)
+        .eq('status', 'held')
+        .gt('release_date', new Date().toISOString());
+
+    if (payoutError) console.error('Error fetching payouts:', payoutError);
+    if (transError) console.error('Error fetching escrow transactions:', transError);
+
+    // Map transactions to payout format for the UI
+    const mappedTransactions: SellerPayout[] = (transactions || []).map(t => ({
+        id: t.id,
+        seller_id: t.seller_id,
+        amount: Number(t.amount),
+        currency: 'GBP', // Default currency for display mapping
+        status: 'escrow',
+        method: 'escrow',
+        payout_details: {},
+        created_at: t.transaction_date || new Date().toISOString(),
+        updated_at: t.transaction_date || new Date().toISOString(),
+        available_at: t.release_date,
+        order_id: t.order_id,
+        order_number: t.orders?.order_number
+    }));
+
+    // Combine and sort by date
+    return [...(payouts || []), ...mappedTransactions].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
 };
 
 export const requestPayout = async (sellerId: string, amount: number, method: 'bank_transfer' | 'mobile_money'): Promise<{ success: boolean; message: string }> => {
@@ -5843,3 +6123,4 @@ export const updateBuyerNotificationPreferences = async (userId: string, prefs: 
         return false;
     }
 };
+9

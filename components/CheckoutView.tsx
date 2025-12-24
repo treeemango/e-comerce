@@ -147,7 +147,7 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
     const groupedItems = useMemo(() => {
         return cartItems.reduce((acc, item) => {
-            const key = item.id.toString();
+            const key = `${item.id}-${item.variant_id || 'default'}`;
             if (!acc[key]) {
                 acc[key] = { ...item, quantity: 0 } as Product & { quantity: number };
             }
@@ -617,8 +617,8 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
                                     <div className="space-y-4 mb-8">
                                         <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Items in Order ({items.length})</h3>
-                                        {items.map(item => (
-                                            <div key={item.id} className="flex gap-4">
+                                        {items.map((item, index) => (
+                                            <div key={`${item.id}-${item.variant_id || index}`} className="flex gap-4">
                                                 <img src={item.image} alt={item.title} className="w-16 h-16 object-cover rounded-lg" />
                                                 <div className="flex-1">
                                                     <p className="text-sm font-medium line-clamp-1">{item.title}</p>

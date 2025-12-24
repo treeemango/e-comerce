@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { CreateProductPayload, ProductAttributeData, ProductVariantData, MediaUploadData, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute } from '../../../types';
+import { CreateProductPayload, ProductAttributeData, ProductVariantData, MediaUploadData, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, QuantityDiscountTier } from '../../../types';
 import { createProductFull, fetchVerticals, fetchCategories, fetchBrands, fetchAttributes, fetchAttributeOptions } from '../../../lib/api';
 import { MediaService } from '../../../lib/media';
 import { getCurrencySymbol } from '../../../lib/currency';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: (string | undefined | null | false)[]) {
-    return twMerge(clsx(inputs));
-}
+import { cn } from '../../../lib/utils';
+import { aiService } from '../../../lib/ai-service';
+import { supabase } from '../../../lib/supabase';
 
 
 // --- Searchable Select Component ---
@@ -261,6 +258,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [tagInput, setTagInput] = useState('');
     const [useCaseInput, setUseCaseInput] = useState('');
     const [occasionInput, setOccasionInput] = useState('');
+    const [listingType, setListingType] = useState<'direct_purchase' | 'inquiry' | 'reservation'>('direct_purchase');
+    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
 
     // Media State
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -547,7 +546,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         setIsImprovingTitle(true);
         try {
             const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const improved = await (await import('../../../lib/ai-service')).aiService.improveTitle(title, categoryName);
+            const improved = await aiService.improveTitle(title, categoryName);
             if (improved) {
                 setTitle(improved);
             }
@@ -567,7 +566,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         setIsGeneratingDescription(true);
         try {
             const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const desc = await (await import('../../../lib/ai-service')).aiService.generateDescription(title, categoryName, attributes);
+            const desc = await aiService.generateDescription(title, categoryName, attributes);
             if (desc) {
                 setDescription(desc);
             }
@@ -586,7 +585,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         }
         setIsGeneratingSEO(true);
         try {
-            const seoData = await (await import('../../../lib/ai-service')).aiService.generateSEO(title, description);
+            const seoData = await aiService.generateSEO(title, description);
             if (seoData) {
                 setSeoTitle(seoData.seo_title);
                 setMetaDescription(seoData.meta_description);
@@ -615,7 +614,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         setIsGeneratingTags(true);
         try {
             const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const res = await (await import('../../../lib/ai-service')).aiService.generateTags(title, categoryName);
+            const res = await aiService.generateTags(title, categoryName);
             if (res && res.length > 0) {
                 setTags(prev => Array.from(new Set([...prev, ...res])));
             }
@@ -635,7 +634,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         setIsGeneratingUseCaseTags(true);
         try {
             const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const res = await (await import('../../../lib/ai-service')).aiService.generateUseCaseTags(title, categoryName);
+            const res = await aiService.generateUseCaseTags(title, categoryName);
             if (res && res.length > 0) {
                 setUseCaseTags(prev => Array.from(new Set([...prev, ...res])));
             }
@@ -655,7 +654,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
         setIsGeneratingOccasionTags(true);
         try {
             const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const res = await (await import('../../../lib/ai-service')).aiService.generateOccasionTags(title, categoryName);
+            const res = await aiService.generateOccasionTags(title, categoryName);
             if (res && res.length > 0) {
                 setOccasionTags(prev => Array.from(new Set([...prev, ...res])));
             }
@@ -935,18 +934,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 occasion_tags: safeOccasions,
                 attributes: finalAttributes,
                 variants: preparedVariants,
-                media: allMedia.map((m, i) => ({ ...m, position: i }))
+                media: allMedia.map((m, i) => ({ ...m, position: i })),
+                listing_type: listingType
             };
 
-            const productId = await createProductFull(
+            const pid = await createProductFull(
                 sellerId,
                 payload,
                 payload.variants,
                 payload.media,
-                payload.attributes
+                payload.attributes,
+                quantityDiscounts
             );
 
-            if (productId) {
+            if (pid) {
 
                 alert('Product published successfully. It is now pending approval.');
                 onSuccess();
@@ -1069,17 +1070,42 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             </div>
 
                             {/* Brand Selection - Enhanced with trickle down */}
-                            <div>
-                                <SearchableSelect
-                                    label="Brand"
-                                    options={brands}
-                                    value={brandId}
-                                    onChange={(val) => setBrandId(val)}
-                                    disabled={!categoryId}
-                                    placeholder={categoryId ? "Search Brand..." : "Select Category First"}
-                                    error={errorBrands || undefined}
-                                    onRetry={() => loadCategoryDetailsAction(categoryId)}
-                                />
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <SearchableSelect
+                                        label="Brand"
+                                        options={brands}
+                                        value={brandId}
+                                        onChange={(val) => setBrandId(val)}
+                                        disabled={!categoryId}
+                                        placeholder={categoryId ? "Search Brand..." : "Select Category First"}
+                                        error={errorBrands || undefined}
+                                        onRetry={() => loadCategoryDetailsAction(categoryId)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Purchase Mode *</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'direct_purchase', icon: 'shopping_cart', label: 'Direct', color: 'orange' },
+                                            { id: 'inquiry', icon: 'chat', label: 'Inquiry', color: 'blue' },
+                                            { id: 'reservation', icon: 'event_available', label: 'Reserve', color: 'emerald' }
+                                        ].map((mode) => (
+                                            <button
+                                                key={mode.id}
+                                                type="button"
+                                                onClick={() => setListingType(mode.id as any)}
+                                                className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-all ${listingType === mode.id
+                                                    ? `border-${mode.color}-500 bg-${mode.color}-50 text-${mode.color}-700`
+                                                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                                                    }`}
+                                            >
+                                                <span className="material-icons text-lg mb-1">{mode.icon}</span>
+                                                <span className="text-[10px] font-bold uppercase tracking-tight">{mode.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Sections removed (Promotions & Shipping) - moved to Pricing & Delivery step */}
@@ -1295,6 +1321,45 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                 </span>
                                             ))}
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Purchase Mode / Listing Type */}
+                                <div className="pt-8 border-t border-gray-100">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
+                                        <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {[
+                                            { id: 'direct_purchase', icon: 'shopping_cart', title: 'Add to Cart', desc: 'Standard checkout', color: 'orange' },
+                                            { id: 'inquiry', icon: 'chat', title: 'Inquiry Only', desc: 'Cars, Land, Services', color: 'blue' },
+                                            { id: 'reservation', icon: 'event_available', title: 'Reservation', desc: 'Book now, pay later', color: 'green' }
+                                        ].map((mode) => (
+                                            <button
+                                                key={mode.id}
+                                                type="button"
+                                                onClick={() => setListingType(mode.id as any)}
+                                                className={cn(
+                                                    "relative flex flex-col p-4 rounded-xl border-2 transition-all text-left group overflow-hidden",
+                                                    listingType === mode.id
+                                                        ? `border-${mode.color}-300 bg-${mode.color}-50/50 shadow-sm`
+                                                        : "border-gray-100 bg-white hover:border-gray-200"
+                                                )}
+                                            >
+                                                {listingType === mode.id && (
+                                                    <div className={`absolute top-2 right-2 w-2 h-2 rounded-full bg-${mode.color}-500 animate-pulse`} />
+                                                )}
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-colors",
+                                                    listingType === mode.id ? `bg-${mode.color}-500 text-white` : "bg-gray-100 text-gray-400 group-hover:bg-gray-200"
+                                                )}>
+                                                    <span className="material-icons text-xl">{mode.icon}</span>
+                                                </div>
+                                                <div className={cn("font-bold text-sm", listingType === mode.id ? `text-${mode.color}-900` : "text-gray-900")}>{mode.title}</div>
+                                                <div className="text-[10px] text-gray-500 uppercase font-black mt-1 leading-tight">{mode.desc}</div>
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -1650,6 +1715,77 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                     placeholder="0.00"
                                                 />
                                             </div>
+                                        </div>
+
+                                        <div className="md:col-span-3 pt-4 border-t border-orange-100">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-widest">Bulk Wholesale Tiers</h4>
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Reward buyers for larger quantities</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setQuantityDiscounts([...quantityDiscounts, { min_quantity: 0, unit_price: 0 }])}
+                                                    className="text-orange-600 text-[10px] font-black uppercase flex items-center gap-1 hover:underline bg-orange-100/50 px-2 py-1 rounded"
+                                                >
+                                                    <span className="material-icons text-xs">add</span>
+                                                    Add Tier
+                                                </button>
+                                            </div>
+
+                                            {quantityDiscounts.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    {quantityDiscounts.map((tier, idx) => (
+                                                        <div key={idx} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-orange-100 animate-in slide-in-from-left-2 transition-all shadow-sm">
+                                                            <div className="flex-1">
+                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Min. Quantity</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={tier.min_quantity}
+                                                                    onChange={(e) => {
+                                                                        const newTiers = [...quantityDiscounts];
+                                                                        newTiers[idx].min_quantity = parseInt(e.target.value) || 0;
+                                                                        setQuantityDiscounts(newTiers);
+                                                                    }}
+                                                                    placeholder="e.g. 50"
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-orange-500 font-bold"
+                                                                />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Wholesale price ({currencySymbol})</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={tier.unit_price}
+                                                                    onChange={(e) => {
+                                                                        const newTiers = [...quantityDiscounts];
+                                                                        newTiers[idx].unit_price = parseFloat(e.target.value) || 0;
+                                                                        setQuantityDiscounts(newTiers);
+                                                                    }}
+                                                                    placeholder="e.g. 45"
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-orange-500 font-bold text-orange-600"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setQuantityDiscounts(quantityDiscounts.filter((_, i) => i !== idx))}
+                                                                className="mt-5 p-1 text-gray-300 hover:text-red-500 transition-colors"
+                                                                title="Remove tier"
+                                                            >
+                                                                <span className="material-icons text-lg">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-100 mt-2">
+                                                        <span className="material-icons text-blue-500 text-xs">info</span>
+                                                        <p className="text-[9px] text-blue-700 font-bold uppercase tracking-tight">Buyers will see these tiers on the product page</p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-4 border-2 border-dashed border-orange-100 rounded-xl bg-orange-50/30">
+                                                    <span className="material-icons text-orange-200 text-2xl mb-1">sell</span>
+                                                    <p className="text-[9px] text-gray-400 font-bold uppercase">No bulk pricing tiers added</p>
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Original Price</label>

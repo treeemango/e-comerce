@@ -3,6 +3,7 @@ import { fetchSellerOrders } from '../../../lib/api';
 import { SellerOrder } from '../../../types';
 import { formatCurrency } from '../../../lib/utils';
 import OrderDetailsModal from './OrderDetailsModal';
+import BuyerReceipt from './BuyerReceipt';
 
 // Use SellerOrder interface from types.ts, mapped to view needs if necessary
 // But try to use the type directly.
@@ -19,6 +20,7 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<SellerOrder | null>(null);
+    const [printingOrder, setPrintingOrder] = useState<SellerOrder | null>(null);
 
     useEffect(() => {
         const loadData = async () => {
@@ -208,9 +210,22 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
                                         <div className="flex flex-col gap-2 items-center">
                                             <button
                                                 onClick={() => setSelectedOrder(order)}
-                                                className="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-600 transition-colors shadow-sm"
+                                                className="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-600 transition-colors shadow-sm w-full"
                                             >
                                                 View Details
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setPrintingOrder(order);
+                                                    setTimeout(() => {
+                                                        window.print();
+                                                        setTimeout(() => setPrintingOrder(null), 100);
+                                                    }, 100);
+                                                }}
+                                                className="bg-white text-gray-700 border border-gray-300 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-50 transition-colors w-full flex items-center justify-center gap-1"
+                                            >
+                                                <span className="material-icons text-sm">print</span>
+                                                Print
                                             </button>
                                         </div>
                                     </td>
@@ -238,6 +253,9 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
                     }}
                 />
             )}
+
+            {/* Print-only Receipt Component */}
+            {printingOrder && <BuyerReceipt order={printingOrder} />}
         </div>
     );
 };
