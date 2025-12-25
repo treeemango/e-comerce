@@ -3,13 +3,15 @@ import React, { useEffect, useRef } from 'react';
 import { useNotifications } from './NotificationContext';
 import { fetchUserCoupons, fetchBuyerOrders, fetchBuyerNotificationPreferences, getSellerUnreadCount, getWishlist, fetchLightningDeals, fetchSellerOrdersSummary, fetchSellerStats, WishlistProduct, LightningDealItem } from '../lib/api';
 import { UserCoupon, BuyerOrder, User, BuyerNotificationPreferences, SellerOrderSummary, SellerStats } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface WebNotificationWrapperProps {
     user: User | null;
     onDataUpdate: (coupons: UserCoupon[], orders: BuyerOrder[]) => void;
+    onReviewPrompt?: (orderId: string) => void;
 }
 
-export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ user, onDataUpdate }) => {
+export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ user, onDataUpdate, onReviewPrompt }) => {
     const { showNotification } = useNotifications();
     const hasInitialLoaded = useRef(false);
     const prevCouponsCount = useRef(0);
@@ -252,6 +254,54 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
 
         return () => {
             if (interval) clearInterval(interval);
+        };
+    }, [user?.id]);
+
+    // Real-time notifications_queue subscription
+    useEffect(() => {
+        if (!user?.id) return;
+
+        console.log('Starting real-time notification subscription for user:', user.id);
+
+        const channel = supabase
+            .channel(`user-notifications-${user.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications_queue',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload) => {
+                    console.log('New notification received:', payload.new);
+
+                    const isReviewPrompt = payload.new.notification_type === 'review_prompt';
+                    const orderId = payload.new.metadata?.order_id || payload.new.order_id;
+
+                    showNotificationRef.current(
+                        payload.new.message_body || payload.new.message,
+                        isReviewPrompt ? 'success' : ((payload.new.type || 'info') as any),
+                        isReviewPrompt ? 15000 : 5000,
+                        isReviewPrompt && orderId ? () => onReviewPrompt?.(orderId) : undefined
+                    );
+
+                    // Mark as sent in the queue (optional, but good for tracking)
+                    supabase
+                        .from('notifications_queue')
+                        .update({ status: 'sent' })
+                        .eq('id', payload.new.id)
+                        .then(({ error }) => {
+                            if (error) console.error('Error marking notification as sent:', error);
+                        });
+                }
+            )
+            .subscribe((status) => {
+                console.log(`Notification subscription status for ${user.id}:`, status);
+            });
+
+        return () => {
+            supabase.removeChannel(channel);
         };
     }, [user?.id]);
 

@@ -408,6 +408,43 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
 
             <div className="p-4 bg-white/90 backdrop-blur-lg border-t border-gray-100 safe-area-bottom sticky bottom-0 z-20">
                 <div className="flex items-end gap-3 rounded-2xl p-1">
+                    <button
+                        onClick={async () => {
+                            if (!messages.length) return;
+                            const lastMessage = messages[messages.length - 1];
+                            if (lastMessage.sender_id === sellerId) {
+                                alert("Wait for the buyer to reply before generating a response.");
+                                return;
+                            }
+
+                            setSending(true);
+                            try {
+                                const { data: { result }, error } = await supabase.functions.invoke('ai-assistant', {
+                                    body: {
+                                        action: 'suggest_chat_reply',
+                                        params: {
+                                            last_message: lastMessage.content,
+                                            product_title: selectedConversation.product_title || 'Item',
+                                        }
+                                    }
+                                });
+                                if (error) throw error;
+                                setInputText(result.replace(/^"|"$/g, '')); // Remove surrounding quotes if any
+                            } catch (e) {
+                                console.error('AI Reply Error', e);
+                                alert('Could not generate reply.');
+                            } finally {
+                                setSending(false);
+                            }
+                        }}
+                        className="w-10 h-10 flex items-center justify-center text-indigo-500 bg-indigo-50 rounded-xl active:scale-95 transition-all relative group"
+                        title="AI Smart Reply"
+                    >
+                        <span className="material-icons text-xl">auto_awesome</span>
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                            AI Reply
+                        </div>
+                    </button>
                     <button className="w-10 h-10 flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl active:scale-95 transition-all">
                         <span className="material-icons-outlined text-xl">image</span>
                     </button>

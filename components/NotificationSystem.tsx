@@ -45,7 +45,12 @@ const NotificationItem: React.FC<{ notification: Notification }> = ({ notificati
         animate-in slide-in-from-right fade-in duration-500
         hover:scale-[1.02] transition-transform cursor-pointer
       `}
-            onClick={() => dismissNotification(notification.id)}
+            onClick={() => {
+                if (notification.onClick) {
+                    notification.onClick();
+                }
+                dismissNotification(notification.id);
+            }}
         >
             <div className={`mt-0.5 ${getIconColor()}`}>
                 <span className="material-icons text-2xl">{getIcon()}</span>

@@ -253,9 +253,10 @@ export interface AppliedFilters {
     brand_ids: string[];
     price_min: number | null;
     price_max: number | null;
-    attributes: Record<string, string[]>;
-    delivery_locations: string[];
-    vendor_countries: string[];
+    attributes?: Record<string, string[]>;
+    delivery_locations?: string[];
+    vendor_countries?: string[];
+    rating_min?: number | null;
 }
 
 // Review System Types
@@ -787,6 +788,7 @@ export interface BuyerOrderItem {
 export interface BuyerOrder {
     id: string;
     created_at: string;
+    updated_at?: string;
     status: string;
     total_amount: number;
     currency?: string;
@@ -1089,6 +1091,8 @@ export const ADMIN_TABS: AdminTabConfig[] = [
     { id: 'drivers', label: 'Driver Verification', icon: 'fas fa-truck', requiredLevel: 'senior_admin' },
     { id: 'users', label: 'User Management', icon: 'fas fa-users', requiredLevel: 'senior_admin' },
     { id: 'orders', label: 'Order Management', icon: 'fas fa-shopping-cart', requiredLevel: 'junior_admin' },
+    { id: 'moderation', label: 'Content Moderation', icon: 'fas fa-flag', requiredLevel: 'junior_admin' },
+    { id: 'finances', label: 'Payout Approvals', icon: 'fas fa-wallet', requiredLevel: 'senior_admin' },
     { id: 'content', label: 'Content Management', icon: 'fas fa-folder', requiredLevel: 'content_manager' },
     { id: 'activity', label: 'Activity Log', icon: 'fas fa-history', requiredLevel: 'senior_admin' },
     { id: 'team', label: 'Team Management', icon: 'fas fa-user-shield', requiredLevel: 'super_admin' },
@@ -1546,4 +1550,82 @@ export interface BuyerNotificationPreferences {
     messages: boolean;
     recommendations: boolean;
     updated_at?: string;
+}
+
+// Analytics Interfaces
+export interface DailyMetric {
+    date: string;
+    total_sales: number;
+    total_orders: number;
+    visitors: number;
+    conversion_rate: number;
+    aov: number;
+}
+
+export interface TrafficSource {
+    source: string;
+    total_visits: number;
+}
+
+export interface RegionalSales {
+    region: string;
+    total_orders: number;
+    total_sales: number;
+}
+
+export interface SellerAnalyticsSummary {
+    summary: {
+        total_sales: number;
+        total_orders: number;
+        total_visitors: number;
+        avg_conversion_rate: number;
+        avg_aov: number;
+    };
+    daily_trend: DailyMetric[];
+    traffic_sources: TrafficSource[];
+    regional_sales: RegionalSales[];
+}
+
+// Analytics Interfaces
+export interface DailyMetric {
+    date: string;
+    total_sales: number;
+    total_orders: number;
+    visitors: number;
+    conversion_rate: number;
+    aov: number;
+}
+
+export interface TrafficSource {
+    source: string;
+    total_visits: number;
+}
+
+export interface RegionalSales {
+    region: string;
+    total_orders: number;
+    total_sales: number;
+}
+
+export interface SellerAnalyticsSummary {
+    summary: {
+        total_sales: number;
+        total_orders: number;
+        total_visitors: number;
+        avg_conversion_rate: number;
+        avg_aov: number;
+    };
+    daily_trend: DailyMetric[];
+    traffic_sources: TrafficSource[];
+    regional_sales: RegionalSales[];
+}
+
+// Delivery Verification
+export interface DeliveryProof {
+    id: string;
+    order_id: string;
+    driver_id: string;
+    proof_type: 'photo' | 'signature';
+    proof_url: string;
+    created_at: string;
 }

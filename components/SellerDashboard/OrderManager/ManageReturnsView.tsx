@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchReturnRequests } from '../../../lib/api';
+import { fetchReturnRequests, authorizeReturnRequest, processRefund } from '../../../lib/api';
 
 interface ManageReturnsViewProps {
     sellerId: string;
@@ -130,8 +130,8 @@ const ManageReturnsView: React.FC<ManageReturnsViewProps> = ({ sellerId }) => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                            item.status === 'authorized' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-gray-100 text-gray-700'
+                                        item.status === 'authorized' ? 'bg-blue-100 text-blue-700' :
+                                            'bg-gray-100 text-gray-700'
                                         }`}>
                                         {item.status}
                                     </span>
@@ -155,12 +155,41 @@ const ManageReturnsView: React.FC<ManageReturnsViewProps> = ({ sellerId }) => {
                                     </div>
                                 </div>
                                 <div className="flex flex-col gap-2 justify-center w-48">
-                                    {item.status === 'pending' && (
+                                    {(item.status === 'pending' || item.status === 'authorized') && (
                                         <>
-                                            <button className="w-full py-2 bg-orange-500 text-white rounded font-medium hover:bg-orange-600 text-sm">
-                                                Authorize Return
-                                            </button>
-                                            <button className="w-full py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-50 text-sm">
+                                            {item.status === 'pending' && (
+                                                <button
+                                                    onClick={async () => {
+                                                        if (confirm('Authorize this return request?')) {
+                                                            const success = await authorizeReturnRequest(item.id);
+                                                            if (success) {
+                                                                alert('Return authorized successfully');
+                                                                window.location.reload();
+                                                            } else {
+                                                                alert('Failed to authorize return');
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="w-full py-2 bg-orange-500 text-white rounded font-medium hover:bg-orange-600 text-sm"
+                                                >
+                                                    Authorize Return
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={async () => {
+                                                    const amount = prompt('Enter refund amount:', item.amount.toString());
+                                                    if (amount && !isNaN(parseFloat(amount))) {
+                                                        const success = await processRefund(item.id, parseFloat(amount));
+                                                        if (success) {
+                                                            alert('Refund processed successfully');
+                                                            window.location.reload();
+                                                        } else {
+                                                            alert('Failed to process refund');
+                                                        }
+                                                    }
+                                                }}
+                                                className="w-full py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-50 text-sm"
+                                            >
                                                 Issue Refund
                                             </button>
                                         </>

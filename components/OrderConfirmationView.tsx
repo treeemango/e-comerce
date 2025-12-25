@@ -2,12 +2,14 @@ import React from 'react';
 
 interface OrderConfirmationViewProps {
     onContinueShopping: () => void;
+    onTrackOrder?: () => void;
     orderNumber?: string;
     customerEmail?: string;
 }
 
 const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
     onContinueShopping,
+    onTrackOrder,
     orderNumber = 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
     customerEmail = 'your email'
 }) => {
@@ -80,7 +82,10 @@ const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
                         >
                             Continue Shopping
                         </button>
-                        <button className="bg-white text-black border-2 border-gray-200 px-8 py-4 rounded-full font-black text-sm hover:border-black transition-all">
+                        <button
+                            onClick={onTrackOrder}
+                            className="bg-white text-black border-2 border-gray-200 px-8 py-4 rounded-full font-black text-sm hover:border-black transition-all"
+                        >
                             Track Order
                         </button>
                     </div>

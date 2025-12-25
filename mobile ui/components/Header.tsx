@@ -2,6 +2,7 @@ import React from 'react';
 
 interface HeaderProps {
   onSearchClick?: () => void;
+  onCameraClick?: () => void;
   onUserClick?: () => void;
   userAvatar?: string | null;
   userName?: string | null;
@@ -11,6 +12,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onSearchClick,
+  onCameraClick,
   onUserClick,
   userAvatar,
   userName,
@@ -27,13 +29,19 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="material-icons-outlined text-gray-400 text-lg">search</span>
           </div>
           <div
-            className="block w-full pl-9 pr-3 py-2 border-none rounded-md leading-5 bg-gray-100 dark:bg-gray-800 text-gray-500 sm:text-sm transition-shadow truncate select-none"
+            className="block w-full pl-9 pr-10 py-2 border-none rounded-md leading-5 bg-gray-100 dark:bg-gray-800 text-gray-500 sm:text-sm transition-shadow truncate select-none"
           >
             Search JuaExpress
           </div>
-          <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
-            <span className="material-icons-outlined text-gray-400 text-lg">photo_camera</span>
-          </div>
+          <button
+            className="absolute inset-y-0 right-0 pr-2 flex items-center z-10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCameraClick?.();
+            }}
+          >
+            <span className="material-icons-outlined text-orange-500 text-xl">photo_camera</span>
+          </button>
         </div>
 
         {/* Icons */}

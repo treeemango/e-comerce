@@ -11,9 +11,23 @@ interface SearchResultsProps {
     onUserClick?: () => void;
     onProductClick: (product: Product) => void;
     onVisualSearch?: (product: Product) => void;
+    userAvatar?: string | null;
+    userName?: string | null;
+    notificationCount?: number;
+    cartCount?: number;
 }
 
-export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onUserClick, onProductClick, onVisualSearch }) => {
+export const SearchResults: React.FC<SearchResultsProps> = ({
+    query,
+    onBack,
+    onUserClick,
+    onProductClick,
+    onVisualSearch,
+    userAvatar,
+    userName,
+    notificationCount = 0,
+    cartCount = 0
+}) => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchResults, setSearchResults] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
@@ -67,15 +81,33 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onU
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-black dark:text-white">
+                    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                         <button className="p-1"><span className="material-icons-outlined text-2xl">format_list_bulleted</span></button>
                         <button className="relative p-1" onClick={onUserClick}>
-                            <img src="https://i.pravatar.cc/100?img=5" alt="User" className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700" />
-                            <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">24</span>
+                            {userAvatar ? (
+                                <img src={userAvatar} alt={userName || 'User'} className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 object-cover" />
+                            ) : (
+                                <div className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                    {userName ? (
+                                        <span className="text-[10px] font-bold">{userName.slice(0, 2).toUpperCase()}</span>
+                                    ) : (
+                                        <span className="material-icons text-lg">person</span>
+                                    )}
+                                </div>
+                            )}
+                            {notificationCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                                    {notificationCount > 99 ? '99+' : notificationCount}
+                                </span>
+                            )}
                         </button>
                         <button className="relative p-1">
                             <span className="material-icons-outlined text-2xl">shopping_cart</span>
-                            <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">4</span>
+                            {cartCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                                    {cartCount > 99 ? '99+' : cartCount}
+                                </span>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -84,7 +116,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onBack, onU
                 <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto hide-scrollbar border-t border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-300">
                     <button
                         onClick={() => setIsFilterOpen(!isFilterOpen)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${isFilterOpen ? 'bg-black text-white dark:bg-white dark:text-black font-bold' : 'bg-gray-100 dark:bg-gray-800'}`}
+                        className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${isFilterOpen ? 'bg-primary text-white font-bold' : 'bg-gray-100 dark:bg-gray-800'}`}
                     >
                         <span className="material-icons-outlined text-sm">filter_alt</span>
                         Filters

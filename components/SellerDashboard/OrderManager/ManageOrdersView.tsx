@@ -15,7 +15,7 @@ interface ManageOrdersViewProps {
 }
 
 const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
-    const [activeTab, setActiveTab] = useState<'pending' | 'unshipped' | 'canceled' | 'shipped'>('unshipped');
+    const [activeTab, setActiveTab] = useState<'pending' | 'unshipped' | 'canceled' | 'shipped' | 'delivered'>('unshipped');
     const [orders, setOrders] = useState<SellerOrder[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -50,6 +50,7 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
         // Status mapping
         let orderStatus = order.status;
         if (orderStatus === 'paid') orderStatus = 'unshipped';
+        if (orderStatus === 'ready_for_pickup') orderStatus = 'unshipped'; // Group ready items in unshipped for now
 
         return orderStatus === activeTab;
     });
@@ -109,6 +110,13 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
                     >
                         Shipped
                         {activeTab === 'shipped' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gray-900"></span>}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('delivered')}
+                        className={`pb-3 font-medium text-sm transition-colors relative ${activeTab === 'delivered' ? 'text-gray-900 font-bold' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Delivered
+                        {activeTab === 'delivered' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gray-900"></span>}
                     </button>
                 </div>
             </div>

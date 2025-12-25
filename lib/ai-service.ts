@@ -11,6 +11,14 @@ export interface SEOMetadata {
     keywords: string;
 }
 
+export interface ImageAnalysisResult {
+    product_type: string;
+    keywords: string[];
+    color: string;
+    style: string;
+    search_query: string;
+}
+
 class AIService {
     private async callFunction(action: string, params: any): Promise<string> {
         const { data, error } = await supabase.functions.invoke('ai-assistant', {
@@ -75,6 +83,35 @@ class AIService {
         const result = await this.callFunction('generate_occasion_tags', { title, category });
         if (!result) return [];
         return result.split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    /**
+     * Analyze a product image using Grok Vision to extract search keywords
+     * @param imageBase64 - Base64 encoded image data (with or without data: prefix)
+     * @returns Product analysis with keywords, category, and search query
+     */
+    async analyzeProductImage(imageBase64: string): Promise<ImageAnalysisResult> {
+        if (!imageBase64) {
+            throw new Error('Image data is required');
+        }
+
+        const result = await this.callFunction('analyze_product_image', { image_base64: imageBase64 });
+
+        try {
+            // Parse the JSON response
+            const jsonStr = result.replace(/```json|```/g, '').trim();
+            return JSON.parse(jsonStr);
+        } catch (e) {
+            console.error('Failed to parse image analysis JSON:', result);
+            // Return a fallback with the raw result as search query
+            return {
+                product_type: 'Product',
+                keywords: result.split(/[,\s]+/).filter(Boolean).slice(0, 5),
+                color: '',
+                style: '',
+                search_query: result.substring(0, 50)
+            };
+        }
     }
 }
 

@@ -6,7 +6,7 @@ import { PermissionBadge } from '@/hooks/useAdminPermissions';
 import AIBackgroundLayer from '../SellerDashboard/AIBackgroundLayer';
 
 // Extended tabs including content and team
-type AdminTabId = 'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'content' | 'activity' | 'team';
+type AdminTabId = 'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity' | 'team';
 
 interface AdminDashboardLayoutProps {
     children: React.ReactNode;

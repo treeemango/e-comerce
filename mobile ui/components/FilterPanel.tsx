@@ -85,7 +85,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
     ];
 
     return (
-        <div className="flex flex-col flex-grow overflow-hidden bg-white dark:bg-black w-full h-full absolute inset-0 z-40 top-[98px]">
+        <div className="flex flex-col flex-grow overflow-hidden bg-white dark:bg-surface-dark w-full h-full absolute inset-0 z-40 top-[98px]">
             {/* Sidebar & Content Container */}
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Sidebar */}

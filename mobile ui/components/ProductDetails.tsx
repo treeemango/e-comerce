@@ -3,6 +3,7 @@ import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProdu
 import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant } from '@/types';
 import { playWishlistAddSound, playWishlistRemoveSound, playFollowSound, playUnfollowSound } from '@/lib/sounds';
 import { ProductCard } from './ProductCard';
+import ProductQuestions from '../../components/ProductDetails/ProductQuestions';
 
 interface ProductDetailsProps {
     product: Product;
@@ -38,6 +39,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [isFollowing, setIsFollowing] = useState(false);
     const [isFollowLoading, setIsFollowLoading] = useState(false);
     const [followerCount, setFollowerCount] = useState(0);
+    const [useCaseItems, setUseCaseItems] = useState<Product[]>([]);
 
     // Variants State
     const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
@@ -212,10 +214,27 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 } finally {
                     setIsLoadingRelated(false);
                 }
+
+                // Fetch Use Case Recommendations
+                if (product.use_case_tags && product.use_case_tags.length > 0) {
+                    const tag = product.use_case_tags[0];
+                    try {
+                        const { fetchFilteredProducts } = await import('@/lib/api');
+                        const results = await fetchFilteredProducts(tag, {
+                            category_ids: [],
+                            brand_ids: [],
+                            price_min: null,
+                            price_max: null
+                        });
+                        setUseCaseItems(results.filter(p => p.id.toString() !== product.id?.toString()).slice(0, 6));
+                    } catch (e) {
+                        console.error("Failed to load use case items", e);
+                    }
+                }
             }
         };
         loadRelated();
-    }, [product.id]);
+    }, [product.id, product.use_case_tags]);
 
     const handleWishlistToggle = async () => {
         if (!user) {
@@ -654,6 +673,11 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     </div>
                 )}
 
+                {/* Product Q&A */}
+                <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/30 dark:to-transparent rounded-xl p-4 border border-indigo-100 dark:border-indigo-900/50">
+                    <ProductQuestions product={product} />
+                </div>
+
                 {/* Enhanced Delivery Details */}
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                     <div className="flex items-center gap-2 mb-2">
@@ -758,6 +782,32 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                     onProductClick={() => onProductClick(item)}
                                     onVisualSearch={onVisualSearch}
                                 />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Use Case Recommendations */}
+                {product.use_case_tags && product.use_case_tags.length > 0 && useCaseItems.length > 0 && !isLoadingRelated && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="p-3 bg-surface-light dark:bg-surface-dark flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <h3 className="font-black text-black dark:text-white text-lg uppercase tracking-tight">More for {product.use_case_tags[0]}</h3>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="material-icons text-purple-600 text-sm">auto_awesome</span>
+                                    <span className="text-[10px] font-black text-purple-600 uppercase tracking-widest bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 rounded">AI Curated</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2.5 overflow-x-auto px-3 pb-4 snap-x snap-mandatory hide-scrollbar">
+                            {useCaseItems.map(item => (
+                                <div key={item.id} className="w-[160px] flex-shrink-0 snap-start">
+                                    <ProductCard
+                                        product={item}
+                                        onProductClick={() => onProductClick(item)}
+                                        onVisualSearch={onVisualSearch}
+                                    />
+                                </div>
                             ))}
                         </div>
                     </div>

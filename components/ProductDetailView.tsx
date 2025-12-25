@@ -12,6 +12,7 @@ import { useSEO } from '../lib/useSEO';
 import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
 import { formatPrice, getCurrencySymbol } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
+import ProductQuestions from './ProductDetails/ProductQuestions';
 
 function cn(...inputs: ClassValue[]) {
    return twMerge(clsx(inputs));
@@ -61,6 +62,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [isFollowing, setIsFollowing] = useState(false);
    const [isFollowLoading, setIsFollowLoading] = useState(false);
    const [followerCount, setFollowerCount] = useState(0);
+   const [useCaseItems, setUseCaseItems] = useState<Product[]>([]);
 
    // Wishlist State
    const [isWishlisted, setIsWishlisted] = useState(false);
@@ -364,10 +366,29 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             setSameItems(same);
             setSimilarItems(similar);
             setIsLoadingRelated(false);
+
+            // Fetch Use Case Recommendations
+            if (product.use_case_tags && product.use_case_tags.length > 0) {
+               const tag = product.use_case_tags[0];
+               try {
+                  const { fetchFilteredProducts } = await import('../lib/api');
+                  // Pass empty filters as the second argument
+                  const results = await fetchFilteredProducts(tag, {
+                     category_ids: [],
+                     brand_ids: [],
+                     price_min: null,
+                     price_max: null
+                  });
+                  // Slice to limit results as fetchFilteredProducts doesn't support limit param directly
+                  setUseCaseItems(results.filter(p => p.id.toString() !== product.id?.toString()).slice(0, 6));
+               } catch (e) {
+                  console.error("Failed to load use case items", e);
+               }
+            }
          }
       };
       loadRelated();
-   }, [product.id]);
+   }, [product.id, product.use_case_tags]);
 
    useEffect(() => {
       if (product?.id) {
@@ -1316,9 +1337,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               <span className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Best Used In</span>
                               <div className="flex flex-wrap gap-2">
                                  {product.use_case_tags.map(tag => (
-                                    <span key={tag} className="px-3 py-1 bg-white dark:bg-slate-700 border border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full shadow-sm">
+                                    <a href={`/search?q=${tag}`} key={tag} className="px-3 py-1 bg-white dark:bg-slate-700 border border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full shadow-sm hover:bg-blue-50 dark:hover:bg-blue-900/40 transition-colors">
                                        {tag}
-                                    </span>
+                                    </a>
                                  ))}
                               </div>
                            </div>
@@ -1412,6 +1433,41 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                </div>
             </div>
          </div>
+
+         {/* Product Questions */}
+         <ProductQuestions product={product} />
+
+
+         {/* AI Search Results: Use Case Recommendations */}
+         {product.use_case_tags && product.use_case_tags.length > 0 && useCaseItems.length > 0 && (
+            <div className="mt-16">
+               <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-col">
+                     <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        More for {product.use_case_tags[0]}
+                        <span className="text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">
+                           AI Curated
+                        </span>
+                     </h2>
+                  </div>
+                  <a href={`/search?q=${product.use_case_tags[0]}`} className="text-sm font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 flex items-center gap-1">
+                     See all
+                     <span className="material-icons text-sm">arrow_forward</span>
+                  </a>
+               </div>
+
+               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {useCaseItems.map(item => (
+                     <ProductCard
+                        key={item.id}
+                        product={item}
+                        onProductClick={onProductClick}
+                        onAddToCart={onAddToCart}
+                     />
+                  ))}
+               </div>
+            </div>
+         )}
 
          {/* AI Search Results: Same Items */}
          {

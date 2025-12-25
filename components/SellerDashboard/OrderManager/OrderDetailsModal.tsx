@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SellerOrder } from '../../../types';
 import { formatCurrency } from '../../../lib/utils';
-import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP } from '../../../lib/api';
+import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady } from '../../../lib/api';
 import BuyerReceipt from './BuyerReceipt';
 
 interface OrderDetailsModalProps {
@@ -19,6 +19,7 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const [shippingType, setShippingType] = useState<'courier' | 'parcel'>('courier');
     const [trackingNumber, setTrackingNumber] = useState('');
     const [isShipping, setIsShipping] = useState(false);
+    const [isMarkingReady, setIsMarkingReady] = useState(false);
     const [generatedOTP, setGeneratedOTP] = useState<string | null>(null);
 
     // Parcel-specific fields
@@ -101,8 +102,30 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
         }
     };
 
+    const handleMarkReady = async () => {
+        setIsMarkingReady(true);
+        try {
+            const success = await markOrderReady(order.id);
+            if (success) {
+                onOrderUpdated?.();
+                onClose();
+            } else {
+                alert('Failed to mark order as ready. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error marking order as ready:', error);
+            alert('An error occurred.');
+        } finally {
+            setIsMarkingReady(false);
+        }
+    };
+
     const canShip = order.status?.toLowerCase() === 'pending' ||
         order.status?.toLowerCase() === 'paid' ||
+        order.status?.toLowerCase() === 'unshipped' ||
+        order.status?.toLowerCase() === 'ready_for_pickup';
+
+    const canMarkReady = order.status?.toLowerCase() === 'paid' ||
         order.status?.toLowerCase() === 'unshipped';
 
     const currency = order.items?.[0]?.currency || 'USD';
@@ -403,6 +426,20 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                 <span className="material-icons text-lg">print</span>
                                 Print Receipt
                             </button>
+                            {canMarkReady && !showTrackingInput && (
+                                <button
+                                    onClick={handleMarkReady}
+                                    disabled={isMarkingReady}
+                                    className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 flex items-center gap-2"
+                                >
+                                    {isMarkingReady ? (
+                                        <span className="material-icons animate-spin text-lg">sync</span>
+                                    ) : (
+                                        <span className="material-icons text-lg">inventory</span>
+                                    )}
+                                    Mark as Ready
+                                </button>
+                            )}
                             {!showTrackingInput ? (
                                 <button
                                     onClick={() => setShowTrackingInput(true)}

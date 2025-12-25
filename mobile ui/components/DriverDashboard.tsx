@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { fetchActiveDeliveryJobs, markOrderDelivered } from '../../lib/api';
+import { fetchActiveDeliveryJobs, completeDeliveryWithProof } from '../../lib/api';
 import { DeliveryAssignment } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+import MobileDeliveryDocs from './MobileDeliveryDocs';
+
+import DriverEarningsView from './DriverEarningsView';
 
 interface DriverDashboardProps {
     partnerId: string;
@@ -13,7 +16,8 @@ interface DriverDashboardProps {
 export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, driverName, onSignOut }) => {
     const [activeJobs, setActiveJobs] = useState<DeliveryAssignment[]>([]);
     const [loading, setLoading] = useState(true);
-    const [processingId, setProcessingId] = useState<string | null>(null);
+    const [verifyingJobId, setVerifyingJobId] = useState<string | null>(null);
+    const [currentView, setCurrentView] = useState<'dashboard' | 'earnings'>('dashboard');
 
     useEffect(() => {
         const loadJobs = async () => {
@@ -43,17 +47,25 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, dri
         };
     }, [partnerId]);
 
-    const handleDeliver = async (jobId: string, orderId: string) => {
-        setProcessingId(jobId);
-        const success = await markOrderDelivered(orderId);
+    const initiateDelivery = (jobId: string) => {
+        setVerifyingJobId(jobId);
+    };
+
+    const handleDeliveryComplete = async (proofUrl: string, proofType: 'photo' | 'signature') => {
+        if (!verifyingJobId) return;
+
+        const job = activeJobs.find(j => j.id === verifyingJobId);
+        if (!job) return;
+
+        const success = await completeDeliveryWithProof(job.order_id, proofUrl, proofType);
+
         if (success) {
-            alert('Order marked as delivered!');
-            // Job will be removed from list via realtime subscription or local filter
-            setActiveJobs(prev => prev.filter(j => j.id !== jobId));
+            alert('Delivery verified and completed successfully!');
+            setActiveJobs(prev => prev.filter(j => j.id !== verifyingJobId));
         } else {
-            alert('Failed to update status.');
+            alert('Failed to complete delivery. Please try again.');
         }
-        setProcessingId(null);
+        setVerifyingJobId(null);
     };
 
     if (loading) {
@@ -65,8 +77,20 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, dri
         );
     }
 
+    if (currentView === 'earnings') {
+        return <DriverEarningsView onBack={() => setCurrentView('dashboard')} />;
+    }
+
     return (
         <div className="bg-slate-900 min-h-screen text-white pb-24">
+            {verifyingJobId && activeJobs.find(j => j.id === verifyingJobId) && (
+                <MobileDeliveryDocs
+                    orderId={activeJobs.find(j => j.id === verifyingJobId)!.order_id}
+                    onComplete={handleDeliveryComplete}
+                    onCancel={() => setVerifyingJobId(null)}
+                />
+            )}
+
             {/* Driver Header */}
             <div className="bg-slate-800 px-6 pt-16 pb-10 rounded-b-[3rem] shadow-2xl relative overflow-hidden">
                 <div className="absolute -top-10 -right-10 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl"></div>
@@ -86,9 +110,17 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, dri
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Active Jobs</p>
                             <p className="text-2xl font-black text-white">{activeJobs.length}</p>
                         </div>
-                        <div className="flex-1 bg-orange-500 p-4 rounded-3xl shadow-lg shadow-orange-500/20">
-                            <p className="text-[10px] font-bold text-orange-200 uppercase tracking-tighter mb-0.5">Revenue Today</p>
-                            <p className="text-2xl font-black text-white">{formatCurrency(activeJobs.reduce((acc, curr) => acc + (curr.delivery_fee || 0), 0))}</p>
+                        <div
+                            onClick={() => setCurrentView('earnings')}
+                            className="flex-1 bg-orange-500 p-4 rounded-3xl shadow-lg shadow-orange-500/20 active:scale-95 transition cursor-pointer"
+                        >
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] font-bold text-orange-200 uppercase tracking-tighter mb-0.5">Revenue Today</p>
+                                    <p className="text-2xl font-black text-white">{formatCurrency(activeJobs.reduce((acc, curr) => acc + (curr.delivery_fee || 0), 0))}</p>
+                                </div>
+                                <span className="material-icons text-orange-900/30 text-xl">chevron_right</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -149,21 +181,25 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, dri
                                 </div>
 
                                 <div className="flex gap-3">
-                                    <button className="flex-1 h-14 bg-slate-700 rounded-2xl flex items-center justify-center gap-2 font-black text-sm active:scale-95 transition">
-                                        <span className="material-icons text-lg">map</span>
-                                        View Map
+                                    <button
+                                        onClick={() => {
+                                            // Use mock coordinates for now, ideally from job.delivery_lat/lng
+                                            const lat = -1.2864; // Nairobi coords
+                                            const lng = 36.8172;
+                                            const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+                                            window.open(url, '_blank');
+                                        }}
+                                        className="flex-1 h-14 bg-slate-700 rounded-2xl flex items-center justify-center gap-2 font-black text-sm active:scale-95 transition"
+                                    >
+                                        <span className="material-icons text-lg">navigation</span>
+                                        Navigate
                                     </button>
                                     <button
-                                        onClick={() => handleDeliver(job.id, job.order_id)}
-                                        disabled={processingId === job.id}
+                                        onClick={() => initiateDelivery(job.id)}
                                         className="flex-[1.5] h-14 bg-orange-500 rounded-2xl flex items-center justify-center gap-2 font-black text-sm shadow-lg shadow-orange-500/20 active:scale-95 transition disabled:opacity-50"
                                     >
-                                        {processingId === job.id ? 'Updating...' : (
-                                            <>
-                                                <span className="material-icons text-lg">check_circle</span>
-                                                Delivered
-                                            </>
-                                        )}
+                                        <span className="material-icons text-lg">check_circle</span>
+                                        Delivered
                                     </button>
                                 </div>
                             </div>

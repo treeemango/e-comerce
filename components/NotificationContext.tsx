@@ -9,12 +9,13 @@ export interface Notification {
     message: string;
     type: NotificationType;
     duration?: number;
+    onClick?: () => void;
 }
 
 interface NotificationContextType {
     notifications: Notification[];
     history: Notification[];
-    showNotification: (message: string, type: NotificationType, duration?: number) => void;
+    showNotification: (message: string, type: NotificationType, duration?: number, onClick?: () => void) => void;
     dismissNotification: (id: string) => void;
     markAllAsRead: () => void;
     clearHistory: () => void;
@@ -37,10 +38,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         setNotifications((prev) => prev.filter((n) => n.id !== id));
     }, []);
 
-    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000) => {
+    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void) => {
         const id = Math.random().toString(36).substring(2, 9);
         const timestamp = new Date().toISOString();
-        const newNotification: Notification & { timestamp: string } = { id, message, type, duration, timestamp };
+        const newNotification: Notification & { timestamp: string } = { id, message, type, duration, timestamp, onClick };
 
         setNotifications((prev) => [...prev, newNotification]);
         setHistory((prev) => {

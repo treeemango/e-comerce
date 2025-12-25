@@ -24,6 +24,9 @@ import { SellerCreateAutomaticDiscountView } from './SellerCreateAutomaticDiscou
 import { SellerManageQuantityDiscountsView } from './SellerManageQuantityDiscountsView';
 import { SellerWalletView } from './SellerWalletView';
 import { SellerOrderDetailsSheet } from './SellerOrderDetailsSheet';
+import { SellerReviewsView } from './SellerReviewsView';
+import { SellerManageReturnsView } from './SellerManageReturnsView';
+import { SellerAnalyticsView } from './SellerAnalyticsView';
 
 interface SellerDashboardProps {
   sellerId: string;
@@ -55,7 +58,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'promotions' | 'messages' | 'wallet' | 'menu'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'promotions' | 'messages' | 'wallet' | 'menu' | 'reviews' | 'returns' | 'analytics'>('overview');
 
   // Modal State (Overlays)
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -182,6 +185,26 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             sellerId={sellerId}
           />
         );
+      case 'reviews':
+        return (
+          <SellerReviewsView
+            sellerId={sellerId}
+          />
+        );
+      case 'returns':
+        return (
+          <SellerManageReturnsView
+            sellerId={sellerId}
+            onBack={() => setActiveTab('menu')}
+          />
+        );
+      case 'analytics':
+        return (
+          <SellerAnalyticsView
+            sellerId={sellerId}
+            onBack={() => setActiveTab('menu')}
+          />
+        );
       case 'menu':
         return (
           <div className="bg-gray-50 min-h-full p-6 space-y-6">
@@ -212,6 +235,15 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
               </button>
               <button onClick={() => setActiveTab('wallet')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
                 <span className="material-icons text-gray-400">account_balance_wallet</span> Payouts
+              </button>
+              <button onClick={() => setActiveTab('reviews')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
+                <span className="material-icons text-gray-400">star_outline</span> Manage Reviews
+              </button>
+              <button onClick={() => setActiveTab('returns')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
+                <span className="material-icons text-gray-400">assignment_return</span> Manage Returns
+              </button>
+              <button onClick={() => setActiveTab('analytics')} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b flex items-center gap-3">
+                <span className="material-icons text-gray-400">insights</span> Analytics
               </button>
               <button className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
                 <span className="material-icons text-gray-400">settings</span> Settings

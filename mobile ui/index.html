@@ -1,57 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Temu Clone</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined|Material+Icons+Round" rel="stylesheet"/>
-    <script>
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              primary: "#FB7701",
-              "background-light": "#F5F5F5",
-              "background-dark": "#121212",
-              "surface-light": "#FFFFFF",
-              "surface-dark": "#1E1E1E",
-              "text-primary-light": "#111111",
-              "text-primary-dark": "#EEEEEE",
-              "text-secondary-light": "#666666",
-              "text-secondary-dark": "#AAAAAA",
-              "price-red": "#E11D48",
-              "banner-green": "#16A34A",
-            },
-            fontFamily: {
-              display: ["Inter", "sans-serif"],
-            },
-            borderRadius: {
-              DEFAULT: "0.5rem",
-              'lg': '0.75rem',
-              'xl': '1rem',
-            },
-            fontSize: {
-                'xxs': '0.65rem',
-            }
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JuaExpress Mobile</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <!-- Preconnect for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Material Icons - ALL variants for cross-platform support -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    rel="stylesheet" />
+  <style>
+    /* Ensure Material icon fonts render ligatures correctly on ALL devices */
+    .material-icons,
+    .material-icons-outlined,
+    .material-icons-round,
+    .material-symbols-outlined {
+      font-weight: normal;
+      font-style: normal;
+      font-size: 24px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: normal;
+      text-transform: none;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -moz-font-feature-settings: 'liga';
+      font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    .material-icons {
+      font-family: 'Material Icons' !important;
+    }
+
+    .material-icons-outlined {
+      font-family: 'Material Icons Outlined' !important;
+    }
+
+    .material-icons-round {
+      font-family: 'Material Icons Round' !important;
+    }
+
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined' !important;
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#FB7701",
+            "background-light": "#F5F5F5",
+            "background-dark": "#121212",
+            "surface-light": "#FFFFFF",
+            "surface-dark": "#1E1E1E",
+            "text-primary-light": "#111111",
+            "text-primary-dark": "#EEEEEE",
+            "text-secondary-light": "#666666",
+            "text-secondary-dark": "#AAAAAA",
+            "price-red": "#E11D48",
+            "banner-green": "#16A34A",
           },
+          fontFamily: {
+            display: ["Inter", "sans-serif"],
+          },
+          borderRadius: {
+            DEFAULT: "0.5rem",
+            'lg': '0.75rem',
+            'xl': '1rem',
+          },
+          fontSize: {
+            'xxs': '0.65rem',
+          }
         },
-      };
-    </script>
-    <style>
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        body {
-            overscroll-behavior-y: none;
-        }
-    </style>
+      },
+    };
+  </script>
+  <style>
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    body {
+      overscroll-behavior-y: none;
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -61,10 +117,13 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+  <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-background-light dark:bg-background-dark font-display text-text-primary-light dark:text-text-primary-dark antialiased pb-20">
-    <div id="root"></div>
+
+<body
+  class="bg-background-light dark:bg-background-dark font-display text-text-primary-light dark:text-text-primary-dark antialiased pb-20">
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

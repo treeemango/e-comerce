@@ -5,8 +5,8 @@ import { getSellerUnreadCount } from '@/lib/api';
 
 interface SellerDashboardLayoutProps {
     children: React.ReactNode;
-    activeTab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount';
-    onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount') => void;
+    activeTab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount';
+    onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount') => void;
     user: any;
     onSignOut: () => void;
 }
@@ -71,6 +71,7 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
             submenu: [
                 { id: 'manage-orders', label: 'Manage orders' },
                 { id: 'manage-returns', label: 'Manage returns' },
+                { id: 'manage-reviews', label: 'Manage reviews' },
                 { id: 'order-reports', label: 'Order reports' },
                 { id: 'upload-order-files', label: 'Upload order related files' },
             ]

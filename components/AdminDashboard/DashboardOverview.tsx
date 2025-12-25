@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchAdminDashboardStats, hasResourcePermission, fetchPlatformRevenue, fetchVerificationQueue, approvePayoutRequest } from '@/lib/api';
 import type { AdminDashboardStats, AdminPermissions, PlatformRevenueAnalytics, VerificationQueueItem, PayoutRequest } from '@/types';
 import { supabase } from '@/lib/supabase';
+import AdminKPIsWidget from './AdminKPIsWidget';
 
 interface StatsCardProps {
     title: string;
@@ -145,6 +146,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ permissions }) =>
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* Platform Health KPIs */}
+            <AdminKPIsWidget />
+
             {/* Primary Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                 <StatsCard

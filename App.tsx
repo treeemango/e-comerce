@@ -1,81 +1,97 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import FeaturesBar from './components/FeaturesBar';
 import LightningDealsRow from './components/LightningDealsRow';
 import DealsNavBar from './components/DealsNavBar';
 import ProductSection from './components/ProductSection';
-import BestSellersView from './components/BestSellersView';
-import ProductDetailView from './components/ProductDetailView';
-import SellerLoginView from './components/SellerLoginView';
-import BuyerAuthView from './components/BuyerAuthView';
-import AccountPageView from './components/AccountPageView';
 import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
-import CheckoutView from './components/CheckoutView';
-import OrderConfirmationView from './components/OrderConfirmationView';
-import CartView from './components/CartView';
-import WishlistView from './components/WishlistView';
-import TrendingVendorsSection from './components/TrendingVendorsSection';
-import SellerOnboardingView from './components/SellerOnboarding/SellerOnboardingView';
-import SellerDashboardLayout from './components/SellerDashboard/SellerDashboardLayout';
-import DashboardOverview from './components/SellerDashboard/DashboardOverview';
-import AddProductView from './components/SellerDashboard/ProductManager/AddProductView';
-import ManageProductsView from './components/SellerDashboard/ProductManager/ManageProductsView';
-import AddProductsUploadView from './components/SellerDashboard/ProductManager/AddProductsUploadView';
-import PricingHealthView from './components/SellerDashboard/PricingHealthView';
-import ProductComplianceView from './components/SellerDashboard/ProductManager/ProductComplianceView';
-import ManageOrdersView from './components/SellerDashboard/OrderManager/ManageOrdersView';
-import ManageReturnsView from './components/SellerDashboard/OrderManager/ManageReturnsView';
-import UploadOrderFilesView from './components/SellerDashboard/OrderManager/UploadOrderFilesView';
-import OrderReportsView from './components/SellerDashboard/OrderManager/OrderReportsView';
-import PromotionsCouponsView from './components/SellerDashboard/Promotions/PromotionsCouponsView';
-import CreateCouponView from './components/SellerDashboard/Promotions/CreateCouponView';
-import PromotionalCampaignsView from './components/SellerDashboard/Promotions/PromotionalCampaignsView';
-import CreateAutomaticDiscountView from './components/SellerDashboard/Promotions/CreateAutomaticDiscountView';
-import PaymentsView from './components/SellerDashboard/Finances/PaymentsView';
-import WalletView from './components/SellerDashboard/Finances/WalletView';
-import ShippingSettingsView from './components/SellerDashboard/Account/ShippingSettingsView';
-import EditShippingTemplateView from './components/SellerDashboard/Account/EditShippingTemplateView';
-import SellerProfileView from './components/SellerDashboard/Account/SellerProfileView';
-import ReturnSettingsView from './components/SellerDashboard/Account/ReturnSettingsView';
-import ChargeMethodView from './components/SellerDashboard/Finances/ChargeMethodView';
-import SellerPerformanceView from './components/SellerDashboard/Performance/SellerPerformanceView';
-import AppsServiceView from './components/SellerDashboard/Apps/AppsServiceView';
-import OrdersView from './components/SellerDashboard/OrdersView';
-import SellerMessagesView from './components/SellerDashboard/SellerMessagesView';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
 import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, DealCategoryNavItem, NavbarCategory } from './lib/api';
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema } from './lib/seo-utils';
 
-// Admin Dashboard Components
-import AdminDashboardLayout from './components/AdminDashboard/AdminDashboardLayout';
-import { default as AdminDashboardOverview } from './components/AdminDashboard/DashboardOverview';
-import ProductApprovalView from './components/AdminDashboard/ProductApproval/ProductApprovalView';
-import SellerVerificationView from './components/AdminDashboard/SellerVerification/SellerVerificationView';
-import DriverVerificationView from './components/AdminDashboard/SellerVerification/DriverVerificationView';
-import UserManagementView from './components/AdminDashboard/UserManagement/UserManagementView';
-import OrderManagementView from './components/AdminDashboard/OrderManagement/OrderManagementView';
-import ContentManagementView from './components/AdminDashboard/ContentManagement/ContentManagementView';
-import ActivityLogView from './components/AdminDashboard/ActivityLog/ActivityLogView';
-import InfoPageView from './components/InfoPageView';
+// Lazy-loaded components for better code splitting
+const BestSellersView = lazy(() => import('./components/BestSellersView'));
+const ProductDetailView = lazy(() => import('./components/ProductDetailView'));
+const SellerLoginView = lazy(() => import('./components/SellerLoginView'));
+const BuyerAuthView = lazy(() => import('./components/BuyerAuthView'));
+const AccountPageView = lazy(() => import('./components/AccountPageView'));
+const CheckoutView = lazy(() => import('./components/CheckoutView'));
+const OrderConfirmationView = lazy(() => import('./components/OrderConfirmationView'));
+const TrackOrderView = lazy(() => import('./components/TrackOrderView'));
+const CartView = lazy(() => import('./components/CartView'));
+const WishlistView = lazy(() => import('./components/WishlistView'));
+const TrendingVendorsSection = lazy(() => import('./components/TrendingVendorsSection'));
+const SellerOnboardingView = lazy(() => import('./components/SellerOnboarding/SellerOnboardingView'));
+const SellerDashboardLayout = lazy(() => import('./components/SellerDashboard/SellerDashboardLayout'));
+const DashboardOverview = lazy(() => import('./components/SellerDashboard/DashboardOverview'));
+const AddProductView = lazy(() => import('./components/SellerDashboard/ProductManager/AddProductView'));
+const ManageProductsView = lazy(() => import('./components/SellerDashboard/ProductManager/ManageProductsView'));
+const AddProductsUploadView = lazy(() => import('./components/SellerDashboard/ProductManager/AddProductsUploadView'));
+const PricingHealthView = lazy(() => import('./components/SellerDashboard/PricingHealthView'));
+const ProductComplianceView = lazy(() => import('./components/SellerDashboard/ProductManager/ProductComplianceView'));
+const ManageOrdersView = lazy(() => import('./components/SellerDashboard/OrderManager/ManageOrdersView'));
+const ManageReturnsView = lazy(() => import('./components/SellerDashboard/OrderManager/ManageReturnsView'));
+const UploadOrderFilesView = lazy(() => import('./components/SellerDashboard/OrderManager/UploadOrderFilesView'));
+const OrderReportsView = lazy(() => import('./components/SellerDashboard/OrderManager/OrderReportsView'));
+const PromotionsCouponsView = lazy(() => import('./components/SellerDashboard/Promotions/PromotionsCouponsView'));
+const CreateCouponView = lazy(() => import('./components/SellerDashboard/Promotions/CreateCouponView'));
+const PromotionalCampaignsView = lazy(() => import('./components/SellerDashboard/Promotions/PromotionalCampaignsView'));
+const CreateAutomaticDiscountView = lazy(() => import('./components/SellerDashboard/Promotions/CreateAutomaticDiscountView'));
+const PaymentsView = lazy(() => import('./components/SellerDashboard/Finances/PaymentsView'));
+const WalletView = lazy(() => import('./components/SellerDashboard/Finances/WalletView'));
+const ShippingSettingsView = lazy(() => import('./components/SellerDashboard/Account/ShippingSettingsView'));
+const EditShippingTemplateView = lazy(() => import('./components/SellerDashboard/Account/EditShippingTemplateView'));
+const SellerProfileView = lazy(() => import('./components/SellerDashboard/Account/SellerProfileView'));
+const ReturnSettingsView = lazy(() => import('./components/SellerDashboard/Account/ReturnSettingsView'));
+const ChargeMethodView = lazy(() => import('./components/SellerDashboard/Finances/ChargeMethodView'));
+const SellerPerformanceView = lazy(() => import('./components/SellerDashboard/Performance/SellerPerformanceView'));
+const AppsServiceView = lazy(() => import('./components/SellerDashboard/Apps/AppsServiceView'));
+const OrdersView = lazy(() => import('./components/SellerDashboard/OrdersView'));
+const SellerMessagesView = lazy(() => import('./components/SellerDashboard/SellerMessagesView'));
+const ManageReviewsView = lazy(() => import('./components/SellerDashboard/ManageReviewsView'));
+const InfoPageView = lazy(() => import('./components/InfoPageView'));
 
-import DriverDashboardLayout from './components/DriverDashboard/DriverDashboardLayout';
-import { default as WebDriverDashboard } from './components/DriverDashboard/WebDriverDashboard';
-import DriverLoginView from './components/DriverDashboard/DriverLoginView';
-import DriverOnboardingView from './components/DriverDashboard/DriverOnboardingView';
-import AdminLoginView from './components/AdminDashboard/AdminLoginView';
+// Admin Dashboard Components (lazy)
+const AdminDashboardLayout = lazy(() => import('./components/AdminDashboard/AdminDashboardLayout'));
+const AdminDashboardOverview = lazy(() => import('./components/AdminDashboard/DashboardOverview'));
+const ProductApprovalView = lazy(() => import('./components/AdminDashboard/ProductApproval/ProductApprovalView'));
+const SellerVerificationView = lazy(() => import('./components/AdminDashboard/SellerVerification/SellerVerificationView'));
+const DriverVerificationView = lazy(() => import('./components/AdminDashboard/SellerVerification/DriverVerificationView'));
+const PayoutApprovalsView = lazy(() => import('./components/AdminDashboard/Finances/PayoutApprovalsView'));
+const UserManagementView = lazy(() => import('./components/AdminDashboard/UserManagement/UserManagementView'));
+const OrderManagementView = lazy(() => import('./components/AdminDashboard/OrderManagement/OrderManagementView'));
+const ContentManagementView = lazy(() => import('./components/AdminDashboard/ContentManagement/ContentManagementView'));
+const ActivityLogView = lazy(() => import('./components/AdminDashboard/ActivityLog/ActivityLogView'));
+const ModerationQueueView = lazy(() => import('./components/AdminDashboard/ModerationQueueView'));
+
+// Driver Dashboard (lazy)
+const DriverDashboardLayout = lazy(() => import('./components/DriverDashboard/DriverDashboardLayout'));
+const WebDriverDashboard = lazy(() => import('./components/DriverDashboard/WebDriverDashboard'));
+const WebDriverEarningsView = lazy(() => import('./components/DriverDashboard/WebDriverEarningsView').then(m => ({ default: m.WebDriverEarningsView })));
+const DriverLoginView = lazy(() => import('./components/DriverDashboard/DriverLoginView'));
+const DriverOnboardingView = lazy(() => import('./components/DriverDashboard/DriverOnboardingView'));
+const AdminLoginView = lazy(() => import('./components/AdminDashboard/AdminLoginView'));
 
 import NotificationSystem from './components/NotificationSystem';
 import { WebNotificationWrapper } from './components/WebNotificationWrapper';
+import { WriteReviewModal } from './components/WriteReviewModal';
+
+// Loading fallback for Suspense
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-[200px]">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+  </div>
+);
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'wishlist' | 'info-page'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
-  const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'users' | 'orders' | 'content' | 'activity'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity'>('overview');
   const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,6 +118,7 @@ const App: React.FC = () => {
   const [activeInfoPageSlug, setActiveInfoPageSlug] = useState<string>('about');
   const [isActivityHubOpen, setIsActivityHubOpen] = useState(false);
   const [activityHubTab, setActivityHubTab] = useState<'list' | 'promotions' | 'shipping' | 'notifications'>('list');
+  const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
 
   // Background Sync'd State
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
@@ -716,7 +733,21 @@ const App: React.FC = () => {
           setUserCoupons(coupons);
           setRecentOrders(orders);
         }, [])}
+        onReviewPrompt={(orderId) => {
+          const order = recentOrders.find(o => o.id === orderId);
+          if (order && order.items?.[0]) {
+            setReviewingProductId(order.items[0].product_id);
+          }
+        }}
       />
+      {reviewingProductId && (
+        <WriteReviewModal
+          productId={reviewingProductId}
+          userId={user?.id}
+          onClose={() => setReviewingProductId(null)}
+          onSubmitted={() => setReviewingProductId(null)}
+        />
+      )}
       {/* Top Banner - Dark Theme (Hide on Seller Login/Auth/Onboarding/Dashboard/Admin) */}
       {currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' && (
         <div className="bg-black text-white text-xs py-2 hidden sm:block">
@@ -927,6 +958,17 @@ const App: React.FC = () => {
               setCompletedOrderInfo(null);
               setCurrentView('home');
             }}
+            onTrackOrder={() => {
+              setCurrentView('track-order');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        )}
+        {currentView === 'track-order' && (
+          <TrackOrderView
+            onBack={() => setCurrentView('home')}
+            initialOrderId={completedOrderInfo?.orderId}
+            initialEmail={completedOrderInfo?.email || user?.email}
           />
         )}
         {currentView === 'cart' && (
@@ -1016,6 +1058,7 @@ const App: React.FC = () => {
             {dashboardTab === 'manage-returns' && <ManageReturnsView />}
             {dashboardTab === 'order-reports' && <OrderReportsView />}
             {dashboardTab === 'upload-order-files' && <UploadOrderFilesView />}
+            {dashboardTab === 'manage-reviews' && <ManageReviewsView sellerId={user?.id || ''} />}
             {dashboardTab === 'promotions-coupons' && <PromotionsCouponsView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} />}
             {dashboardTab === 'promotions-campaigns' && <PromotionalCampaignsView sellerId={user?.id || ''} />}
             {dashboardTab === 'create-coupon' && (
@@ -1083,6 +1126,8 @@ const App: React.FC = () => {
             {adminTab === 'drivers' && <DriverVerificationView permissions={adminPermissions!} />}
             {adminTab === 'users' && <UserManagementView permissions={adminPermissions!} />}
             {adminTab === 'orders' && <OrderManagementView />}
+            {adminTab === 'moderation' && <ModerationQueueView />}
+            {adminTab === 'finances' && <PayoutApprovalsView />}
             {adminTab === 'content' && <ContentManagementView permissions={adminPermissions!} />}
             {adminTab === 'activity' && <ActivityLogView />}
           </AdminDashboardLayout>
@@ -1095,12 +1140,7 @@ const App: React.FC = () => {
             onSignOut={handleSignOutClick}
           >
             {driverTab === 'jobs' && <WebDriverDashboard partnerId={user?.id || ''} />}
-            {driverTab === 'earnings' && (
-              <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
-                <span className="material-icons text-4xl text-slate-300">analytics</span>
-                <p className="mt-4 text-slate-500 font-bold">Detailed earnings charts coming soon.</p>
-              </div>
-            )}
+            {driverTab === 'earnings' && <WebDriverEarningsView partnerId={user?.id || ''} />}
             {driverTab === 'vehicles' && (
               <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
                 <span className="material-icons text-4xl text-slate-300">minor_crash</span>

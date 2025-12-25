@@ -16,7 +16,7 @@ serve(async (req: Request) => {
 
     try {
         const { action, params } = await req.json();
-        console.log(`Action: ${action}`, "Params:", JSON.stringify(params));
+        console.log(`Action: ${action}`, "Params:", JSON.stringify(params).slice(0, 200));
 
         if (!GROK_API_KEY) {
             throw new Error("GROK_API_KEY is not set");
@@ -24,6 +24,8 @@ serve(async (req: Request) => {
 
         let prompt = "";
         let systemPrompt = "You are a helpful e-commerce copywriter assistant. Your goal is to help sellers create high-quality, SEO-optimized product listings. Provide concise, professional, and engaging content.";
+        let messages: any[] = [];
+        let useVision = false;
 
         switch (action) {
             case "improve_title":
@@ -50,8 +52,55 @@ serve(async (req: Request) => {
             case "generate_occasion_tags":
                 prompt = `Generate 5-8 product "Occasion" tags for: "${params.title}"${params.category ? ` in category "${params.category}"` : ""}. These should describe events or times when the product is appropriate. Return ONLY a comma-separated list. Example: wedding, party, summer, gift, casual`;
                 break;
+            case "suggest_chat_reply":
+                systemPrompt = "You are a helpful customer service assistant for an e-commerce seller. Your goal is to draft polite, professional, and helpful replies to buyer messages. Keep replies concise (under 50 words) and friendly.";
+                prompt = `The buyer wrote: "${params.last_message}". \nContext: Selling product "${params.product_title || 'item'}". \nDraft a reply for the seller. Return ONLY the reply text.`;
+                break;
+            case "answer_product_question":
+                systemPrompt = "You are a helpful product expert assistant. Your goal is to answer buyer questions based ONLY on the provided product information. If the answer is not in the context, politely say 'I cannot find that information in the product details.' or similar. Keep answers concise (under 3 or 4 sentences).";
+                prompt = `Product: "${params.product_title}".\nMatches Context: ${params.description || ''} ${JSON.stringify(params.attributes || {})}.\n\nQuestion: "${params.question}".\n\nAnswer:`;
+                break;
+            case "analyze_product_image":
+                // Visual search: analyze image and extract product keywords
+                useVision = true;
+                systemPrompt = "You are a product recognition AI assistant. Analyze images and identify what products are shown. Return search keywords that would help find similar products on an e-commerce platform.";
+
+                if (!params.image_base64) {
+                    throw new Error("image_base64 is required for analyze_product_image");
+                }
+
+                // Build vision message with image
+                messages = [
+                    { role: "system", content: systemPrompt },
+                    {
+                        role: "user",
+                        content: [
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: params.image_base64.startsWith('data:')
+                                        ? params.image_base64
+                                        : `data:image/jpeg;base64,${params.image_base64}`
+                                }
+                            },
+                            {
+                                type: "text",
+                                text: "Analyze this product image. Return a JSON object with: { \"product_type\": \"main category\", \"keywords\": [\"keyword1\", \"keyword2\", ...], \"color\": \"primary color\", \"style\": \"style description\", \"search_query\": \"best search query to find similar products\" }. Return ONLY the JSON."
+                            }
+                        ]
+                    }
+                ];
+                break;
             default:
                 throw new Error("Invalid action");
+        }
+
+        // Build messages array if not using vision
+        if (!useVision) {
+            messages = [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: prompt },
+            ];
         }
 
         const response = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -61,17 +110,15 @@ serve(async (req: Request) => {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
+                // grok-4-1-fast-non-reasoning supports both text and image input
                 model: "grok-4-1-fast-non-reasoning",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: prompt },
-                ],
+                messages,
                 temperature: 0.7,
             }),
         });
 
         const data = await response.json();
-        console.log("xAI Response Data:", JSON.stringify(data));
+        console.log("xAI Response Data:", JSON.stringify(data).slice(0, 500));
 
         if (!response.ok) {
             console.error("xAI API Error:", data);

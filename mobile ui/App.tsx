@@ -38,6 +38,9 @@ import { formatPrice } from '@/lib/currency';
 import { useNotifications } from '@/components/NotificationContext';
 import NotificationSystem from '@/components/NotificationSystem';
 import NotificationInbox from '@/components/NotificationInbox';
+import { WriteReviewModal } from '@/components/WriteReviewModal';
+import MobileWriteReviewSheet from './components/MobileWriteReviewSheet';
+import VisualSearchSheet from './components/VisualSearchSheet';
 
 type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications';
 
@@ -73,6 +76,8 @@ const App: React.FC = () => {
     const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
     const [visualSearchProduct, setVisualSearchProduct] = useState<Product | null>(null);
     const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+    const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
+    const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
 
     // Modern Notification & Data Sync State
     const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
@@ -214,8 +219,29 @@ const App: React.FC = () => {
                                                 {order.items?.[0]?.product_title || 'Order items'}
                                                 {order.items && order.items.length > 1 && ` +${order.items.length - 1} more`}
                                             </div>
-                                            <div className="text-sm font-bold text-price-red mt-1">
-                                                {formatPrice(order.total_amount, order.currency || 'USD')}
+                                            <div className="flex justify-between items-end mt-1">
+                                                <div className="text-sm font-bold text-price-red">
+                                                    {formatPrice(order.total_amount, order.currency || 'USD')}
+                                                </div>
+                                                {order.status === 'delivered' && order.items?.length === 1 && (
+                                                    <button
+                                                        onClick={() => setReviewingProductId(order.items[0].product_id)}
+                                                        className="px-3 py-1 bg-orange-50 text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-orange-100"
+                                                    >
+                                                        Review
+                                                    </button>
+                                                )}
+                                                {order.status === 'delivered' && order.items && order.items.length > 1 && (
+                                                    <button
+                                                        onClick={() => {
+                                                            // For now, let's just review the first one, or we could open a picker
+                                                            setReviewingProductId(order.items[0].product_id);
+                                                        }}
+                                                        className="px-3 py-1 bg-orange-50 text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-orange-100"
+                                                    >
+                                                        Review Items
+                                                    </button>
+                                                )}
                                             </div>
 
                                             {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && order.status === 'shipped' && (
@@ -708,6 +734,10 @@ const App: React.FC = () => {
                     onUserClick={() => setIsAccountOpen(true)}
                     onProductClick={handleProductClick}
                     onVisualSearch={setVisualSearchProduct}
+                    userAvatar={userProfile?.avatar_url}
+                    userName={userProfile?.name || userProfile?.email}
+                    notificationCount={history.length + userCoupons.length}
+                    cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
                 />
             );
         }
@@ -852,6 +882,12 @@ const App: React.FC = () => {
                     setUserCoupons(coupons);
                     setRecentOrders(orders);
                 }, [])}
+                onReviewPrompt={(orderId) => {
+                    const order = recentOrders.find(o => o.id === orderId);
+                    if (order && order.items?.[0]) {
+                        setReviewingProductId(order.items[0].product_id);
+                    }
+                }}
             />
             {/* Category View Overlay - Full Screen */}
             {categoryViewOpen && (
@@ -962,6 +998,7 @@ const App: React.FC = () => {
                     <TopAppBanner />
                     <Header
                         onSearchClick={() => setIsSearchOpen(true)}
+                        onCameraClick={() => setIsVisualSearchOpen(true)}
                         onUserClick={() => setIsAccountOpen(true)}
                         userAvatar={userProfile?.avatar_url}
                         userName={userProfile?.name || userProfile?.email}
@@ -997,6 +1034,18 @@ const App: React.FC = () => {
                     }}
                     cartCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
                     notificationCount={userCoupons.length}
+                />
+            )}
+
+            {reviewingProductId && (
+                <WriteReviewModal
+                    productId={reviewingProductId}
+                    userId={userProfile?.id}
+                    onClose={() => setReviewingProductId(null)}
+                    onSubmitted={() => {
+                        setReviewingProductId(null);
+                        // Refresh orders if needed
+                    }}
                 />
             )}
 
@@ -1051,6 +1100,34 @@ const App: React.FC = () => {
                     onProductClick={(p) => {
                         setVisualSearchProduct(null);
                         handleProductClick(p);
+                    }}
+                />
+            )}
+
+            {/* Mobile Write Review Sheet */}
+            {reviewingProductId && (
+                <MobileWriteReviewSheet
+                    productId={reviewingProductId}
+                    userId={userProfile?.id}
+                    onClose={() => setReviewingProductId(null)}
+                    onSubmitted={() => {
+                        setReviewingProductId(null);
+                        // Optionally refresh orders
+                    }}
+                />
+            )}
+
+            {/* Visual Search Sheet */}
+            {isVisualSearchOpen && (
+                <VisualSearchSheet
+                    onClose={() => setIsVisualSearchOpen(false)}
+                    onSearchResults={(searchQuery, keywords) => {
+                        setIsVisualSearchOpen(false);
+                        // Use the AI-generated search query to search products
+                        if (searchQuery) {
+                            setSearchQuery(searchQuery);
+                            setActiveTab('search_results');
+                        }
                     }}
                 />
             )}

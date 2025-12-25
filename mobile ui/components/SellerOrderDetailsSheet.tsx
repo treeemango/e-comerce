@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SellerOrder } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
-import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP } from '../../lib/api';
+import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady } from '../../lib/api';
 import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
 
 interface SellerOrderDetailsSheetProps {
@@ -104,6 +104,24 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
         }
     };
 
+    const handleMarkReady = async () => {
+        setIsProcessing(true);
+        try {
+            const success = await markOrderReady(order.id);
+            if (success) {
+                onOrderUpdated?.();
+                onClose();
+            } else {
+                alert('Failed to mark order as ready.');
+            }
+        } catch (error) {
+            console.error('Error marking ready:', error);
+            alert('An error occurred.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
 
     const orderDate = new Date(order.created_at).toLocaleDateString('en-US', {
         weekday: 'short',
@@ -119,6 +137,10 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
 
     const canShip = order.status?.toLowerCase() === 'pending' ||
         order.status?.toLowerCase() === 'paid' ||
+        order.status?.toLowerCase() === 'unshipped' ||
+        order.status?.toLowerCase() === 'ready_for_pickup';
+
+    const canMarkReady = order.status?.toLowerCase() === 'paid' ||
         order.status?.toLowerCase() === 'unshipped';
 
     const currency = order.items?.[0]?.currency || 'USD';
@@ -369,6 +391,20 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                 <span className="material-icons text-lg">print</span>
                                 Print Receipt
                             </button>
+                            {canMarkReady && !showTrackingInput && (
+                                <button
+                                    onClick={handleMarkReady}
+                                    disabled={isProcessing}
+                                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isProcessing ? (
+                                        <span className="material-icons animate-spin text-lg">sync</span>
+                                    ) : (
+                                        <span className="material-icons text-lg">inventory</span>
+                                    )}
+                                    Mark as Ready
+                                </button>
+                            )}
                             {!showTrackingInput ? (
                                 <button
                                     onClick={() => setShowTrackingInput(true)}

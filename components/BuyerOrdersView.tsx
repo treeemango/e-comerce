@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { fetchBuyerOrders, fetchOrderTrackingEvents } from '../lib/api';
 import { getCurrencySymbol } from '@/lib/currency';
 import { OrderTrackingEvent, BuyerOrder, User } from '../types';
+import { WriteReviewModal } from './WriteReviewModal';
 
 interface BuyerOrdersViewProps {
     user?: User | null;
@@ -17,21 +18,71 @@ const statusLabels: Record<string, string> = {
     refunded: 'Refunded'
 };
 
-const TrackingTimeline: React.FC<{ orderId: string }> = ({ orderId }) => {
+const TrackingTimeline: React.FC<{ order: BuyerOrder }> = ({ order }) => {
     const [events, setEvents] = useState<OrderTrackingEvent[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const load = async () => {
-            const data = await fetchOrderTrackingEvents(orderId);
-            setEvents(data);
+            const data = await fetchOrderTrackingEvents(order.id);
+
+            // If no events found, generate synthetic journey based on current status
+            if (data.length === 0) {
+                const synthetic: OrderTrackingEvent[] = [];
+
+                // Step 1: Always Placed
+                synthetic.push({
+                    id: 'synthetic-placed',
+                    order_id: order.id,
+                    event_type: 'order_placed',
+                    event_description: 'Order placed successfully',
+                    created_at: order.created_at
+                });
+
+                // Step 2: Confirmed (if not pending)
+                if (['processing', 'shipped', 'delivered'].includes(order.status.toLowerCase())) {
+                    synthetic.push({
+                        id: 'synthetic-confirmed',
+                        order_id: order.id,
+                        event_type: 'order_confirmed',
+                        event_description: 'Order confirmed and processing',
+                        created_at: order.created_at // Using created_at as base
+                    });
+                }
+
+                // Step 3: Shipped (if shipped or delivered)
+                if (['shipped', 'delivered'].includes(order.status.toLowerCase())) {
+                    synthetic.push({
+                        id: 'synthetic-shipped',
+                        order_id: order.id,
+                        event_type: 'picked_up',
+                        event_description: 'Order has been shipped',
+                        created_at: order.updated_at || order.created_at
+                    });
+                }
+
+                // Step 4: Delivered (if delivered)
+                if (order.status.toLowerCase() === 'delivered') {
+                    synthetic.push({
+                        id: 'synthetic-delivered',
+                        order_id: order.id,
+                        event_type: 'delivered',
+                        event_description: 'Order delivered successfully',
+                        created_at: order.updated_at || order.created_at
+                    });
+                }
+
+                setEvents(synthetic);
+            } else {
+                setEvents(data);
+            }
+
             setLoading(false);
         };
         load();
-    }, [orderId]);
+    }, [order.id, order.created_at, order.status, order.updated_at]);
 
     if (loading) return <div className="py-4 text-center text-xs text-gray-400 italic">Loading tracking info...</div>;
-    if (events.length === 0) return <div className="py-4 text-center text-xs text-gray-400 italic">No tracking events found yet.</div>;
 
     return (
         <div className="mt-6 space-y-4">
@@ -68,6 +119,7 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+    const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
 
     const load = async () => {
         if (!user?.id) return;
@@ -235,8 +287,19 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                                                     Quantity: {item.quantity} {item.variant_sku && `· ${item.variant_sku}`}
                                                 </p>
                                             </div>
-                                            <div className="text-right">
+                                            <div className="text-right flex flex-col items-end gap-2">
                                                 <p className="text-sm font-black text-slate-900">{formatPrice(item.unit_price * item.quantity, order.currency)}</p>
+                                                {order.status?.toLowerCase() === 'delivered' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setReviewingProductId(item.product_id);
+                                                        }}
+                                                        className="px-3 py-1 bg-orange-50 text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-orange-100 hover:bg-orange-100 transition-colors"
+                                                    >
+                                                        Rate & Review
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -322,7 +385,7 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
 
                                 {expandedOrder === order.id ? (
                                     <div className="mt-8 pt-8 border-t border-slate-50 animate-in fade-in slide-in-from-top-4 duration-300">
-                                        <TrackingTimeline orderId={order.id} />
+                                        <TrackingTimeline order={order} />
                                         <button
                                             onClick={() => setExpandedOrder(null)}
                                             className="mt-8 w-full py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
@@ -354,6 +417,18 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                     ))
                 )}
             </div>
+
+            {reviewingProductId && (
+                <WriteReviewModal
+                    productId={reviewingProductId}
+                    userId={user?.id}
+                    onClose={() => setReviewingProductId(null)}
+                    onSubmitted={() => {
+                        setReviewingProductId(null);
+                        load();
+                    }}
+                />
+            )}
         </div>
     );
 };
