@@ -10,9 +10,10 @@ interface HomeViewProps {
   showPromotions?: boolean;
   onViewAllDeals?: () => void;
   onVisualSearch?: (p: Product) => void;
+  onFilterClick?: (filter: string) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick }) => {
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -30,7 +31,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
       {showPromotions && (
         <>
           {/* Dynamic Hero Section */}
-          <MobileHeroSection />
+          <MobileHeroSection onProductClick={onProductClick} />
 
           {/* Quick Info Bar */}
           <div className="bg-[#FFF8F0] dark:bg-orange-900/10 p-3 flex justify-between items-start text-xs border-b border-orange-100 dark:border-orange-900/30">
@@ -76,9 +77,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
           <div className="bg-surface-light dark:bg-surface-dark pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
             <div className="scroll-fade px-3 overflow-x-auto hide-scrollbar">
               <div className="flex items-center gap-2 min-w-max">
-                {[{ label: 'All', icon: 'bolt' }, { label: '5-Star Rated', icon: 'star' }, { label: 'Best Sellers', icon: 'thumb_up' }].map((filter, idx) => (
+                {[{ label: 'All', icon: 'bolt', id: 'all' }, { label: '5-Star Rated', icon: 'star', id: 'top_rated' }, { label: 'Best Sellers', icon: 'thumb_up', id: 'best_sellers' }].map((filter, idx) => (
                   <button
                     key={filter.label}
+                    onClick={() => {
+                      if (filter.id === 'all') return;
+                      onFilterClick?.(filter.id);
+                    }}
                     className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${idx === 0
                       ? 'bg-primary text-white border-primary'
                       : 'bg-transparent text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'

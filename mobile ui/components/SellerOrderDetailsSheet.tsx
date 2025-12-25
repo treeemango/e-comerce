@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SellerOrder } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
-import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady } from '../../lib/api';
+import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady, submitShipmentProof } from '../../lib/api';
 import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
 
 interface SellerOrderDetailsSheetProps {
@@ -29,6 +29,9 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
     // OTP Field for Verification
     const [otpCode, setOtpCode] = useState('');
     const [showOTPInput, setShowOTPInput] = useState(false);
+
+    const [shipmentProofUrl, setShipmentProofUrl] = useState('');
+    const [isSubmittingProof, setIsSubmittingProof] = useState(false);
 
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -139,6 +142,26 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
         order.status?.toLowerCase() === 'paid' ||
         order.status?.toLowerCase() === 'unshipped' ||
         order.status?.toLowerCase() === 'ready_for_pickup';
+
+    const handleSubmitProof = async () => {
+        if (!shipmentProofUrl.trim()) return;
+        setIsSubmittingProof(true);
+        try {
+            const res = await submitShipmentProof(order.id, shipmentProofUrl);
+            if (res.success) {
+                alert('Shipment proof submitted successfully.');
+                onOrderUpdated?.();
+                onClose();
+            } else {
+                alert(res.message || 'Failed to submit proof.');
+            }
+        } catch (err) {
+            console.error('Error submitting proof:', err);
+            alert('An error occurred.');
+        } finally {
+            setIsSubmittingProof(false);
+        }
+    };
 
     const canMarkReady = order.status?.toLowerCase() === 'paid' ||
         order.status?.toLowerCase() === 'unshipped';
@@ -444,43 +467,80 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                     )}
 
                     {order.status?.toLowerCase() === 'shipped' && (
-                        <div className="space-y-3">
-                            {!showOTPInput ? (
-                                <button
-                                    onClick={() => setShowOTPInput(true)}
-                                    className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                                >
-                                    <span className="material-icons text-lg">task_alt</span>
-                                    Complete Delivery (OTP)
-                                </button>
-                            ) : (
-                                <div className="flex gap-2">
+                        <>
+                            <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 animate-in fade-in duration-500">
+                                <h3 className="text-sm font-black text-rose-900 mb-2 flex items-center gap-2">
+                                    <span className="material-icons text-lg">policy</span>
+                                    Shipment Evidence
+                                </h3>
+                                <p className="text-[10px] text-rose-700 mb-4 leading-relaxed">
+                                    Upload a photo of your shipping receipt or waybill. This protects you if the buyer raises a dispute.
+                                </p>
+                                <div className="space-y-3">
+                                    <input
+                                        type="text"
+                                        value={shipmentProofUrl}
+                                        onChange={(e) => setShipmentProofUrl(e.target.value)}
+                                        placeholder="Paste Image URL / Proof Link"
+                                        className="w-full px-4 py-3 bg-white border border-rose-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                    />
                                     <button
-                                        onClick={() => setShowOTPInput(false)}
-                                        className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
+                                        onClick={handleSubmitProof}
+                                        disabled={isSubmittingProof || !shipmentProofUrl.trim()}
+                                        className="w-full bg-rose-600 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-600/20 disabled:opacity-50"
                                     >
-                                        <span className="material-icons">close</span>
-                                    </button>
-                                    <button
-                                        onClick={handleVerifyOTP}
-                                        disabled={isProcessing}
-                                        className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                    >
-                                        {isProcessing ? (
-                                            <>
-                                                <span className="material-icons animate-spin text-lg">sync</span>
-                                                Verifying...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <span className="material-icons text-lg">verified</span>
-                                                Verify & Complete
-                                            </>
-                                        )}
+                                        {isSubmittingProof ? 'Uploading...' : 'Submit Evidence'}
                                     </button>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
+                                    <span className="material-icons text-blue-500 text-lg">hourglass_empty</span>
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-bold text-blue-900">Waiting for Confirmation</p>
+                                        <p className="text-[10px] text-blue-700 leading-relaxed">
+                                            The buyer can now confirm receipt directly from their app. You can also manually verify their collection code (OTP) if you are at the handover point.
+                                        </p>
+                                    </div>
+                                </div>
+                                {!showOTPInput ? (
+                                    <button
+                                        onClick={() => setShowOTPInput(true)}
+                                        className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <span className="material-icons text-lg">task_alt</span>
+                                        Complete Delivery (OTP)
+                                    </button>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setShowOTPInput(false)}
+                                            className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
+                                        >
+                                            <span className="material-icons">close</span>
+                                        </button>
+                                        <button
+                                            onClick={handleVerifyOTP}
+                                            disabled={isProcessing}
+                                            className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isProcessing ? (
+                                                <>
+                                                    <span className="material-icons animate-spin text-lg">sync</span>
+                                                    Verifying...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="material-icons text-lg">verified</span>
+                                                    Verify & Complete
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </>
                     )}
 
 

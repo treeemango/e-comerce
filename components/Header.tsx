@@ -22,6 +22,7 @@ interface HeaderProps {
   user?: User | null;
   loyaltyProfile?: LoyaltyProfile | null;
   onOpenNotifications?: () => void;
+  onCartClick?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -38,7 +39,8 @@ const Header: React.FC<HeaderProps> = ({
   cartItemCount = 0,
   user,
   loyaltyProfile,
-  onOpenNotifications
+  onOpenNotifications,
+  onCartClick
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -639,7 +641,7 @@ const Header: React.FC<HeaderProps> = ({
           className="relative group hover:text-gray-200 transition-colors p-1"
           onClick={(e) => {
             e.preventDefault();
-            if (onCheckoutClick) onCheckoutClick();
+            if (onCartClick) onCartClick();
           }}
         >
           <span className="material-icons text-2xl">shopping_cart</span>

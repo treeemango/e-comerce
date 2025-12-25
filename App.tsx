@@ -13,9 +13,11 @@ import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createC
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema } from './lib/seo-utils';
+import CartSidebar from './components/CartSidebar';
 
 // Lazy-loaded components for better code splitting
 const BestSellersView = lazy(() => import('./components/BestSellersView'));
+const TopRatedView = lazy(() => import('./components/TopRatedView'));
 const ProductDetailView = lazy(() => import('./components/ProductDetailView'));
 const SellerLoginView = lazy(() => import('./components/SellerLoginView'));
 const BuyerAuthView = lazy(() => import('./components/BuyerAuthView'));
@@ -58,6 +60,7 @@ const InfoPageView = lazy(() => import('./components/InfoPageView'));
 
 // Admin Dashboard Components (lazy)
 const AdminDashboardLayout = lazy(() => import('./components/AdminDashboard/AdminDashboardLayout'));
+const DisputeManagementView = lazy(() => import('./components/AdminDashboard/OrderManagement/DisputeManagementView'));
 const AdminDashboardOverview = lazy(() => import('./components/AdminDashboard/DashboardOverview'));
 const ProductApprovalView = lazy(() => import('./components/AdminDashboard/ProductApproval/ProductApprovalView'));
 const SellerVerificationView = lazy(() => import('./components/AdminDashboard/SellerVerification/SellerVerificationView'));
@@ -119,6 +122,7 @@ const App: React.FC = () => {
   const [isActivityHubOpen, setIsActivityHubOpen] = useState(false);
   const [activityHubTab, setActivityHubTab] = useState<'list' | 'promotions' | 'shipping' | 'notifications'>('list');
   const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
+  const [isCartSidebarOpen, setIsCartSidebarOpen] = useState(false);
 
   // Background Sync'd State
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
@@ -488,7 +492,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRemoveFromCart = (productId: number | string, variantId?: string) => {
+  const handleRemoveFromCartLegacy = (productId: number | string, variantId?: string) => {
     setCartItems(prev => prev.filter(item =>
       !(item.id === productId && item.variant_id === variantId)
     ));
@@ -603,8 +607,19 @@ const App: React.FC = () => {
   };
 
   const handleCartClick = () => {
-    setCurrentView('cart');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setIsCartSidebarOpen(true);
+  };
+
+  const handleUpdateCartQuantityDirect = (productId: string, quantity: number) => {
+    setCartItems(prev => {
+      const remainingItems = prev.filter(item => item.id !== productId);
+      const itemsToAdd = prev.filter(item => item.id === productId).slice(0, 1);
+      const newItems = [...remainingItems];
+      for (let i = 0; i < quantity; i++) {
+        if (itemsToAdd[0]) newItems.push(itemsToAdd[0]);
+      }
+      return newItems;
+    });
   };
 
   const loadDealsData = useCallback(async (categoryId?: string | null) => {
@@ -854,12 +869,13 @@ const App: React.FC = () => {
             setActivityHubTab('notifications');
             setIsActivityHubOpen(true);
           }}
+          onCartClick={handleCartClick}
         />
       )}
       <main className={`flex-1 w-full ${currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' ? 'max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8' : ''}`}>
         {currentView === 'home' && (
           <>
-            <HeroSection />
+            <HeroSection onProductClick={handleProductClick} />
             <FeaturesBar />
             <LightningDealsRow
               userId={user?.id}
@@ -871,14 +887,15 @@ const App: React.FC = () => {
           </>
         )}
         {currentView === 'five-star' && (
-          <ProductSection isFiveStarView={true} onProductClick={handleProductClick} products={products} onAddToCart={addToCart} />
+          <TopRatedView
+            onProductClick={handleProductClick}
+            products={products}
+          />
         )}
         {currentView === 'best-selling' && (
           <BestSellersView
             onProductClick={handleProductClick}
             products={products}
-            cartItems={cartItems}
-            onCartClick={handleCartClick}
           />
         )}
         {currentView === 'deals' && (
@@ -974,7 +991,7 @@ const App: React.FC = () => {
         {currentView === 'cart' && (
           <CartView
             cartItems={cartItems}
-            onRemoveFromCart={handleRemoveFromCart}
+            onRemoveFromCart={handleRemoveFromCartLegacy}
             onUpdateQuantity={handleUpdateQuantity}
             onCheckoutClick={handleCheckoutClick}
             onHomeClick={handleHomeClick}
@@ -1126,6 +1143,7 @@ const App: React.FC = () => {
             {adminTab === 'drivers' && <DriverVerificationView permissions={adminPermissions!} />}
             {adminTab === 'users' && <UserManagementView permissions={adminPermissions!} />}
             {adminTab === 'orders' && <OrderManagementView />}
+            {adminTab === 'disputes' && <DisputeManagementView />}
             {adminTab === 'moderation' && <ModerationQueueView />}
             {adminTab === 'finances' && <PayoutApprovalsView />}
             {adminTab === 'content' && <ContentManagementView permissions={adminPermissions!} />}
@@ -1249,6 +1267,23 @@ const App: React.FC = () => {
           onPaneChange={setActivityHubTab}
         />
       )}
+      <CartSidebar
+        isOpen={isCartSidebarOpen}
+        onClose={() => setIsCartSidebarOpen(false)}
+        cartItems={cartItems}
+        onViewCart={() => {
+          setIsCartSidebarOpen(false);
+          setCurrentView('cart');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onCheckout={() => {
+          setIsCartSidebarOpen(false);
+          setCurrentView('checkout');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onRemoveItem={(productId) => handleRemoveFromCartLegacy(productId)}
+        onUpdateQuantity={handleUpdateCartQuantityDirect}
+      />
     </div>
   );
 };

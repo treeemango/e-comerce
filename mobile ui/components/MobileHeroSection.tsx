@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
 import { formatPrice } from '@/lib/currency';
+import { Product } from '@/types';
 
 // Thematic Mapping for Categories (Shared logic but mobile-tuned colors)
 const CATEGORY_THEMES: Record<string, { gradient: string; accent: string; text: string }> = {
@@ -47,7 +48,11 @@ const getTheme = (categoryId?: string, index: number = 0) => {
     return THEME_LIST[index % THEME_LIST.length] || CATEGORY_THEMES.default;
 };
 
-export const MobileHeroSection: React.FC = () => {
+interface MobileHeroSectionProps {
+    onProductClick?: (product: Product) => void;
+}
+
+export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductClick }) => {
     const [deals, setDeals] = useState<LightningDealItem[]>([]);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -124,13 +129,24 @@ export const MobileHeroSection: React.FC = () => {
                                     )}
                                 </div>
 
-                                <a
-                                    href={`/product/${deal.id}`}
+                                <button
+                                    onClick={() => onProductClick?.({
+                                        id: deal.id,
+                                        title: deal.title,
+                                        price: deal.price,
+                                        image: deal.image,
+                                        currency: deal.currency,
+                                        originalPrice: deal.originalPrice,
+                                        discountPercent: deal.discountPercent,
+                                        rating: deal.rating,
+                                        reviews: deal.reviews,
+                                        category: deal.category_name,
+                                    } as Product)}
                                     className="mt-2 bg-white text-black text-[10px] font-black px-5 py-2 rounded-xl shadow-xl w-fit flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform"
                                 >
                                     GET IT NOW
                                     <span className="material-icons-outlined text-xs">arrow_forward</span>
-                                </a>
+                                </button>
                             </div>
 
                             {/* Product Visual */}

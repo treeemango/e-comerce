@@ -5,6 +5,7 @@ import { submitReview } from '@/lib/api';
 interface WriteReviewModalProps {
     productId: string;
     userId?: string;
+    orderId?: string;
     onClose: () => void;
     onSubmitted: () => void;
 }
@@ -12,12 +13,14 @@ interface WriteReviewModalProps {
 export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
     productId,
     userId,
+    orderId,
     onClose,
     onSubmitted
 }) => {
     const [formData, setFormData] = useState<Partial<SubmitReviewData>>({
         product_id: productId,
         user_id: userId || '',
+        order_id: orderId,
         rating: 0,
         content: '',
         title: '',

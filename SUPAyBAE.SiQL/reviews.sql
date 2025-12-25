@@ -173,24 +173,21 @@ ALTER TABLE public.product_review_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.review_moderation_queue ENABLE ROW LEVEL SECURITY;
 
 -- Enhanced reviews policies
+DROP POLICY IF EXISTS "Anyone can view approved reviews" ON public.enhanced_reviews;
 CREATE POLICY "Anyone can view approved reviews" ON public.enhanced_reviews
     FOR SELECT USING (status = 'approved');
 
-CREATE POLICY "Users can create reviews for their purchases" ON public.enhanced_reviews
+DROP POLICY IF EXISTS "Users can create reviews" ON public.enhanced_reviews;
+CREATE POLICY "Users can create reviews" ON public.enhanced_reviews
     FOR INSERT WITH CHECK (
-        auth.uid() = user_id AND
-        (
-            order_id IS NULL OR
-            order_id IN (
-                SELECT id FROM public.orders
-                WHERE user_id = auth.uid()
-            )
-        )
+        auth.uid() = user_id
     );
 
+DROP POLICY IF EXISTS "Users can update their own reviews" ON public.enhanced_reviews;
 CREATE POLICY "Users can update their own reviews" ON public.enhanced_reviews
     FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Moderators can manage all reviews" ON public.enhanced_reviews;
 CREATE POLICY "Moderators can manage all reviews" ON public.enhanced_reviews
     FOR ALL USING (
         EXISTS (
@@ -200,9 +197,11 @@ CREATE POLICY "Moderators can manage all reviews" ON public.enhanced_reviews
     );
 
 -- Review photos policies
+DROP POLICY IF EXISTS "Anyone can view review photos" ON public.review_photos;
 CREATE POLICY "Anyone can view review photos" ON public.review_photos
     FOR SELECT USING (TRUE);
 
+DROP POLICY IF EXISTS "Users can manage photos for their reviews" ON public.review_photos;
 CREATE POLICY "Users can manage photos for their reviews" ON public.review_photos
     FOR ALL USING (
         review_id IN (
@@ -212,19 +211,24 @@ CREATE POLICY "Users can manage photos for their reviews" ON public.review_photo
     );
 
 -- Review votes policies
+DROP POLICY IF EXISTS "Anyone can view review votes" ON public.review_votes;
 CREATE POLICY "Anyone can view review votes" ON public.review_votes
     FOR SELECT USING (TRUE);
 
+DROP POLICY IF EXISTS "Authenticated users can vote on reviews" ON public.review_votes;
 CREATE POLICY "Authenticated users can vote on reviews" ON public.review_votes
     FOR ALL USING (auth.uid() IS NOT NULL);
 
 -- Review reports policies
+DROP POLICY IF EXISTS "Users can report reviews" ON public.review_reports;
 CREATE POLICY "Users can report reviews" ON public.review_reports
     FOR INSERT WITH CHECK (auth.uid() = reported_by);
 
+DROP POLICY IF EXISTS "Users can view their own reports" ON public.review_reports;
 CREATE POLICY "Users can view their own reports" ON public.review_reports
     FOR SELECT USING (auth.uid() = reported_by);
 
+DROP POLICY IF EXISTS "Moderators can manage all reports" ON public.review_reports;
 CREATE POLICY "Moderators can manage all reports" ON public.review_reports
     FOR ALL USING (
         EXISTS (
@@ -234,9 +238,11 @@ CREATE POLICY "Moderators can manage all reports" ON public.review_reports
     );
 
 -- Review responses policies
+DROP POLICY IF EXISTS "Anyone can view approved responses" ON public.review_responses;
 CREATE POLICY "Anyone can view approved responses" ON public.review_responses
     FOR SELECT USING (status = 'approved');
 
+DROP POLICY IF EXISTS "Vendors and admins can create responses" ON public.review_responses;
 CREATE POLICY "Vendors and admins can create responses" ON public.review_responses
     FOR INSERT WITH CHECK (
         responder_type IN ('vendor', 'admin') OR
@@ -246,6 +252,7 @@ CREATE POLICY "Vendors and admins can create responses" ON public.review_respons
         )
     );
 
+DROP POLICY IF EXISTS "Moderators can manage responses" ON public.review_responses;
 CREATE POLICY "Moderators can manage responses" ON public.review_responses
     FOR ALL USING (
         EXISTS (
@@ -255,9 +262,11 @@ CREATE POLICY "Moderators can manage responses" ON public.review_responses
     );
 
 -- Review keywords policies
+DROP POLICY IF EXISTS "Anyone can view review keywords" ON public.review_keywords;
 CREATE POLICY "Anyone can view review keywords" ON public.review_keywords
     FOR SELECT USING (TRUE);
 
+DROP POLICY IF EXISTS "Moderators can manage keywords" ON public.review_keywords;
 CREATE POLICY "Moderators can manage keywords" ON public.review_keywords
     FOR ALL USING (
         EXISTS (
@@ -267,13 +276,16 @@ CREATE POLICY "Moderators can manage keywords" ON public.review_keywords
     );
 
 -- Product review summary policies
+DROP POLICY IF EXISTS "Anyone can view product review summaries" ON public.product_review_summary;
 CREATE POLICY "Anyone can view product review summaries" ON public.product_review_summary
     FOR SELECT USING (TRUE);
 
+DROP POLICY IF EXISTS "System can update review summaries" ON public.product_review_summary;
 CREATE POLICY "System can update review summaries" ON public.product_review_summary
     FOR ALL USING (TRUE);
 
 -- Review moderation queue policies
+DROP POLICY IF EXISTS "Moderators can manage moderation queue" ON public.review_moderation_queue;
 CREATE POLICY "Moderators can manage moderation queue" ON public.review_moderation_queue
     FOR ALL USING (
         EXISTS (
@@ -384,31 +396,59 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Triggers
+DROP TRIGGER IF EXISTS update_enhanced_reviews_updated_at ON public.enhanced_reviews;
 CREATE TRIGGER update_enhanced_reviews_updated_at
     BEFORE UPDATE ON public.enhanced_reviews
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_review_reports_updated_at ON public.review_reports;
 CREATE TRIGGER update_review_reports_updated_at
     BEFORE UPDATE ON public.review_reports
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_review_responses_updated_at ON public.review_responses;
 CREATE TRIGGER update_review_responses_updated_at
     BEFORE UPDATE ON public.review_responses
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_review_moderation_queue_completed_at ON public.review_moderation_queue;
 CREATE TRIGGER update_review_moderation_queue_completed_at
     BEFORE UPDATE ON public.review_moderation_queue
     FOR EACH ROW
     WHEN (OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL)
     EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_product_review_summary_trigger ON public.enhanced_reviews;
 CREATE TRIGGER update_product_review_summary_trigger
     AFTER INSERT OR UPDATE OR DELETE ON public.enhanced_reviews
     FOR EACH ROW EXECUTE FUNCTION public.update_product_review_summary();
 
+DROP TRIGGER IF EXISTS update_review_helpful_votes_trigger ON public.review_votes;
 CREATE TRIGGER update_review_helpful_votes_trigger
     AFTER INSERT OR UPDATE OR DELETE ON public.review_votes
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Automatically set is_verified_purchase = TRUE if linked to a delivered order
+CREATE OR REPLACE FUNCTION public.set_is_verified_purchase()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.order_id IS NOT NULL THEN
+        IF EXISTS (
+            SELECT 1 FROM public.orders
+            WHERE id = NEW.order_id
+            AND status = 'delivered'
+        ) THEN
+            NEW.is_verified_purchase := TRUE;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS set_is_verified_purchase_trigger ON public.enhanced_reviews;
+CREATE TRIGGER set_is_verified_purchase_trigger
+    BEFORE INSERT ON public.enhanced_reviews
+    FOR EACH ROW EXECUTE FUNCTION public.set_is_verified_purchase();
 
 -- Comments
 COMMENT ON TABLE public.enhanced_reviews IS 'Enhanced product reviews with detailed ratings and verification';

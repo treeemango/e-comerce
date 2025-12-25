@@ -798,6 +798,8 @@ export interface BuyerOrder {
     shipping_method?: string;
     shipping_additional_info?: string;
     fulfillment_type?: 'official_courier' | 'local_parcel';
+    shipped_at?: string | null;
+    shipment_proof_url?: string | null;
     parcel_details?: {
         company: string;
         waybill_number: string;
@@ -1091,6 +1093,7 @@ export const ADMIN_TABS: AdminTabConfig[] = [
     { id: 'drivers', label: 'Driver Verification', icon: 'fas fa-truck', requiredLevel: 'senior_admin' },
     { id: 'users', label: 'User Management', icon: 'fas fa-users', requiredLevel: 'senior_admin' },
     { id: 'orders', label: 'Order Management', icon: 'fas fa-shopping-cart', requiredLevel: 'junior_admin' },
+    { id: 'disputes', label: 'Delivery Disputes', icon: 'fas fa-gavel', requiredLevel: 'senior_admin' },
     { id: 'moderation', label: 'Content Moderation', icon: 'fas fa-flag', requiredLevel: 'junior_admin' },
     { id: 'finances', label: 'Payout Approvals', icon: 'fas fa-wallet', requiredLevel: 'senior_admin' },
     { id: 'content', label: 'Content Management', icon: 'fas fa-folder', requiredLevel: 'content_manager' },
@@ -1323,6 +1326,7 @@ export interface OrderTrackingEvent {
 export interface OrderIssue {
     id: string;
     order_id?: string;
+    user_id?: string;
     issue_type: 'wrong_item' | 'damaged_item' | 'missing_item' | 'late_delivery' | 'wrong_address' | 'payment_issue' | 'other';
     severity?: 'low' | 'medium' | 'high' | 'critical';
     description: string;
@@ -1336,9 +1340,15 @@ export interface OrderIssue {
     priority?: number;
     tags?: string[];
     internal_notes?: string;
+    admin_notes?: string;
     customer_visible?: boolean;
     created_at: string;
     updated_at: string;
+    // Joined data
+    order_number?: string;
+    customer_name?: string;
+    shipment_proof_url?: string;
+    shipped_at?: string;
 }
 
 export interface OrderDeliverySchedule {
@@ -1629,3 +1639,4 @@ export interface DeliveryProof {
     proof_url: string;
     created_at: string;
 }
+

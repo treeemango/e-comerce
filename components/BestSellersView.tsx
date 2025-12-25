@@ -1,172 +1,117 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { PRODUCTS } from '../constants';
+import React, { useState, useEffect } from 'react';
 import ProductCard from './ProductCard';
 import { Product } from '../types';
-import { fetchBestSellingItems, fetchRecommendedItems } from '../lib/api';
-import { getCurrencySymbol } from '@/lib/currency';
+import { fetchBestSellingProducts } from '../lib/api';
 
 interface BestSellersViewProps {
    onProductClick: (product: Product) => void;
    products: Product[];
-   cartItems: Product[];
-   onCartClick: () => void;
 }
 
-const BestSellersView: React.FC<BestSellersViewProps> = ({ onProductClick, products: initialProducts, cartItems, onCartClick }) => {
-   const [products, setProducts] = useState<Product[]>(initialProducts);
-   const [isLoading, setIsLoading] = useState(false);
-   const [selectedPeriod, setSelectedPeriod] = useState('week');
+const BestSellersView: React.FC<BestSellersViewProps> = ({ onProductClick, products: initialProducts }) => {
+   const [products, setProducts] = useState<Product[]>([]);
+   const [isLoading, setIsLoading] = useState(true);
+   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month'>('week');
 
    useEffect(() => {
       const loadBestSellers = async () => {
          setIsLoading(true);
-         const data = await fetchBestSellingItems(selectedPeriod);
-         setProducts(data.length > 0 ? data : initialProducts);
-         setIsLoading(false);
+         try {
+            const data = await fetchBestSellingProducts(selectedPeriod);
+            setProducts(data);
+         } catch (error) {
+            console.error('Failed to load best sellers:', error);
+            setProducts(initialProducts.slice(0, 20));
+         } finally {
+            setIsLoading(false);
+         }
       };
       loadBestSellers();
    }, [selectedPeriod, initialProducts]);
 
-   const subtotal = cartItems.reduce((sum, item) => sum + item.price, 0);
-   const freeShippingThreshold = 50;
-   const remainingForFreeShipping = Math.max(0, freeShippingThreshold - subtotal);
-   const shippingProgress = Math.min(100, (subtotal / freeShippingThreshold) * 100);
-
    return (
-      <div className="container mx-auto px-4 py-6">
-         {/* Header */}
-         <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Best-Selling Items</h1>
-            <div className="flex items-center gap-3">
-               <button
-                  onClick={() => setSelectedPeriod('week')}
-                  className={`px-4 py-2 rounded-full font-medium text-sm transition-colors ${selectedPeriod === 'week'
-                     ? 'bg-primary text-white'
-                     : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                     }`}
-               >
-                  <span>Week</span>
-               </button>
-               <button
-                  onClick={() => setSelectedPeriod('month')}
-                  className={`px-4 py-2 rounded-full font-medium text-sm transition-colors ${selectedPeriod === 'month'
-                        ? 'bg-primary text-white'
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                     }`}
-               >
-                  <span>Month</span>
-               </button>
+      <div className="max-w-screen-2xl mx-auto px-4 py-8">
+         {/* Premium Header Section */}
+         <div className="relative mb-10 overflow-hidden rounded-3xl bg-slate-900 px-8 py-12 shadow-2xl">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-rose-500/20 mix-blend-overlay" />
+            <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+               <div>
+                  <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-orange-400 ring-1 ring-orange-500/20">
+                     <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500"></span>
+                     </span>
+                     Live Rankings
+                  </div>
+                  <h1 className="text-4xl font-black tracking-tight text-white uppercase sm:text-5xl">
+                     Best-Selling <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-rose-400">Items</span>
+                  </h1>
+                  <p className="mt-3 max-w-xl text-lg font-medium text-slate-400">
+                     Discover what's trending right now. Our most popular products, ranked by real-time sales and customer demand.
+                  </p>
+               </div>
+
+               <div className="flex bg-slate-800/50 p-1.5 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
+                  <button
+                     onClick={() => setSelectedPeriod('week')}
+                     className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all duration-300 ${selectedPeriod === 'week'
+                        ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                        }`}
+                  >
+                     Weekly
+                  </button>
+                  <button
+                     onClick={() => setSelectedPeriod('month')}
+                     className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all duration-300 ${selectedPeriod === 'month'
+                        ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                        }`}
+                  >
+                     Monthly
+                  </button>
+               </div>
             </div>
          </div>
 
-         <div className="flex flex-col lg:flex-row gap-6">
-
+         <div className="w-full">
             {/* Product Grid */}
-            <div className="flex-1">
-               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {isLoading ? (
-                     <div className="col-span-full py-12 text-center text-slate-500">
-                        Loading products...
-                     </div>
-                  ) : products.length > 0 ? (
-                     products.map((product, idx) => (
-                        <ProductCard
-                           key={product.id}
-                           product={product}
-                           ranking={product.saleRank || idx + 1}
-                           onProductClick={onProductClick}
-                        />
-                     ))
-                  ) : (
-                     <div className="col-span-full py-12 text-center text-slate-500">
-                        No products found for this period.
-                     </div>
-                  )}
-               </div>
-            </div>
-
-            {/* Right Sidebar - Sticky Cart/Checkout */}
-            <div className="w-full lg:w-80 flex-shrink-0">
-               <div className="sticky top-24 space-y-4">
-
-                  {/* Checkout Card */}
-                  <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-                     <div className="bg-shop-red text-white text-center py-2 rounded mb-4 font-bold flex items-center justify-center gap-2">
-                        <span className="material-icons text-sm">shopping_cart</span> Subtotal
-                     </div>
-
-                     <div className="text-center mb-4">
-                        <div className="text-3xl font-bold text-slate-900 dark:text-white">{getCurrencySymbol(cartItems[0]?.currency)}{subtotal.toFixed(2)}</div>
-                     </div>
-
-                     <div className="bg-orange-50 dark:bg-orange-900/20 p-2 rounded mb-4">
-                        <div className="flex items-center gap-2 text-xs font-bold text-green-700 dark:text-green-400 mb-1">
-                           <span className="material-icons text-sm">check</span> Free shipping
+            <div className="w-full">
+               {isLoading ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-6">
+                     {[...Array(14)].map((_, i) => (
+                        <div key={i} className="animate-pulse space-y-4">
+                           <div className="aspect-square bg-slate-100 dark:bg-slate-800 rounded-2xl" />
+                           <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded-full w-3/4" />
+                           <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded-full w-1/2" />
                         </div>
-                        <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                           <div className="h-full bg-orange-500 transition-all duration-300" style={{ width: `${shippingProgress}%` }}></div>
-                        </div>
-                        {remainingForFreeShipping > 0 && (
-                           <div className="text-xs text-orange-600 mt-1 text-center">
-                              Add {getCurrencySymbol(cartItems[0]?.currency)}{remainingForFreeShipping.toFixed(2)} for free shipping
-                           </div>
-                        )}
-                     </div>
-
-                     {subtotal >= 10 ? (
-                        <button
-                           onClick={onCartClick}
-                           className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-full mb-3 transition-colors shadow-lg shadow-orange-500/30"
-                        >
-                           Checkout
-                        </button>
-                     ) : (
-                        <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-full mb-3 transition-colors shadow-lg shadow-orange-500/30 opacity-50 cursor-not-allowed">
-                           £10.00 Min. to checkout
-                        </button>
-                     )}
-
-                     <button
-                        onClick={onCartClick}
-                        className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold py-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
-                     >
-                        Go to cart
-                     </button>
+                     ))}
                   </div>
-
-                  {/* Selection Card (Mini Cart Items) */}
-                  {cartItems.length > 0 && (
-                     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-slate-700 pb-2">
-                           <div className="flex items-center gap-2 cursor-pointer font-bold text-sm text-slate-800 dark:text-white">
-                              <span className="material-icons text-slate-900 dark:text-white">check_circle</span> Select all ({cartItems.length})
+               ) : products.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-6 gap-y-10">
+                     {products.map((product, idx) => (
+                        <div key={product.id} className="relative group">
+                           {/* Rank Badge */}
+                           <div className="absolute -top-3 -left-3 z-30 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 font-black text-white shadow-xl ring-2 ring-white transition-transform group-hover:scale-110 dark:ring-slate-800">
+                              #{idx + 1}
                            </div>
-                           <span className="material-icons text-slate-400 text-sm">arrow_drop_up</span>
+                           <ProductCard
+                              product={product}
+                              onProductClick={onProductClick}
+                           />
                         </div>
-
-                        <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar">
-                           {cartItems.map((item, idx) => (
-                              <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
-                                 <span className="material-icons text-slate-900 dark:text-white text-sm">check_circle</span>
-                                 <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex-shrink-0">
-                                    <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                    <h4 className="text-xs text-gray-700 dark:text-gray-300 truncate mb-0.5">{item.title}</h4>
-                                    <div className="flex items-baseline gap-1">
-                                       <span className="text-orange-500 font-bold text-sm">{getCurrencySymbol(item.currency)}{item.price.toFixed(2)}</span>
-                                    </div>
-                                    <div className="text-xs text-gray-400">Qty: 1</div>
-                                 </div>
-                              </div>
-                           ))}
-                        </div>
+                     ))}
+                  </div>
+               ) : (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                     <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                        <span className="material-icons text-4xl text-slate-400">trending_up</span>
                      </div>
-                  )}
-
-               </div>
+                     <h3 className="text-xl font-bold text-slate-900 dark:text-white">No items found</h3>
+                     <p className="mt-2 text-slate-500">We couldn't find any best-selling items for this period.</p>
+                  </div>
+               )}
             </div>
-
          </div>
       </div>
    );

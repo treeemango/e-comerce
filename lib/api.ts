@@ -797,6 +797,101 @@ export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<
     }
 };
 
+export interface BestSellingProduct extends Product {
+    total_sold: number;
+    revenue: number;
+    trend_score: number;
+    is_personalized: boolean;
+    ranking: number;
+    category_name?: string;
+}
+
+export const fetchBestSellingProducts = async (
+    period: 'week' | 'month' = 'week',
+    userId?: string,
+    limit = 20
+): Promise<BestSellingProduct[]> => {
+    const { data, error } = await supabase.rpc('get_best_selling_products', {
+        time_interval: period,
+        p_user_id: userId ?? null,
+        p_limit: limit
+    });
+
+    if (error) {
+        console.error('Error fetching best selling products:', error);
+        return [];
+    }
+
+    return (data || []).map((item: any) => ({
+        id: item.product_id,
+        title: item.product_name,
+        price: item.price,
+        currency: item.currency || 'USD',
+        image: item.product_image_url,
+        total_sold: parseInt(item.total_sold),
+        revenue: item.revenue,
+        trend_score: item.trend_score,
+        is_personalized: item.is_personalized,
+        ranking: item.ranking,
+        categoryName: item.category_name,
+        categoryId: item.category_id,
+        // Map required Product fields from RPC
+        rating: item.rating || 0,
+        reviews: item.review_count || 0,
+        free_delivery: item.free_delivery,
+        is_express_delivery: item.is_express_delivery,
+        delivery_time_estimate: item.delivery_time_estimate,
+        delivery_locations: item.delivery_locations,
+        vendor: {
+            business_country: item.vendor_country
+        },
+        stock: 10,
+        media: [],
+        gallery_media: [],
+        deal_type: 'standard',
+        listing_type: 'direct_purchase',
+        in_stock: true
+    }));
+};
+
+export const fetchTopRatedProducts = async (
+    limit = 20
+): Promise<Product[]> => {
+    const { data, error } = await supabase.rpc('get_top_rated_products', {
+        p_limit: limit
+    });
+
+    if (error) {
+        console.error('Error fetching top rated products:', error);
+        return [];
+    }
+
+    return (data || []).map((item: any) => ({
+        id: item.product_id,
+        title: item.product_name,
+        price: item.price,
+        currency: item.currency || 'USD',
+        image: item.product_image_url,
+        rating: item.avg_rating,
+        reviews: item.review_count,
+        ranking: item.ranking,
+        free_delivery: item.free_delivery,
+        is_express_delivery: item.is_express_delivery,
+        delivery_time_estimate: item.delivery_time_estimate,
+        delivery_locations: item.delivery_locations,
+        vendor: {
+            business_country: item.vendor_country
+        },
+        // Default values for standard Product interface compatibility
+        stock: 10,
+        media: [],
+        gallery_media: [],
+        deal_type: 'standard',
+        listing_type: 'direct_purchase',
+        in_stock: true
+    }));
+};
+
 export const fetchFilteredProducts = async (
     searchQuery: string,
     appliedFilters: AppliedFilters,
@@ -2524,11 +2619,15 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             carrier,
             shipping_additional_info,
             fulfillment_type,
+            shipped_at,
+            shipment_proof_url,
             items:order_items!order_items_order_id_fkey (
                 id,
+                product_id,
                 price,
                 quantity,
                 product:products!order_items_product_id_fkey (
+                    id,
                     title,
                     currency,
                     media:media!media_product_fk (
@@ -2577,12 +2676,13 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
     return (data || []).map((order: any) => {
         const items = (order.items || []).map((item: any) => ({
             id: item.id,
-            product_id: null,
+            product_id: item.product_id || item.product?.id || null,
             product_title: item.product?.title || 'Item',
             variant_sku: null,
             quantity: item.quantity ?? 1,
             unit_price: item.price ?? 0,
-            image_url: item.product?.media?.[0]?.image_url || null
+            image_url: item.product?.media?.[0]?.image_url || null,
+            delivery_otp: otpMap[order.id] || null
         }));
 
         const itemsSubtotal = items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
@@ -2602,6 +2702,8 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             id: order.id,
             order_number: order.order_number,
             created_at: order.created_at,
+            shipped_at: order.shipped_at,
+            shipment_proof_url: order.shipment_proof_url,
             updated_at: order.updated_at,
             status: order.status,
             total_amount: finalTotal,
@@ -5522,6 +5624,115 @@ export const verifyParcelOTP = async (orderId: string, otpCode: string) => {
     };
 };
 
+/**
+ * Confirm Order Receipt (Buyer)
+ */
+export const confirmOrderReceiptBuyer = async (orderId: string) => {
+    console.log('[confirmOrderReceiptBuyer] Confirming receipt...', { orderId });
+
+    const { data, error } = await supabase.rpc('confirm_order_receipt_buyer', {
+        p_order_id: orderId
+    });
+
+    if (error) {
+        console.error('[confirmOrderReceiptBuyer] RPC error:', error);
+        return { success: false, message: `Confirmation failed: ${error.message}` };
+    }
+
+    return {
+        success: data.success,
+        message: data.message
+    };
+};
+
+/**
+ * Get QR Code URL for OTP
+ */
+export const getOrderQRCodeURL = (otp: string | null | undefined) => {
+    if (!otp) return null;
+    // Using qrserver.com - lightweight and no dependencies
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${otp}&color=f97316`; // f97316 is tailwind orange-500
+};
+
+/**
+ * Raise a delivery dispute for an order (Buyer)
+ * Must be at least 5 days after shipping
+ */
+export const raiseDeliveryDispute = async (orderId: string, reason: string) => {
+    console.log('[raiseDeliveryDispute] Raising dispute...', { orderId, reason });
+    const { data, error } = await supabase.rpc('raise_delivery_dispute', {
+        p_order_id: orderId,
+        p_reason: reason
+    });
+
+    if (error) {
+        console.error('[raiseDeliveryDispute] error:', error);
+        return { success: false, message: error.message };
+    }
+
+    return {
+        success: data.success,
+        message: data.message,
+        issueId: data.issue_id
+    };
+};
+
+/**
+ * Submit shipment proof for an order (Seller)
+ */
+export const submitShipmentProof = async (orderId: string, proofUrl: string) => {
+    console.log('[submitShipmentProof] Submitting proof...', { orderId, proofUrl });
+    const { data, error } = await supabase.rpc('submit_shipment_proof', {
+        p_order_id: orderId,
+        p_proof_url: proofUrl
+    });
+
+    if (error) {
+        console.error('[submitShipmentProof] error:', error);
+        return { success: false, message: error.message };
+    }
+
+    return { success: data.success, message: data.message };
+};
+
+/**
+ * Resolve a delivery dispute (Admin)
+ */
+export const resolveDisputeAdmin = async (issueId: string, resolution: 'release' | 'refund', adminNotes: string) => {
+    console.log('[resolveDisputeAdmin] Resolving dispute...', { issueId, resolution });
+    const { data, error } = await supabase.rpc('resolve_dispute_admin', {
+        p_issue_id: issueId,
+        p_resolution: resolution,
+        p_admin_notes: adminNotes
+    });
+
+    if (error) {
+        console.error('[resolveDisputeAdmin] error:', error);
+        return { success: false, message: error.message };
+    }
+
+    return { success: data.success, message: data.message };
+};
+
+/**
+ * Fetch all active delivery disputes (Admin)
+ */
+export const fetchActiveDisputes = async (): Promise<OrderIssue[]> => {
+    console.log('[fetchActiveDisputes] Fetching disputes...');
+    const { data, error } = await supabase
+        .from('order_issue_details')
+        .select('*')
+        .eq('issue_type', 'late_delivery')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('[fetchActiveDisputes] error:', error);
+        return [];
+    }
+
+    return data || [];
+};
+
 
 export const fetchSellerOrders = async (sellerId: string) => {
     // Seller orders are linked via products.seller_id (auth.uid) → order_items.product_id
@@ -5568,7 +5779,9 @@ export const fetchSellerOrders = async (sellerId: string) => {
                 tax_amount,
                 tax_rate,
                 delivery_fee,
-                shipping_address
+                shipping_address,
+                shipped_at,
+                shipment_proof_url
             )
         `)
         .in('product_id', productIds)
@@ -5604,6 +5817,8 @@ export const fetchSellerOrders = async (sellerId: string) => {
                 tax_amount: item.order.tax_amount || 0,
                 tax_rate: item.order.tax_rate || 0,
                 delivery_fee: item.order.delivery_fee || 0,
+                shipped_at: item.order.shipped_at,
+                shipment_proof_url: item.order.shipment_proof_url,
                 items: []
             });
         }

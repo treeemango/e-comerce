@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
 import { getCurrencySymbol } from '@/lib/currency';
+import { Product } from '@/types';
 
 const formatPrice = (value: number, currency?: string) => `${getCurrencySymbol(currency || 'USD')}${value.toFixed(2)}`;
 
@@ -59,7 +60,11 @@ const getTheme = (categoryId?: string, index: number = 0) => {
   return THEME_LIST[index % THEME_LIST.length] || CATEGORY_THEMES.default;
 };
 
-const HeroSection: React.FC = () => {
+interface HeroSectionProps {
+  onProductClick?: (product: Product) => void;
+}
+
+const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
   const [deals, setDeals] = useState<LightningDealItem[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -251,13 +256,24 @@ const HeroSection: React.FC = () => {
                   </p>
 
                   <div className={`pt-6 transition-all duration-700 delay-1000 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-                    <a
-                      href={`/product/${deal.id}`}
+                    <button
+                      onClick={() => onProductClick?.({
+                        id: deal.id,
+                        title: deal.title,
+                        price: deal.price,
+                        image: deal.image,
+                        currency: deal.currency,
+                        originalPrice: deal.originalPrice,
+                        discountPercent: deal.discountPercent,
+                        rating: deal.rating,
+                        reviews: deal.reviews,
+                        category: deal.category_name,
+                      } as Product)}
                       className="group/btn relative px-10 py-4 bg-white text-black font-black rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_20px_40px_-10px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3 w-full md:w-fit"
                     >
                       SHOP THIS DEAL
                       <span className="material-icons transition-transform group-hover/btn:translate-x-2">arrow_forward</span>
-                    </a>
+                    </button>
                   </div>
                 </div>
 
