@@ -254,37 +254,44 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
 
   return (
     <div className="fixed bottom-6 right-6 z-40">
-      <div className="flex flex-col items-center gap-4 bg-white/95 dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 px-3 py-4">
+      {/* Premium Floating Button Group */}
+      <div className="flex flex-col items-center gap-3 bg-white/90 dark:bg-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-black/10 border border-gray-100 dark:border-gray-800 px-4 py-5">
         <button
           onClick={handleMessages}
-          className="relative flex flex-col items-center gap-1 text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition-colors"
+          className="relative flex flex-col items-center gap-1.5 text-gray-600 dark:text-gray-300 hover:text-primary transition-all group"
           aria-label="Activity Hub"
         >
-          <span className="material-icons text-2xl">hub</span>
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center shadow-lg shadow-primary/30 group-hover:scale-110 group-active:scale-95 transition-transform">
+            <span className="material-icons-round text-white text-xl">hub</span>
+          </div>
           {totalAlerts > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full shadow-md animate-pulse">
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black h-5 w-5 flex items-center justify-center rounded-full shadow-md animate-pulse border-2 border-white dark:border-gray-900">
               {totalAlerts}
             </span>
           )}
-          <span className="text-xs font-medium">Activity</span>
+          <span className="text-[10px] font-black uppercase tracking-wider">Hub</span>
         </button>
 
         <button
           onClick={handleFeedback}
-          className="flex flex-col items-center gap-1 text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition-colors"
+          className="flex flex-col items-center gap-1.5 text-gray-600 dark:text-gray-300 hover:text-emerald-600 transition-all group"
           aria-label="Feedback"
         >
-          <span className="material-icons text-2xl">edit_note</span>
-          <span className="text-xs font-medium">Feedback</span>
+          <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 group-hover:scale-110 group-active:scale-95 transition-all">
+            <span className="material-icons-round text-lg">edit_note</span>
+          </div>
+          <span className="text-[10px] font-bold">Feedback</span>
         </button>
 
         <button
           onClick={scrollToTop}
-          className="flex flex-col items-center gap-1 text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition-colors"
+          className="flex flex-col items-center gap-1.5 text-gray-600 dark:text-gray-300 hover:text-blue-600 transition-all group"
           aria-label="Back to top"
         >
-          <span className="material-icons text-2xl">expand_less</span>
-          <span className="text-xs font-medium">Top</span>
+          <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 group-hover:scale-110 group-active:scale-95 transition-all">
+            <span className="material-icons-round text-lg">expand_less</span>
+          </div>
+          <span className="text-[10px] font-bold">Top</span>
         </button>
       </div>
       {isMessagesOpen && user && (
@@ -296,27 +303,24 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
           <div className="relative mr-3 sm:mr-5 mb-4 sm:mb-6 h-[75vh] w-full max-w-[420px] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800">
             {activePane === 'list' && (
               <div className="flex flex-col h-full">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-                  <div className="flex items-center gap-2">
-                    <span className="material-icons text-gray-700 dark:text-gray-200">hub</span>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">Activity Hub</h3>
+                {/* Premium Activity Hub Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-950">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center shadow-lg shadow-primary/20">
+                      <span className="material-icons-round text-white">hub</span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-gray-900 dark:text-white">Activity Hub</h3>
+                      <p className="text-[10px] text-gray-500 font-medium">Messages, orders & updates</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setActivePane('notifications')}
-                      className={`p-1.5 rounded-full transition-colors ${activePane === 'notifications' ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100 dark:hover:bg-gray-800 invisible'}`}
-                      aria-label="Activity"
-                    >
-                      <span className="material-icons">notifications</span>
-                    </button>
-                    <button
-                      onClick={() => setIsMessagesOpen(false)}
-                      className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
-                      aria-label="Close messages"
-                    >
-                      <span className="material-icons text-gray-700 dark:text-gray-200">close</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setIsMessagesOpen(false)}
+                    className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-90 transition-all"
+                    aria-label="Close messages"
+                  >
+                    <span className="material-icons-round text-gray-400">close</span>
+                  </button>
                 </div>
 
                 <div className="border-b border-gray-200 dark:border-gray-800 divide-y divide-gray-200 dark:divide-gray-800">

@@ -27,89 +27,108 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
   };
 
   return (
-    <div className="w-full max-w-md mx-auto sm:max-w-full sm:px-4 md:px-0">
+    <div className="w-full max-w-md mx-auto sm:max-w-full pb-8">
       {showPromotions && (
-        <>
+        <div className="space-y-6">
           {/* Dynamic Hero Section */}
-          <MobileHeroSection onProductClick={onProductClick} />
-
-          {/* Quick Info Bar */}
-          <div className="bg-[#FFF8F0] dark:bg-orange-900/10 p-3 flex justify-between items-start text-xs border-b border-orange-100 dark:border-orange-900/30">
-            <div className="flex flex-col gap-1 w-1/2 pr-2 border-r border-orange-200 dark:border-orange-800/30">
-              <div className="flex items-center gap-1 text-green-600 dark:text-green-400 font-bold">
-                <span className="material-icons-outlined text-sm">check</span>
-                Free shipping
-              </div>
-              <div className="text-text-secondary-light dark:text-text-secondary-dark pl-5 text-[10px] leading-tight">
-                Incredible
-              </div>
+          <div className="px-4 pt-4">
+            <div className="rounded-3xl overflow-hidden shadow-premium">
+              <MobileHeroSection onProductClick={onProductClick} />
             </div>
-            <div className="flex flex-col gap-1 w-1/2 pl-3">
-              <div className="flex items-center gap-1 text-text-primary-light dark:text-text-primary-dark font-bold">
-                <span className="material-icons-outlined text-sm">inventory_2</span>
-                Free returns
+          </div>
+
+          {/* Premium Info Bar */}
+          <div className="px-4">
+            <div className="bg-white dark:bg-surface-dark rounded-2xl p-4 flex justify-between items-center shadow-sm border border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center text-green-600">
+                  <span className="material-icons-round">local_shipping</span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-green-600 uppercase tracking-widest">Free Shipping</div>
+                  <div className="text-[9px] text-gray-400 font-bold uppercase">On all orders today</div>
+                </div>
               </div>
-              <div className="text-text-secondary-light dark:text-text-secondary-dark pl-5 text-[10px] leading-tight">
-                Up to 90 days*
+              <div className="h-8 w-px bg-gray-100 dark:bg-gray-800" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600">
+                  <span className="material-icons-round">verified_user</span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-blue-600 uppercase tracking-widest">Secure</div>
+                  <div className="text-[9px] text-gray-400 font-bold uppercase">Money back guarantee</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Price Guarantee */}
-          <div className="px-2 py-2 bg-surface-light dark:bg-surface-dark">
-            <div className="bg-green-700 dark:bg-green-800 text-white py-2 px-3 rounded-md flex items-center justify-between text-xs font-bold shadow-sm">
+          {/* Flash Deals Section - Horizontal */}
+          <div className="space-y-4">
+            <div className="px-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-icons-outlined text-base">verified_user</span>
-                <span>Never overpay with our Price Match Guarantee</span>
+                <span className="material-icons-round text-price-red">bolt</span>
+                <h3 className="font-black text-lg tracking-tight uppercase">Flash Deals</h3>
               </div>
-              <span className="material-icons-outlined text-sm">chevron_right</span>
+              <button
+                onClick={onViewAllDeals}
+                className="text-[10px] font-black text-primary uppercase tracking-widest"
+              >
+                See All
+              </button>
+            </div>
+            <div className="scroll-fade">
+              <MobileLightningDealsRow
+                onProductClick={onProductClick}
+                onViewAll={onViewAllDeals || (() => { })}
+              />
             </div>
           </div>
 
-
-          {/* Mobile Lightning Deals Row */}
-          <MobileLightningDealsRow
-            onProductClick={onProductClick}
-            onViewAll={onViewAllDeals || (() => { })}
-          />
-
-          {/* Sub-Filters */}
-          <div className="bg-surface-light dark:bg-surface-dark pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
-            <div className="scroll-fade px-3 overflow-x-auto hide-scrollbar">
-              <div className="flex items-center gap-2 min-w-max">
-                {[{ label: 'All', icon: 'bolt', id: 'all' }, { label: '5-Star Rated', icon: 'star', id: 'top_rated' }, { label: 'Best Sellers', icon: 'thumb_up', id: 'best_sellers' }].map((filter, idx) => (
-                  <button
-                    key={filter.label}
-                    onClick={() => {
-                      if (filter.id === 'all') return;
-                      onFilterClick?.(filter.id);
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${idx === 0
-                      ? 'bg-primary text-white border-primary'
-                      : 'bg-transparent text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                  >
-                    <span className="material-icons-outlined text-base">{filter.icon}</span>
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
+          {/* Tags / Sub-Filters */}
+          <div className="px-4 overflow-x-auto hide-scrollbar scroll-fade">
+            <div className="flex items-center gap-2.5 min-w-max">
+              {[
+                { label: 'For You', icon: 'auto_awesome', id: 'all' },
+                { label: 'Best Sellers', icon: 'trending_up', id: 'best_sellers' },
+                { label: 'New Arrivals', icon: 'new_releases', id: 'new' },
+                { label: 'Top Rated', icon: 'star_outline', id: 'top_rated' }
+              ].map((filter, idx) => (
+                <button
+                  key={filter.label}
+                  onClick={() => {
+                    if (filter.id === 'all') return;
+                    onFilterClick?.(filter.id);
+                  }}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${idx === 0
+                    ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                    : 'bg-white dark:bg-surface-dark text-gray-600 dark:text-gray-400 border border-gray-100 dark:border-gray-800'
+                    }`}
+                >
+                  <span className="material-icons-round text-sm">{filter.icon}</span>
+                  {filter.label}
+                </button>
+              ))}
             </div>
           </div>
-        </>
+        </div>
       )}
 
-      {/* Grid */}
-      <div className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-black p-1 w-full">
-        {products.map((item, idx) => (
-          <div key={idx} className="w-full min-w-0">
-            <ProductCard
-              product={item}
-              onProductClick={onProductClick}
-              onVisualSearch={onVisualSearch}
-            />
-          </div>
-        ))}
+      {/* Main Product Feed */}
+      <div className="mt-8 px-4">
+        <div className="flex items-center gap-2 mb-4">
+          <h3 className="font-black text-lg tracking-tight uppercase">Explore More</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3.5">
+          {products.map((item, idx) => (
+            <div key={idx} className="animate-premium-pop" style={{ animationDelay: `${idx * 0.05}s` }}>
+              <ProductCard
+                product={item}
+                onProductClick={onProductClick}
+                onVisualSearch={onVisualSearch}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,8 @@
-# JuaExpress - Robots.txt
-# This file tells search engines and AI crawlers which parts of your site they can access
+# JuaExpress.com - Robots.txt
+# Premium Multi-Country E-Commerce Platform for UK & Africa
+# Connecting Buyers, Sellers, and Delivery Drivers across United Kingdom, Kenya, Nigeria, South Africa, Ghana, Uganda, Tanzania
+# User-friendly marketplace with secure payments and fast delivery
+# https://juaexpress.com
 
 # Allow all search engines and AI crawlers
 User-agent: *

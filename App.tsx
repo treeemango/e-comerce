@@ -76,6 +76,8 @@ const ModerationQueueView = lazy(() => import('./components/AdminDashboard/Moder
 const DriverDashboardLayout = lazy(() => import('./components/DriverDashboard/DriverDashboardLayout'));
 const WebDriverDashboard = lazy(() => import('./components/DriverDashboard/WebDriverDashboard'));
 const WebDriverEarningsView = lazy(() => import('./components/DriverDashboard/WebDriverEarningsView').then(m => ({ default: m.WebDriverEarningsView })));
+const WebDriverVehiclesView = lazy(() => import('./components/DriverDashboard/WebDriverVehiclesView').then(module => ({ default: module.WebDriverVehiclesView })));
+const WebDriverProfileView = lazy(() => import('./components/DriverDashboard/WebDriverProfileView').then(module => ({ default: module.WebDriverProfileView })));
 const DriverLoginView = lazy(() => import('./components/DriverDashboard/DriverLoginView'));
 const DriverOnboardingView = lazy(() => import('./components/DriverDashboard/DriverOnboardingView'));
 const AdminLoginView = lazy(() => import('./components/AdminDashboard/AdminLoginView'));
@@ -1159,18 +1161,8 @@ const App: React.FC = () => {
           >
             {driverTab === 'jobs' && <WebDriverDashboard partnerId={user?.id || ''} />}
             {driverTab === 'earnings' && <WebDriverEarningsView partnerId={user?.id || ''} />}
-            {driverTab === 'vehicles' && (
-              <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
-                <span className="material-icons text-4xl text-slate-300">minor_crash</span>
-                <p className="mt-4 text-slate-500 font-bold">Vehicle management coming soon.</p>
-              </div>
-            )}
-            {driverTab === 'profile' && (
-              <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center">
-                <span className="material-icons text-4xl text-slate-300">badge</span>
-                <p className="mt-4 text-slate-500 font-bold">Driver profile settings coming soon.</p>
-              </div>
-            )}
+            {driverTab === 'vehicles' && <WebDriverVehiclesView partnerId={user?.id || ''} />}
+            {driverTab === 'profile' && <WebDriverProfileView partnerId={user?.id || ''} />}
           </DriverDashboardLayout>
         )}
         {currentView === 'driver-login' && (

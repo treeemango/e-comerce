@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchActiveDeliveryJobs } from '../../lib/api'; // We might need a generic 'fetchDriverStats' later
+import { fetchDriverEarnings, fetchDriverPayouts } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
 
@@ -25,17 +25,26 @@ export const WebDriverEarningsView: React.FC<WebDriverEarningsViewProps> = ({ pa
         const loadStats = async () => {
             setLoading(true);
             try {
-                // Mock data for immediate visualization
-                setEarnings({
-                    today: 12500,
-                    week: 87500,
-                    month: 350000,
-                    total: 1250000
-                });
-                setRecentPayouts([
-                    { id: '1', date: new Date().toISOString(), amount: 45000, status: 'paid' },
-                    { id: '2', date: new Date(Date.now() - 86400000 * 7).toISOString(), amount: 52000, status: 'paid' },
+                // Resolve real partner ID
+                const { data: profile } = await supabase
+                    .from('delivery_partners')
+                    .select('id')
+                    .eq('user_id', partnerId)
+                    .single();
+
+                if (!profile) {
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch real data in parallel using REAL ID
+                const [earningsData, payoutsData] = await Promise.all([
+                    fetchDriverEarnings(profile.id),
+                    fetchDriverPayouts(profile.id)
                 ]);
+
+                setEarnings(earningsData);
+                setRecentPayouts(payoutsData);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -95,19 +104,24 @@ export const WebDriverEarningsView: React.FC<WebDriverEarningsViewProps> = ({ pa
                 <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-50 shadow-xl">
                     <h3 className="text-lg font-black text-slate-900 mb-6">Recent Payouts</h3>
                     <div className="space-y-4">
-                        {recentPayouts.map((p) => (
-                            <div key={p.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-emerald-500">
-                                        <span className="material-icons text-sm">check</span>
+                        {recentPayouts.length === 0 ? (
+                            <p className="text-slate-500 text-sm">No recent payouts found.</p>
+                        ) : (
+                            recentPayouts.map((p) => (
+                                <div key={p.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-emerald-500">
+                                            <span className="material-icons text-sm">check</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-black text-slate-900">{formatCurrency(p.amount)}</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{new Date(p.payment_date).toLocaleDateString()}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-black text-slate-900">{formatCurrency(p.amount)}</p>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">{new Date(p.date).toLocaleDateString()}</p>
-                                    </div>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${p.status === 'processed' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>{p.status}</span>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                     <button className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition">
                         View All History

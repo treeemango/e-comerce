@@ -53,34 +53,37 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
     };
 
     return (
-        <div className="pb-24 bg-gray-50/50 min-h-screen">
-            {/* Header & Search */}
-            <div className="bg-white sticky top-0 z-10 px-5 pt-4 pb-2 border-b border-gray-100 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black text-gray-900">Products</h2>
+        <div className="pb-24 bg-gray-50 dark:bg-black min-h-screen">
+            {/* Premium Header & Search */}
+            <div className="bg-white dark:bg-gray-900 sticky top-0 z-10 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800 shadow-sm">
+                <div className="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Products</h2>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{products.length} Items</p>
+                    </div>
                     <button
                         onClick={onCreateProduct}
-                        className="flex items-center gap-1 bg-orange-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
+                        className="flex items-center gap-1.5 bg-primary text-white px-4 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-wider shadow-lg shadow-primary/30 active:scale-95 transition-transform"
                     >
-                        <span className="material-icons-outlined text-sm">add</span>
+                        <span className="material-icons-round text-sm">add</span>
                         Add New
                     </button>
                 </div>
 
-                {/* Search */}
-                <div className="relative mb-3">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-icons-outlined text-gray-400">search</span>
+                {/* Premium Search */}
+                <div className="relative mb-4">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 material-icons-round text-gray-400 text-lg">search</span>
                     <input
                         type="text"
                         placeholder="Search products, SKU..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl pl-11 pr-4 py-3.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-gray-400"
                     />
                 </div>
 
-                {/* Tabs */}
-                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-1">
+                {/* Premium Tabs */}
+                <div className="flex gap-1 overflow-x-auto hide-scrollbar pb-1">
                     {[
                         { id: 'all', label: 'All' },
                         { id: 'active', label: 'Active' },
@@ -89,9 +92,9 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`whitespace-nowrap pb-2 text-sm font-bold border-b-2 transition-colors ${activeTab === tab.id
-                                ? 'border-orange-500 text-orange-600'
-                                : 'border-transparent text-gray-400 hover:text-gray-600'
+                            className={`whitespace-nowrap px-4 py-2 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all ${activeTab === tab.id
+                                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                                 }`}
                         >
                             {tab.label}

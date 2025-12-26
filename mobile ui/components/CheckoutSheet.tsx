@@ -362,31 +362,66 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex flex-col justify-end">
-      <div className="bg-white dark:bg-surface-dark rounded-t-[2.5rem] shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
-        {/* Header with Progress */}
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-black text-black dark:text-white">Checkout</h2>
-            <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
-              <span className="material-icons-outlined text-sm">close</span>
+    <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex flex-col justify-end animate-in fade-in duration-300">
+      <div className="bg-white dark:bg-black rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.15)] max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Premium Glass Header */}
+        <div className="px-6 pt-6 pb-5 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-b from-white to-gray-50/50 dark:from-black dark:to-gray-900/50">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-black text-black dark:text-white tracking-tight">Checkout</h2>
+              <p className="text-[11px] text-gray-400 font-medium mt-0.5">Complete your purchase securely</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 bg-gray-100 dark:bg-gray-900 rounded-2xl flex items-center justify-center active:scale-90 transition-transform"
+            >
+              <span className="material-icons-round text-gray-500 text-lg">close</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            {[1, 2, 3].map(i => {
-              const isActive = (step === 'shipping' && i === 1) || (step === 'payment' && i === 2) || (step === 'review' && i === 3);
-              const isDone = (step === 'payment' && i < 2) || (step === 'review' && i < 3);
+          {/* Step Indicator with Numbers */}
+          <div className="flex items-center justify-between">
+            {[
+              { step: 1, label: 'Shipping', key: 'shipping' },
+              { step: 2, label: 'Payment', key: 'payment' },
+              { step: 3, label: 'Review', key: 'review' }
+            ].map((item, idx) => {
+              const isActive = step === item.key;
+              const isDone = (step === 'payment' && item.step < 2) || (step === 'review' && item.step < 3);
               return (
-                <React.Fragment key={i}>
-                  <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${isActive ? 'bg-primary' : isDone ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-800'}`} />
+                <React.Fragment key={item.step}>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className={`w-9 h-9 rounded-2xl flex items-center justify-center text-[13px] font-black transition-all duration-500 ${isActive
+                      ? 'bg-primary text-white shadow-lg shadow-primary/30'
+                      : isDone
+                        ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                        : 'bg-gray-100 dark:bg-gray-900 text-gray-400'
+                      }`}>
+                      {isDone ? (
+                        <span className="material-icons-round text-sm">check</span>
+                      ) : (
+                        item.step
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase tracking-wide ${isActive ? 'text-primary' : isDone ? 'text-emerald-500' : 'text-gray-400'
+                      }`}>
+                      {item.label}
+                    </span>
+                  </div>
+                  {idx < 2 && (
+                    <div className={`flex-1 h-0.5 mx-2 rounded-full transition-all duration-500 ${(step === 'payment' && idx === 0) || (step === 'review' && idx < 2)
+                      ? 'bg-emerald-500'
+                      : 'bg-gray-200 dark:bg-gray-800'
+                      }`} />
+                  )}
                 </React.Fragment>
               );
             })}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
 
           {/* Step 1: Shipping */}
           {step === 'shipping' && (
@@ -586,48 +621,63 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
           )}
         </div>
 
-        {/* Sticky Footer */}
-        <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md">
-          <div className="space-y-3 mb-6">
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>Subtotal</span>
-              <span>{formatPrice(subtotal, currency)}</span>
+        {/* Premium Sticky Footer */}
+        <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-black/95 backdrop-blur-xl">
+          {/* Price Breakdown */}
+          <div className="space-y-2.5 mb-5">
+            <div className="flex justify-between text-[12px] text-gray-500">
+              <span className="font-medium">Subtotal</span>
+              <span className="font-bold text-gray-700 dark:text-gray-300">{formatPrice(subtotal, currency)}</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-xs text-indigo-600 font-bold">
-                <span>Coupon Applied</span>
-                <span>-{formatPrice(discountAmount, currency)}</span>
+              <div className="flex justify-between text-[12px] text-emerald-600">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-icons-round text-xs">discount</span>
+                  <span className="font-bold">Coupon Discount</span>
+                </div>
+                <span className="font-black">-{formatPrice(discountAmount, currency)}</span>
               </div>
             )}
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>{taxName} ({taxPercentage}%)</span>
-              <span>{formatPrice(taxes, currency)}</span>
+            <div className="flex justify-between text-[12px] text-gray-500">
+              <span className="font-medium">{taxName} ({taxPercentage}%)</span>
+              <span className="font-bold text-gray-700 dark:text-gray-300">{formatPrice(taxes, currency)}</span>
             </div>
-            <div className="flex justify-between text-sm font-black text-black dark:text-white pt-2 border-t border-gray-50 dark:border-gray-800">
-              <span>Total Amount</span>
-              <span className="text-primary text-lg">{formatPrice(total, currency)}</span>
+            <div className="flex justify-between items-end pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grand Total</span>
+              </div>
+              <span className="text-2xl font-black text-primary tracking-tight">{formatPrice(total, currency)}</span>
             </div>
           </div>
 
+          {/* Premium CTA Button */}
           <button
             onClick={() => {
               if (step === 'shipping') setStep('payment');
               else if (step === 'payment') setStep('review');
               else handlePlaceOrder();
             }}
-            className="w-full bg-primary py-4 rounded-full font-black text-white shadow-xl shadow-primary/20 flex items-center justify-center gap-2 group transition-all active:scale-[0.98]"
+            className="relative w-full bg-primary py-4 rounded-2xl font-black text-white text-[13px] uppercase tracking-widest shadow-xl shadow-primary/30 flex items-center justify-center gap-2.5 group transition-all active:scale-[0.98] overflow-hidden"
           >
-            <span>{step === 'review' ? 'Place Order Now' : 'Continue'}</span>
-            <span className="material-icons text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+            {/* Glow effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+            <span>{step === 'review' ? 'Place Order' : 'Continue'}</span>
+            <span className="material-icons-round text-lg group-hover:translate-x-1 transition-transform">arrow_forward</span>
           </button>
 
           {step !== 'shipping' && (
-            <button onClick={() => {
-              if (step === 'payment') setStep('shipping');
-              if (step === 'review') setStep('payment');
-            }} className="w-full mt-3 py-2 text-xs font-bold text-gray-400">Go Back</button>
+            <button
+              onClick={() => {
+                if (step === 'payment') setStep('shipping');
+                if (step === 'review') setStep('payment');
+              }}
+              className="w-full mt-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors"
+            >
+              ← Go Back
+            </button>
           )}
         </div>
+
       </div>
     </div>
   );

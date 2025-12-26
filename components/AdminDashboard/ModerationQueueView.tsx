@@ -7,11 +7,21 @@ interface FlaggedReview {
     product_id: string;
     user_id: string;
     rating: number;
-    comment: string;
+    title?: string;
+    content: string;
     created_at: string;
-    flagged_reason?: string;
+    status: string;
+    moderation_reason?: string;
     product_title?: string;
     user_email?: string;
+    fit_rating: number;
+    value_rating: number;
+    quality_rating: number;
+    pros?: string[];
+    cons?: string[];
+    recommended?: boolean;
+    would_buy_again?: boolean;
+    photos?: { photo_url: string }[];
 }
 
 const ModerationQueueView: React.FC = () => {
@@ -26,19 +36,28 @@ const ModerationQueueView: React.FC = () => {
         setLoading(true);
         try {
             const { data, error } = await supabase
-                .from('reviews')
+                .from('enhanced_reviews')
                 .select(`
                     id,
                     product_id,
                     user_id,
                     rating,
-                    comment,
+                    title,
+                    content,
                     created_at,
-                    flagged_reason,
-                    products(title),
-                    profiles(email)
+                    status,
+                    moderation_reason,
+                    fit_rating,
+                    value_rating,
+                    quality_rating,
+                    pros,
+                    cons,
+                    recommended,
+                    would_buy_again,
+                    products!enhanced_reviews_product_id_fkey(title),
+                    review_photos(photo_url)
                 `)
-                .eq('flagged', true)
+                .eq('status', 'pending') // Only show pending reviews
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -46,22 +65,22 @@ const ModerationQueueView: React.FC = () => {
             const mapped = data?.map((r: any) => ({
                 ...r,
                 product_title: r.products?.title || 'Unknown Product',
-                user_email: r.profiles?.email || 'Unknown User'
+                photos: r.review_photos || []
             })) || [];
 
             setFlaggedReviews(mapped);
         } catch (err) {
-            console.error('Error loading flagged reviews:', err);
+            console.error('Error loading pending reviews:', err);
         } finally {
             setLoading(false);
         }
     };
 
     const handleApprove = async (id: string) => {
-        // Unflag the review
+        // Approve the review
         const { error } = await supabase
-            .from('reviews')
-            .update({ flagged: false, flagged_reason: null })
+            .from('enhanced_reviews')
+            .update({ status: 'approved' })
             .eq('id', id);
 
         if (!error) {
@@ -73,7 +92,7 @@ const ModerationQueueView: React.FC = () => {
         if (!window.confirm('Delete this review permanently?')) return;
 
         const { error } = await supabase
-            .from('reviews')
+            .from('enhanced_reviews')
             .delete()
             .eq('id', id);
 
@@ -103,46 +122,150 @@ const ModerationQueueView: React.FC = () => {
                 ) : flaggedReviews.length === 0 ? (
                     <div className="p-10 text-center text-gray-500">
                         <span className="material-icons text-5xl text-green-400 mb-3">verified</span>
-                        <p className="font-medium">All clear! No flagged content.</p>
+                        <p className="font-medium">All clear! No pending reviews.</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-100">
                         {flaggedReviews.map(review => (
-                            <div key={review.id} className="p-5 hover:bg-gray-50 transition">
-                                <div className="flex justify-between items-start gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold text-gray-900">{review.product_title}</span>
-                                            <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">
-                                                {review.rating}★
-                                            </span>
+                            <div key={review.id} className="p-6 hover:bg-gray-50 transition border-l-4 border-transparent hover:border-indigo-500">
+                                <div className="flex flex-col gap-4">
+                                    {/* Header: Product & Overall Rating */}
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="font-black text-gray-900 text-lg">{review.product_title}</h3>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <div className="flex text-yellow-400">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <span key={i} className="material-icons text-lg">
+                                                            {i < review.rating ? 'star' : 'star_border'}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                <span className="text-sm font-bold text-gray-600">{review.rating}.0</span>
+                                                <span className="text-gray-300">•</span>
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">
+                                                    {formatDistanceToNow(new Date(review.created_at))} ago
+                                                </span>
+                                            </div>
                                         </div>
-                                        <p className="text-sm text-gray-700 mb-2 line-clamp-2">{review.comment}</p>
-                                        <div className="flex items-center gap-3 text-xs text-gray-400">
-                                            <span>By: {review.user_email}</span>
-                                            <span>•</span>
-                                            <span>{formatDistanceToNow(new Date(review.created_at))} ago</span>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleApprove(review.id)}
+                                                className="px-4 py-2 bg-green-100 text-green-700 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-green-200 transition shadow-sm"
+                                            >
+                                                Approve
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(review.id)}
+                                                className="px-4 py-2 bg-red-100 text-red-700 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red-200 transition shadow-sm"
+                                            >
+                                                Delete
+                                            </button>
                                         </div>
-                                        {review.flagged_reason && (
-                                            <p className="mt-2 text-xs text-red-500 bg-red-50 px-2 py-1 rounded inline-block">
-                                                Reason: {review.flagged_reason}
-                                            </p>
-                                        )}
                                     </div>
-                                    <div className="flex gap-2 flex-shrink-0">
-                                        <button
-                                            onClick={() => handleApprove(review.id)}
-                                            className="px-3 py-1.5 bg-green-100 text-green-700 text-sm font-medium rounded-lg hover:bg-green-200 transition"
-                                        >
-                                            Approve
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(review.id)}
-                                            className="px-3 py-1.5 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200 transition"
-                                        >
-                                            Delete
-                                        </button>
+
+                                    {/* Main Content */}
+                                    <div className="bg-gray-50 rounded-xl p-4">
+                                        <h4 className="font-bold text-gray-900 mb-2">{review.title || 'No Title'}</h4>
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{review.content}</p>
                                     </div>
+
+                                    {/* Sub-Ratings Grid -- FIXED: Safely check for rating values */}
+                                    {(review.fit_rating > 0 || review.value_rating > 0 || review.quality_rating > 0) && (
+                                        <div className="grid grid-cols-3 gap-4 bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
+                                            {review.fit_rating > 0 && (
+                                                <div className="text-center">
+                                                    <span className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Fit</span>
+                                                    <div className="text-indigo-600 font-bold">{review.fit_rating}/5</div>
+                                                </div>
+                                            )}
+                                            {review.value_rating > 0 && (
+                                                <div className="text-center border-l border-gray-100">
+                                                    <span className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Value</span>
+                                                    <div className="text-indigo-600 font-bold">{review.value_rating}/5</div>
+                                                </div>
+                                            )}
+                                            {review.quality_rating > 0 && (
+                                                <div className="text-center border-l border-gray-100">
+                                                    <span className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Quality</span>
+                                                    <div className="text-indigo-600 font-bold">{review.quality_rating}/5</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Photos Carousel */}
+                                    {review.photos && review.photos.length > 0 && (
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 block">Attached Photos ({review.photos.length})</span>
+                                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
+                                                {review.photos.map((photo, i) => (
+                                                    <div key={i} className="flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-gray-200 cursor-pointer hover:opacity-90 transition">
+                                                        <img src={photo.photo_url} alt="Review attachment" className="w-full h-full object-cover" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Pros & Cons */}
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            {review.pros && review.pros.length > 0 && (
+                                                <>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2 block flex items-center gap-1">
+                                                        <span className="material-icons text-sm">thumb_up</span> Pros
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {review.pros.map((pro, i) => (
+                                                            <span key={i} className="px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-md border border-green-100">
+                                                                {pro}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                        <div>
+                                            {review.cons && review.cons.length > 0 && (
+                                                <>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-2 block flex items-center gap-1">
+                                                        <span className="material-icons text-sm">thumb_down</span> Cons
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {review.cons.map((con, i) => (
+                                                            <span key={i} className="px-2 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-md border border-red-100">
+                                                                {con}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Recommendation & Buy Again */}
+                                    <div className="flex gap-4 pt-2 border-t border-gray-100">
+                                        <div className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg ${review.recommended ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            <span className="material-icons text-sm">{review.recommended ? 'check_circle' : 'cancel'}</span>
+                                            Recommends Product
+                                        </div>
+                                        <div className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg ${review.would_buy_again ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            <span className="material-icons text-sm">{review.would_buy_again ? 'all_inclusive' : 'cancel'}</span>
+                                            Would Buy Again
+                                        </div>
+                                    </div>
+
+                                    {/* Moderation Reason / Metadata */}
+                                    {review.moderation_reason && (
+                                        <div className="bg-red-50 border border-red-100 p-3 rounded-lg flex items-start gap-3">
+                                            <span className="material-icons text-red-500">warning</span>
+                                            <div>
+                                                <p className="text-xs font-black text-red-700 uppercase tracking-wide">Auto-Flagged</p>
+                                                <p className="text-sm text-red-600">{review.moderation_reason}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

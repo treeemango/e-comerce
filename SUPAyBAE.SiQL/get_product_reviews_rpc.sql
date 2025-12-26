@@ -16,9 +16,19 @@ RETURNS TABLE (
     total_votes integer,
     status text,
     reviewer_name text,         -- Profile data
-    reviewer_avatar_url text,   -- Profile data
-    photos jsonb,               -- Aggregate photos
-    responses jsonb             -- Aggregate responses
+    reviewer_avatar_url text,
+    
+    -- Enhanced fields
+    fit_rating integer,
+    value_rating integer,
+    quality_rating integer,
+    pros text[],
+    cons text[],
+    recommended boolean,
+    would_buy_again boolean,
+
+    photos jsonb,
+    responses jsonb
 )
 LANGUAGE sql
 SECURITY DEFINER
@@ -28,7 +38,7 @@ AS $$
         r.product_id,
         r.user_id,
         r.rating,
-        r.content AS comment, -- Renaming content to comment for frontend consistency
+        r.content AS comment,
         r.created_at,
         r.title,
         r.is_verified_purchase,
@@ -37,6 +47,15 @@ AS $$
         r.status,
         u.name AS reviewer_name,
         u.avatar_url AS reviewer_avatar_url,
+        
+        -- Enhanced fields
+        r.fit_rating,
+        r.value_rating,
+        r.quality_rating,
+        r.pros,
+        r.cons,
+        r.recommended,
+        r.would_buy_again,
         
         -- Aggregate photos
         COALESCE(
@@ -60,7 +79,9 @@ AS $$
                 SELECT jsonb_agg(
                     jsonb_build_object(
                         'id', rr.id,
-                        'content', rr.content,
+                        'response_text', rr.response_text,
+                        'responder_type', rr.responder_type,
+                        'is_official', rr.is_official,
                         'created_at', rr.created_at,
                         'responder_name', ru.name
                     ) ORDER BY rr.created_at

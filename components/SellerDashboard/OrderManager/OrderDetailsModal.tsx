@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { SellerOrder } from '../../../types';
 import { formatCurrency } from '../../../lib/utils';
-import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady } from '../../../lib/api';
+import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady, submitShipmentProof } from '../../../lib/api';
+import { MediaService } from '../../../lib/media';
 import BuyerReceipt from './BuyerReceipt';
 
 interface OrderDetailsModalProps {
@@ -20,7 +21,6 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const [trackingNumber, setTrackingNumber] = useState('');
     const [isShipping, setIsShipping] = useState(false);
     const [isMarkingReady, setIsMarkingReady] = useState(false);
-    const [generatedOTP, setGeneratedOTP] = useState<string | null>(null);
 
     // Parcel-specific fields
     const [parcelService, setParcelService] = useState('');
@@ -28,6 +28,12 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const [collectionPoint, setCollectionPoint] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
     const [otpInput, setOtpInput] = useState('');
+    const [showOTPInput, setShowOTPInput] = useState(false);
+
+    // Shipment Evidence
+    const [shipmentProofUrl, setShipmentProofUrl] = useState(order.shipment_proof_url || '');
+    const [isSubmittingProof, setIsSubmittingProof] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
     const getStatusStyles = (status?: string) => {
         const s = status?.toLowerCase();
@@ -54,11 +60,7 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 }
                 const result = await fulfillParcelOrder(order.id, parcelService, waybillNumber, collectionPoint);
                 if (result.success) {
-                    setGeneratedOTP(result.otp || null);
-                    // Show OTP confirmation before closing
-                    if (result.otp) {
-                        alert(`Order shipped! Collection OTP: ${result.otp}\n\nThe buyer will see this code when they view their order.`);
-                    }
+                    alert(`✅ Order shipped! Mutual Protection Enabled.\n\nThe buyer will receive a secret 4-digit code in their app for secure collection.`);
                     onOrderUpdated?.();
                     onClose();
                 } else {
@@ -99,6 +101,45 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             alert('An error occurred during verification.');
         } finally {
             setIsVerifying(false);
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        try {
+            // Get sellerId from the order items or user context if available
+            // In this modal we have the order, we can assume the current user is the seller
+            // MediaService.getInstance().uploadFile needs a sellerId for the path
+            const sellerId = order.items?.[0]?.seller_id || 'unknown_seller'; // Fallback
+            const result = await MediaService.getInstance().uploadFile(file, sellerId);
+            setShipmentProofUrl(result.url);
+        } catch (err) {
+            console.error('Upload failed:', err);
+            alert('Failed to upload image.');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleSubmitProof = async () => {
+        if (!shipmentProofUrl.trim()) return;
+        setIsSubmittingProof(true);
+        try {
+            const res = await submitShipmentProof(order.id, shipmentProofUrl);
+            if (res.success) {
+                alert('Shipment proof submitted successfully.');
+                onOrderUpdated?.();
+            } else {
+                alert(res.message || 'Failed to submit proof.');
+            }
+        } catch (err) {
+            console.error('Error submitting proof:', err);
+            alert('An error occurred.');
+        } finally {
+            setIsSubmittingProof(false);
         }
     };
 
@@ -364,44 +405,132 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                         </div>
                     )}
 
-                    {/* Collection Verification (OTP) - Show when order is shipped via parcel */}
-                    {order.status?.toLowerCase() === 'shipped' && order.fulfillment_type === 'local_parcel' && (
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                                    <span className="material-icons text-emerald-600">verified_user</span>
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-emerald-900">Verify Collection</h3>
-                                    <p className="text-xs text-emerald-600 font-medium">Mutual Protection Enabled</p>
-                                </div>
-                            </div>
+                    {/* Collection Verification (OTP) & Shipment Evidence */}
+                    {order.status?.toLowerCase() === 'shipped' && (
+                        <div className="space-y-6">
+                            {/* Verification Card (Blue/Emerald depending on parcel) */}
+                            {(order.fulfillment_type === 'local_parcel' || showOTPInput) ? (
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                                            <span className="material-icons">verified_user</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-emerald-900">Verify Collection</h3>
+                                            <p className="text-xs text-emerald-600 font-medium">Mutual Protection Enabled</p>
+                                        </div>
+                                    </div>
 
-                            <p className="text-sm text-emerald-700 leading-relaxed">
-                                Ask the buyer for their <strong>4-digit collection code</strong> to confirm handover.
-                                Successful verification releases funds to your account balance.
-                            </p>
+                                    <p className="text-sm text-emerald-700 leading-relaxed">
+                                        Ask the buyer for their <strong>4-digit collection code</strong> to confirm handover and release funds.
+                                    </p>
 
-                            <div className="flex gap-3">
-                                <input
-                                    type="text"
-                                    maxLength={4}
-                                    value={otpInput}
-                                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
-                                    placeholder="Enter Code"
-                                    className="flex-1 px-4 py-4 bg-white border-2 border-emerald-200 rounded-xl text-center font-black text-2xl tracking-[0.5em] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all placeholder:text-gray-300 placeholder:tracking-normal placeholder:font-medium placeholder:text-sm"
-                                />
-                                <button
-                                    onClick={handleVerifyOTP}
-                                    disabled={isVerifying || otpInput.length !== 4}
-                                    className="px-8 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center min-w-[120px]"
-                                >
-                                    {isVerifying ? (
-                                        <span className="material-icons animate-spin">sync</span>
-                                    ) : (
-                                        'Verify'
+                                    <div className="flex gap-3">
+                                        <input
+                                            type="text"
+                                            maxLength={4}
+                                            value={otpInput}
+                                            onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                                            placeholder="Enter Code"
+                                            className="flex-1 px-4 py-4 bg-white border-2 border-emerald-200 rounded-xl text-center font-black text-2xl tracking-[0.5em] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                                        />
+                                        <button
+                                            onClick={handleVerifyOTP}
+                                            disabled={isVerifying || otpInput.length !== 4}
+                                            className="px-8 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center min-w-[120px]"
+                                        >
+                                            {isVerifying ? <span className="material-icons animate-spin">sync</span> : 'Verify'}
+                                        </button>
+                                    </div>
+                                    {showOTPInput && order.fulfillment_type !== 'local_parcel' && (
+                                        <button
+                                            onClick={() => setShowOTPInput(false)}
+                                            className="text-xs text-emerald-600 font-bold uppercase tracking-wider hover:underline"
+                                        >
+                                            Cancel Manual Verification
+                                        </button>
                                     )}
-                                </button>
+                                </div>
+                            ) : (
+                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 space-y-4">
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                                            <span className="material-icons">hourglass_empty</span>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <h3 className="font-bold text-blue-900 leading-none">Waiting for Confirmation</h3>
+                                            <p className="text-xs text-blue-700 leading-relaxed font-medium mt-1">
+                                                The buyer can confirm receipt from their app. You can also manually verify their collection code (OTP).
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowOTPInput(true)}
+                                        className="w-full bg-white border border-blue-200 text-blue-600 py-3 rounded-xl font-bold text-xs hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <span className="material-icons text-sm">vpn_key</span>
+                                        Enter Collection Code
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Shipment Evidence Card (Pink) */}
+                            <div className="bg-rose-50 border border-rose-100 rounded-2xl p-6 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+                                        <span className="material-icons">policy</span>
+                                    </div>
+                                    <h3 className="font-bold text-rose-900">Shipment Evidence</h3>
+                                </div>
+
+                                <p className="text-xs text-rose-700 leading-relaxed font-medium">
+                                    Upload a photo of your shipping receipt or waybill. This protects you if the buyer raises a dispute.
+                                </p>
+
+                                <div className="space-y-3">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={shipmentProofUrl}
+                                            onChange={(e) => setShipmentProofUrl(e.target.value)}
+                                            placeholder="Paste Image URL or Upload"
+                                            className="flex-1 px-4 py-3 bg-white border border-rose-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                        />
+                                        <input
+                                            type="file"
+                                            id="shipment-proof-upload"
+                                            className="hidden"
+                                            accept="image/*"
+                                            capture="environment"
+                                            onChange={handleFileUpload}
+                                        />
+                                        <label
+                                            htmlFor="shipment-proof-upload"
+                                            className="px-4 bg-white border border-rose-200 text-rose-600 rounded-xl flex items-center justify-center cursor-pointer hover:bg-rose-50 transition-colors"
+                                        >
+                                            {isUploading ? (
+                                                <span className="material-icons animate-spin">sync</span>
+                                            ) : (
+                                                <span className="material-icons">photo_camera</span>
+                                            )}
+                                        </label>
+                                    </div>
+
+                                    {order.shipment_proof_url && (
+                                        <div className="p-2 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-lg border border-emerald-100 flex items-center gap-1">
+                                            <span className="material-icons text-xs">check_circle</span>
+                                            Proof already submitted
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleSubmitProof}
+                                        disabled={isSubmittingProof || !shipmentProofUrl.trim()}
+                                        className="w-full bg-rose-600 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 disabled:opacity-50 transition-all shadow-lg shadow-rose-600/20"
+                                    >
+                                        {isSubmittingProof ? 'Sending...' : 'Submit Evidence'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}

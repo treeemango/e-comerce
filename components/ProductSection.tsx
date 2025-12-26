@@ -4,6 +4,7 @@ import ProductCard from './ProductCard';
 import { Product, SearchFilters, AppliedFilters, VisualCategory, AttributeValue, CategoryFilter, BrandFilter, Breadcrumb } from '../types';
 import { fetchSearchFilters, fetchFilteredProducts, fetchNavbarCategories, NavbarCategory } from '../lib/api';
 import ProductCardSkeleton from './ProductCardSkeleton';
+import { getCurrencySymbol } from '../lib/currency';
 
 interface ProductSectionProps {
   isFiveStarView?: boolean;
@@ -65,6 +66,18 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   const initialColumns = typeof window === 'undefined' ? 4 : getColumnsFromWidth();
   const [gridColumns, setGridColumns] = useState(initialColumns);
   const [visibleCount, setVisibleCount] = useState(initialColumns * 8);
+
+  // Pick a currency for price filters based on backend metadata or loaded products
+  const priceCurrency = useMemo(() => {
+    return (
+      searchFilters?.price_range?.currency ||
+      filteredProducts[0]?.currency ||
+      products[0]?.currency ||
+      'USD'
+    );
+  }, [filteredProducts, products, searchFilters]);
+
+  const priceCurrencySymbol = useMemo(() => getCurrencySymbol(priceCurrency || 'USD'), [priceCurrency]);
 
   const totalAppliedFilters =
     appliedFilters.category_ids.length +
@@ -740,7 +753,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                     {activeFilter === 'price' && searchFilters && (
                       <div className="space-y-4 max-w-sm">
                         <div className="text-sm text-gray-500">
-                          Range: £{searchFilters.price_range.min_price.toFixed(2)} - £{searchFilters.price_range.max_price.toFixed(2)}
+                          Range: {priceCurrencySymbol}{searchFilters.price_range.min_price.toFixed(2)} - {priceCurrencySymbol}{searchFilters.price_range.max_price.toFixed(2)}
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>

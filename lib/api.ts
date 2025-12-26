@@ -39,6 +39,7 @@ export interface LightningDealItem {
     soldCount?: number;
     stock?: number;
     listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
+    vendor?: VendorInfo;
 }
 
 export interface DealCategoryNavItem {
@@ -71,6 +72,37 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
     const payload = Array.isArray(data) ? data[0] : data;
     const products = payload?.products ?? [];
 
+    // Fetch vendor info for hero deals
+    const sellerIds = Array.from(new Set(products.map((p: any) => p.vendor_id || p.seller_id).filter(Boolean)));
+    let vendorMap = new Map<string, VendorInfo>();
+
+    if (sellerIds.length > 0) {
+        try {
+            // We use fetchVendorInfo if available, or fetch directly
+            // Since we cannot locate fetchVendorInfo definition easily, we implement direct fetch here for safety
+            const { data: vendors, error: vendorError } = await supabase
+                .from('vendors')
+                .select('user_id, business_name, address_country, rating, review_count, is_verified, logo_url')
+                .in('user_id', sellerIds);
+
+            if (!vendorError && vendors) {
+                vendors.forEach((v: any) => {
+                    vendorMap.set(v.user_id, {
+                        vendor_id: v.user_id,
+                        business_name: v.business_name,
+                        business_country: v.address_country,
+                        vendor_rating: v.rating,
+                        review_count: v.review_count,
+                        is_verified: v.is_verified,
+                        logo_url: v.logo_url
+                    });
+                });
+            }
+        } catch (e) {
+            console.error('Error fetching vendor info for hero deals', e);
+        }
+    }
+
     const mapped: LightningDealItem[] = products.map((item: any) => {
         const originalPrice = item.originalPrice ?? item.original_price ?? item.price ?? 0;
         const price = item.price ?? item.current_price ?? originalPrice;
@@ -99,6 +131,7 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             .filter(m => !!m.url);
 
         const primaryImage = item.image_url || mediaItems.find(m => m.type === 'image')?.url || mediaItems[0]?.url || '';
+        const sellerId = item.vendor_id || item.seller_id;
 
         return {
             id: item.id,
@@ -120,7 +153,8 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             delivery_locations: item.delivery_locations || [], // ✅ Added
             sale_unit: item.sale_unit || undefined, // ✅ Unit of measurement
             vendor_country: item.vendor_country || undefined,
-            seller_id: item.vendor_id || item.seller_id || undefined,
+            seller_id: sellerId || undefined,
+            vendor: sellerId ? vendorMap.get(sellerId) : undefined,
             tag: 'OVERALL BEST', // Custom tag for Hero
             accent: undefined,
             currency: item.currency || 'USD',
@@ -163,6 +197,35 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
     const payload = Array.isArray(data) ? data[0] : data;
     const products = (payload?.products ?? []).slice(offset);
 
+    // Fetch vendor info for lightning deals
+    const sellerIds = Array.from(new Set(products.map((p: any) => p.vendor_id || p.seller_id).filter(Boolean)));
+    let vendorMap = new Map<string, VendorInfo>();
+
+    if (sellerIds.length > 0) {
+        try {
+            const { data: vendors, error: vendorError } = await supabase
+                .from('vendors')
+                .select('user_id, business_name, address_country, rating, review_count, is_verified, logo_url')
+                .in('user_id', sellerIds);
+
+            if (!vendorError && vendors) {
+                vendors.forEach((v: any) => {
+                    vendorMap.set(v.user_id, {
+                        vendor_id: v.user_id,
+                        business_name: v.business_name,
+                        business_country: v.address_country,
+                        vendor_rating: v.rating,
+                        review_count: v.review_count,
+                        is_verified: v.is_verified,
+                        logo_url: v.logo_url
+                    });
+                });
+            }
+        } catch (e) {
+            console.error('Error fetching vendor info for lightning deals', e);
+        }
+    }
+
 
     const mapped: LightningDealItem[] = products.map((item: any) => {
         const originalPrice = item.originalPrice ?? item.original_price ?? item.price ?? 0;
@@ -192,6 +255,7 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
             .filter(m => !!m.url);
 
         const primaryImage = item.image_url || mediaItems.find(m => m.type === 'image')?.url || mediaItems[0]?.url || '';
+        const sellerId = item.vendor_id || item.seller_id;
 
         return {
             id: item.id,
@@ -213,7 +277,8 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
             delivery_locations: item.delivery_locations || [], // ✅ Added
             sale_unit: item.sale_unit || undefined, // ✅ Unit of measurement
             vendor_country: item.vendor_country || undefined,
-            seller_id: item.vendor_id || item.seller_id || undefined,
+            seller_id: sellerId || undefined,
+            vendor: sellerId ? vendorMap.get(sellerId) : undefined,
             tag: item.deal_type === 'flash_sale' ? 'Flash sale' : item.deal_type === 'lightning_deal' ? 'Lightning' : undefined,
             accent: undefined,
             currency: item.currency || 'USD',
@@ -241,7 +306,7 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
         };
     });
 
-    return mapped;
+    return mapped; // Return mapped instead of products
 };
 
 export const fetchDealsProducts = async (
@@ -471,7 +536,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
             currency: item.currency || 'USD',
             seller_id: item.seller_id || undefined,
             rating: item.rating || 0,
-            reviews: 0,
+            reviews: item.review_count || 0,
             image: item.featured_image_url || '',
             stock: item.stock ?? item.available_stock ?? item.inventory_quantity ?? item.quantity_available ?? undefined,
             media,
@@ -721,7 +786,8 @@ export const fetchVendorInfo = async (productIds: string[]): Promise<Map<string,
                     business_country: vendor.business_country,
                     cancellation_rate: vendor.cancellation_rate,
                     response_time: vendor.response_time,
-                    seller_since: vendor.seller_since
+                    seller_since: vendor.seller_since,
+                    logo_url: vendor.logo_url
                 };
                 // Key by BOTH user_id and vendor_id to ensure lookup success regardless of which ID is used in products table
                 if (vendorInfo.user_id) {
@@ -1160,7 +1226,7 @@ export const fetchSellerProductsForCoupons = async (sellerId: string): Promise<P
 
     const { data, error } = await supabase
         .from('products_with_media')
-        .select('id, title, price, currency, featured_image_url, stock, seller_id, status')
+        .select('id, title, price, currency, featured_image_url, stock, seller_id, status, rating, review_count')
         .eq('seller_id', sellerId)
         .order('created_at', { ascending: false });
 
@@ -1177,8 +1243,8 @@ export const fetchSellerProductsForCoupons = async (sellerId: string): Promise<P
         image: item.featured_image_url,
         stock: item.stock,
         vendor: undefined,
-        rating: 0,
-        reviews: 0,
+        rating: item.rating || 0,
+        reviews: item.review_count || 0,
     }));
 };
 
@@ -2243,6 +2309,15 @@ export const fetchProductReviews = async (
         user_name: review.reviewer_name,
         user_avatar: review.reviewer_avatar_url,
 
+        // Enhanced ratings & tags
+        fit_rating: review.fit_rating,
+        value_rating: review.value_rating,
+        quality_rating: review.quality_rating,
+        pros: review.pros || [],
+        cons: review.cons || [],
+        recommended: review.recommended,
+        would_buy_again: review.would_buy_again,
+
         // Photos and responses are already aggregated as JSONB
         photos: review.photos || [],
         responses: review.responses || []
@@ -3062,6 +3137,7 @@ export const createDriverProfile = async (payload: {
 };
 
 // Create Driver Vehicle
+// Create Driver Vehicle
 export const createDriverVehicle = async (payload: {
     partner_id: string;
     vehicle_type: string;
@@ -3083,17 +3159,109 @@ export const createDriverVehicle = async (payload: {
     return { data, error };
 };
 
+// Fetch Driver Vehicles
+export const fetchDriverVehicles = async (partnerId: string) => {
+    const { data, error } = await supabase
+        .from('delivery_partner_vehicles')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching driver vehicles:', error);
+        return [];
+    }
+    return data || [];
+};
+
+// Update Driver Vehicle
+export const updateDriverVehicle = async (vehicleId: string, updates: Partial<{
+    vehicle_type: string;
+    license_plate: string;
+    make: string;
+    model: string;
+    year: number;
+    color: string;
+    capacity_kg: number;
+    max_package_size: 'small' | 'medium' | 'large' | 'extra_large';
+    insurance_number: string;
+    registration_expiry: string;
+}>) => {
+    const { data, error } = await supabase
+        .from('delivery_partner_vehicles')
+        .update(updates)
+        .eq('id', vehicleId)
+        .select()
+        .single();
+    return { data, error };
+};
+
+// Delete (Soft Delete) Driver Vehicle
+export const deleteDriverVehicle = async (vehicleId: string) => {
+    const { error } = await supabase
+        .from('delivery_partner_vehicles')
+        .update({ is_active: false })
+        .eq('id', vehicleId);
+    return !error;
+};
+
 // Fetch Driver Profile
 export const fetchDriverProfile = async (userId: string) => {
+    // 1. Try to find by user_id
+    let { data, error } = await supabase
+        .from('delivery_partners')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error fetching driver profile:', error);
+        return null;
+    }
+
+    // 2. If not found, it might be that the user is the partner? No, user_id is the link.
+    // If data is null, they might not have a profile yet (should filter out in UI or auto-create)
+    return data;
+};
+
+// Update Driver Profile
+export const updateDriverProfile = async (partnerId: string, updates: Partial<{
+    company_name: string;
+    contact_email: string;
+    contact_phone: string;
+    license_number: string;
+    insurance_policy_number: string;
+    delivery_radius_km: number;
+    base_delivery_fee: number;
+    per_km_fee: number;
+    is_active: boolean;
+}>) => {
     const { data, error } = await supabase
         .from('delivery_partners')
-        .select(`
-            *,
-            vehicles:delivery_partner_vehicles(*)
-        `)
-        .eq('user_id', userId)
+        .update(updates)
+        .eq('id', partnerId)
+        .select()
         .single();
-    return data;
+
+    return { data, error };
+};
+
+// Fetch Driver History
+export const fetchDriverHistory = async (partnerId: string) => {
+    const { data, error } = await supabase
+        .from('delivery_assignments')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .in('status', ['delivered', 'failed', 'cancelled'])
+        .order('delivered_at', { ascending: false })
+        .limit(50);
+
+    if (error) {
+        console.error('Error fetching driver history:', error);
+        return [];
+    }
+    return data || [];
 };
 
 // Fetch Pending Driver Applications (Admin)
@@ -3955,8 +4123,8 @@ export const fetchBestSellingItems = async (interval: string): Promise<BestSelli
     richProducts?.forEach(p => richMap.set(p.id, p));
 
     // Fetch vendor info
-    const sellerIds = Array.from(new Set(richProducts?.map(p => p.seller_id).filter(Boolean)));
-    const vendorMap = await fetchVendorInfo(sellerIds as string[]);
+    // Fetch vendor info - pass productIds as fetchVendorInfo expects product IDs to resolve via RPC
+    const vendorMap = await fetchVendorInfo(productIds);
 
     return data.map((item: any) => {
         const richItem = richMap.get(item.product_id);
@@ -4013,6 +4181,8 @@ export const fetchBestSellingItems = async (interval: string): Promise<BestSelli
             activeCoupon: item.activeCoupon,
             image: item.image_url,
             currency: 'USD',
+            rating: item.rating || 0,
+            reviews: item.review_count || 0,
             total_quantity_sold: item.total_quantity_sold,
             sale_rank: item.sale_rank
         } as BestSellingProduct;
@@ -5473,7 +5643,9 @@ export const fulfillOrder = async (orderId: string, trackingNumber?: string) => 
         .from('orders')
         .update({
             status: 'shipped',
-            tracking_number: trackingNumber
+            tracking_number: trackingNumber,
+            shipped_at: new Date().toISOString(),
+            fulfillment_type: 'official_courier'
         })
         .eq('id', orderId);
 
@@ -5589,7 +5761,7 @@ export const fulfillParcelOrder = async (
         });
     }
 
-    return { success: true, otp };
+    return { success: true };
 };
 
 /**
@@ -5781,7 +5953,10 @@ export const fetchSellerOrders = async (sellerId: string) => {
                 delivery_fee,
                 shipping_address,
                 shipped_at,
-                shipment_proof_url
+                shipment_proof_url,
+                fulfillment_type,
+                tracking_number,
+                carrier
             )
         `)
         .in('product_id', productIds)
@@ -5819,6 +5994,9 @@ export const fetchSellerOrders = async (sellerId: string) => {
                 delivery_fee: item.order.delivery_fee || 0,
                 shipped_at: item.order.shipped_at,
                 shipment_proof_url: item.order.shipment_proof_url,
+                fulfillment_type: item.order.fulfillment_type,
+                tracking_number: item.order.tracking_number,
+                carrier: item.order.carrier,
                 items: []
             });
         }
@@ -6220,6 +6398,91 @@ export const fetchActiveDeliveryJobs = async (partnerId: string): Promise<Delive
         console.error('Error fetching active delivery jobs:', error);
         return [];
     }
+    return data || [];
+};
+
+export const fetchDriverEarnings = async (partnerId: string) => {
+    // Fetch completed assignments to calculate earnings
+    const { data, error } = await supabase
+        .from('delivery_assignments')
+        .select('delivery_fee, delivered_at')
+        .eq('partner_id', partnerId)
+        .eq('status', 'delivered');
+
+    if (error) {
+        console.error('Error fetching driver earnings:', error);
+        return { today: 0, week: 0, month: 0, total: 0 };
+    }
+
+    const now = new Date();
+    // Set to beginning of today
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    // Set to beginning of current week (assuming Sunday start)
+    const currentDay = now.getDay(); // 0-6
+    const diff = now.getDate() - currentDay;
+    const startOfWeek = new Date(now.setDate(diff));
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeekTime = startOfWeek.getTime();
+
+    // Reset now for month calculation because setDate(diff) mutated it
+    const nowForMonth = new Date();
+    const startOfMonth = new Date(nowForMonth.getFullYear(), nowForMonth.getMonth(), 1).getTime();
+
+    let todayTotal = 0;
+    let weekTotal = 0;
+    let monthTotal = 0;
+    let totalLifeTime = 0;
+
+    data?.forEach((job: any) => {
+        const fee = Number(job.delivery_fee || 0);
+        const deliveredAt = new Date(job.delivered_at).getTime();
+
+        if (deliveredAt >= startOfToday) todayTotal += fee;
+        if (deliveredAt >= startOfWeekTime) weekTotal += fee;
+        if (deliveredAt >= startOfMonth) monthTotal += fee;
+        totalLifeTime += fee;
+    });
+
+    return {
+        today: todayTotal,
+        week: weekTotal,
+        month: monthTotal,
+        total: totalLifeTime
+    };
+};
+
+export const fetchDriverStats = async (partnerId: string) => {
+    const { data, error } = await supabase
+        .from('delivery_partners')
+        .select('rating, success_rate')
+        .eq('id', partnerId)
+        .single();
+
+    if (error) {
+        console.error('Error fetching driver stats:', error);
+        return { rating: 0, completionRate: 0 };
+    }
+
+    return {
+        rating: data?.rating || 0,
+        completionRate: data?.success_rate || 0,
+    };
+};
+
+export const fetchDriverPayouts = async (partnerId: string) => {
+    const { data, error } = await supabase
+        .from('delivery_partner_payments')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .order('payment_date', { ascending: false })
+        .limit(10);
+
+    if (error) {
+        console.error('Error fetching driver payouts:', error);
+        return [];
+    }
+
     return data || [];
 };
 

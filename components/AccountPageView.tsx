@@ -284,29 +284,36 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
 
    return (
       <div className="flex flex-col md:flex-row gap-8 max-w-screen-2xl mx-auto pb-12">
-         {/* Sidebar Navigation */}
-         <div className="w-full md:w-64 flex-shrink-0">
+         {/* Premium Sidebar Navigation */}
+         <div className="w-full md:w-72 flex-shrink-0">
             <div className="sticky top-24">
-               <div className="mb-6 flex items-center gap-3 px-4">
-                  <div className="w-10 h-10 rounded-full bg-[#8B735B] flex items-center justify-center text-white text-lg font-bold">
-                     {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'K'}
+               {/* Profile Card */}
+               <div className="mb-6 p-5 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-800 dark:via-gray-900 dark:to-gray-950 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                  <div className="flex items-center gap-4">
+                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-primary/30">
+                        {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'G'}
+                     </div>
+                     <div>
+                        <span className="font-black text-slate-900 dark:text-white block">
+                           {user?.name || user?.email || 'Guest'}
+                        </span>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Premium Member</span>
+                     </div>
                   </div>
-                  <span className="font-bold text-slate-900 dark:text-white">
-                     {user?.name || user?.email || 'Guest'}
-                  </span>
                </div>
-               <nav className="space-y-1">
+
+               <nav className="space-y-1 bg-white dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-800">
                   {sidebarItems.map((item) => (
                      <button
                         key={item.label}
                         onClick={() => handleNavigation(item.label)}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${item.label === pageTitle
-                           ? 'bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-white'
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${item.label === pageTitle
+                           ? 'bg-primary text-white shadow-md shadow-primary/20'
                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-white'
                            }`}
                      >
-                        <span className="material-icons text-[20px] opacity-70 w-6 text-left">{item.icon}</span>
-                        <span>{item.label}</span>
+                        <span className={`material-icons-round text-lg w-6 text-left ${item.label === pageTitle ? 'text-white' : 'opacity-70'}`}>{item.icon}</span>
+                        <span className="font-bold">{item.label}</span>
                      </button>
                   ))}
                </nav>
@@ -315,11 +322,11 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
 
          {/* Main Content Area */}
          <div className="flex-1 min-w-0">
-            {/* Breadcrumbs */}
-            <div className="text-xs text-gray-500 mb-6 flex items-center gap-1">
-               <span className="hover:underline cursor-pointer" onClick={() => handleNavigation('Followed stores')}>Home</span>
-               <span className="material-icons text-[10px]">chevron_right</span>
-               <span className="text-slate-900 dark:text-white font-medium">{pageTitle}</span>
+            {/* Premium Breadcrumbs */}
+            <div className="text-xs text-gray-500 mb-6 flex items-center gap-2 bg-gray-50 dark:bg-gray-900/50 px-4 py-2 rounded-xl w-fit">
+               <span className="hover:text-primary cursor-pointer transition-colors" onClick={() => handleNavigation('Followed stores')}>Home</span>
+               <span className="material-icons-round text-[10px]">chevron_right</span>
+               <span className="text-slate-900 dark:text-white font-black">{pageTitle}</span>
             </div>
 
             {renderContent()}

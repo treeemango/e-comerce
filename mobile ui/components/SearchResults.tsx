@@ -6,7 +6,7 @@ import { FilterPanel } from './FilterPanel';
 
 interface SearchResultsProps {
     query: string;
-    results: Product[]; // Kept for backwards compatibility but will be overridden
+    results: Product[]; // Kept for backwards compatibility
     onBack: () => void;
     onUserClick?: () => void;
     onProductClick: (product: Product) => void;
@@ -47,10 +47,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
             setLoading(true);
             try {
-                // Track the search
                 await trackSearch(query);
-
-                // Fetch results
                 const results = await fetchFilteredProducts(query, appliedFilters);
                 setSearchResults(results);
             } catch (error) {
@@ -64,47 +61,31 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     }, [query, appliedFilters]);
 
     return (
-        <div className="flex flex-col h-full bg-background-light dark:bg-background-dark relative">
-            {/* Custom Header for Search Results */}
-            <header className="bg-surface-light dark:bg-surface-dark shadow-sm flex-none z-50">
-                <div className="flex items-center justify-between px-2 py-2 gap-2">
-                    <button onClick={onBack} className="p-1">
-                        <span className="material-icons-outlined text-xl text-black dark:text-white">arrow_back_ios_new</span>
+        <div className="flex flex-col h-full bg-white dark:bg-black relative">
+            {/* Unified Search Results Header */}
+            <header className="bg-white/80 dark:bg-black/80 backdrop-blur-xl sticky top-0 z-40 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-3 px-4 py-3">
+                    <button
+                        onClick={onBack}
+                        className="w-10 h-10 -ml-2 flex items-center justify-center rounded-full active:bg-gray-100 dark:active:bg-gray-900"
+                    >
+                        <span className="material-icons-round text-gray-800 dark:text-white text-2xl">chevron_left</span>
                     </button>
 
-                    <div className="flex-grow relative">
-                        <div className="w-full flex items-center bg-white dark:bg-black border border-black dark:border-gray-600 rounded-full px-3 py-1.5">
-                            <span className="flex-grow text-sm text-black dark:text-white truncate">{query}</span>
-                            <button className="bg-gray-300 dark:bg-gray-700 rounded-full w-4 h-4 flex items-center justify-center ml-2" onClick={onBack}>
-                                <span className="material-icons-round text-white text-[10px]">close</span>
-                            </button>
-                        </div>
+                    <div
+                        className="flex-grow flex items-center bg-gray-100 dark:bg-gray-900 rounded-2xl px-4 py-2.5 cursor-pointer active:scale-[0.98] transition-all"
+                        onClick={onBack}
+                    >
+                        <span className="material-icons-round text-primary text-lg mr-2">search</span>
+                        <span className="flex-grow text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate">{query}</span>
+                        <span className="material-icons-round text-gray-400 text-sm ml-2">edit</span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                        <button className="p-1"><span className="material-icons-outlined text-2xl">format_list_bulleted</span></button>
-                        <button className="relative p-1" onClick={onUserClick}>
-                            {userAvatar ? (
-                                <img src={userAvatar} alt={userName || 'User'} className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 object-cover" />
-                            ) : (
-                                <div className="w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                    {userName ? (
-                                        <span className="text-[10px] font-bold">{userName.slice(0, 2).toUpperCase()}</span>
-                                    ) : (
-                                        <span className="material-icons text-lg">person</span>
-                                    )}
-                                </div>
-                            )}
-                            {notificationCount > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
-                                    {notificationCount > 99 ? '99+' : notificationCount}
-                                </span>
-                            )}
-                        </button>
-                        <button className="relative p-1">
-                            <span className="material-icons-outlined text-2xl">shopping_cart</span>
+                    <div className="flex items-center gap-1">
+                        <button className="w-10 h-10 flex items-center justify-center rounded-full active:bg-gray-100 dark:active:bg-gray-900 relative">
+                            <span className="material-icons-round text-gray-800 dark:text-white text-2xl">shopping_cart</span>
                             {cartCount > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                                <span className="absolute top-2 right-2 bg-primary text-white text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center border-2 border-white dark:border-black shadow-sm">
                                     {cartCount > 99 ? '99+' : cartCount}
                                 </span>
                             )}
@@ -112,31 +93,28 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     </div>
                 </div>
 
-                {/* Filters Bar */}
-                <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto hide-scrollbar border-t border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-300">
+                {/* Modern Filters Bar */}
+                <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
                     <button
-                        onClick={() => setIsFilterOpen(!isFilterOpen)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${isFilterOpen ? 'bg-primary text-white font-bold' : 'bg-gray-100 dark:bg-gray-800'}`}
+                        onClick={() => setIsFilterOpen(true)}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-bold transition-all ${isFilterOpen || Object.values(appliedFilters).some(v => Array.isArray(v) ? v.length > 0 : v !== null)
+                                ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                                : 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
+                            }`}
                     >
-                        <span className="material-icons-outlined text-sm">filter_alt</span>
+                        <span className="material-icons-round text-sm">tune</span>
                         Filters
                     </button>
-                    <button className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
-                        Sort by
-                        <span className="material-icons-outlined text-sm">expand_more</span>
-                    </button>
-                    <button className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
-                        Category
-                        <span className="material-icons-outlined text-sm">expand_more</span>
-                    </button>
-                    <button className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
-                        Colour
-                        <span className="material-icons-outlined text-sm">expand_more</span>
-                    </button>
-                    <button className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
-                        Price Range
-                        <span className="material-icons-outlined text-sm">expand_more</span>
-                    </button>
+
+                    {['Sort by', 'Category', 'Price', 'Brand'].map((filter) => (
+                        <button
+                            key={filter}
+                            className="flex items-center gap-1 px-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-[12px] font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap active:scale-95 transition-all"
+                        >
+                            {filter}
+                            <span className="material-icons-round text-sm opacity-60">expand_more</span>
+                        </button>
+                    ))}
                 </div>
             </header>
 
@@ -153,44 +131,48 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 />
             )}
 
-            {/* Main Results Content (Hidden when filter is open to prevent double scroll) */}
+            {/* Main Results Content */}
             {!isFilterOpen && (
-                <div className="flex-grow overflow-y-auto pb-20">
-                    {/* Value Props */}
-                    <div className="bg-[#FFF8F0] dark:bg-orange-900/10 px-4 py-2 flex items-center justify-between text-xs border-b border-orange-100 dark:border-orange-900/30">
-                        <div className="flex items-center gap-1 text-banner-green dark:text-green-400 font-bold whitespace-nowrap">
-                            <span className="material-icons-outlined text-base">check</span>
-                            Free shipping
-                        </div>
-                        <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-2"></div>
-                        <div className="flex items-center gap-1 text-banner-green dark:text-green-400 font-bold overflow-hidden">
-                            <span className="material-icons-outlined text-base">check</span>
-                            <span className="truncate">Price adjustment within 30 days</span>
-                        </div>
-                        <span className="material-icons-outlined text-gray-400 text-sm ml-1">chevron_right</span>
-                    </div>
-
-                    {/* Deals Banner */}
-                    <div className="px-2 pt-2">
-                        <div className="border border-gray-200 dark:border-gray-700 rounded-full py-1 flex items-center justify-center text-xs font-bold text-gray-700 dark:text-gray-300 bg-white dark:bg-surface-dark shadow-sm">
-                            <span className="material-icons-outlined text-sm mr-1">bolt</span>
-                            Deals end today
+                <div className="flex-grow overflow-y-auto pb-24">
+                    {/* Value Props & Marketing */}
+                    <div className="mt-2 px-4">
+                        <div className="bg-primary/5 dark:bg-primary/10 rounded-2xl p-3 flex items-center justify-between border border-primary/10">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+                                    <span className="material-icons-round text-primary text-lg">local_shipping</span>
+                                </div>
+                                <div>
+                                    <div className="text-[11px] font-black text-primary uppercase tracking-tight">Free Shipping</div>
+                                    <div className="text-[10px] text-gray-500 font-medium">On orders over $30.00</div>
+                                </div>
+                            </div>
+                            <span className="material-icons-round text-primary/40 text-lg">chevron_right</span>
                         </div>
                     </div>
 
-                    <div className="px-3 py-2 text-[10px] text-gray-500 flex items-center gap-1">
-                        Learn more about these results
-                        <span className="material-icons-outlined text-[10px]">help_outline</span>
+                    {/* Meta Info */}
+                    <div className="px-5 py-4 flex items-center justify-between">
+                        <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">
+                            {loading ? 'Searching...' : `${searchResults.length} Results for "${query}"`}
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                            <span className="material-icons-round text-sm">verified_user</span>
+                            Secure
+                        </div>
                     </div>
 
                     {/* Results Grid */}
-                    <div className="px-2">
+                    <div className="px-4">
                         {loading ? (
-                            <div className="flex justify-center items-center h-40 text-sm">Searching...</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {[1, 2, 3, 4].map(n => (
+                                    <div key={n} className="aspect-[3/4] rounded-3xl bg-gray-100 dark:bg-gray-900 animate-pulse"></div>
+                                ))}
+                            </div>
                         ) : searchResults.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2 w-full">
+                            <div className="grid grid-cols-2 gap-3">
                                 {searchResults.map(product => (
-                                    <div key={product.id} className="w-full min-w-0">
+                                    <div key={product.id} className="animate-premium-pop">
                                         <ProductCard
                                             product={product}
                                             onProductClick={onProductClick}
@@ -200,9 +182,18 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex flex-col justify-center items-center h-40 text-sm text-gray-500">
-                                <span className="material-icons-outlined text-4xl mb-2">search_off</span>
-                                <p>No results found for "{query}"</p>
+                            <div className="flex flex-col items-center justify-center py-20 px-8 text-center animate-premium-pop">
+                                <div className="w-20 h-20 rounded-full bg-gray-50 dark:bg-gray-900 flex items-center justify-center mb-6">
+                                    <span className="material-icons-round text-gray-300 dark:text-gray-800 text-4xl">search_off</span>
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">No matching items</h3>
+                                <p className="text-sm text-gray-500 mb-8 max-w-[240px]">We couldn't find anything for "{query}". Try adjusting your filters or search keywords.</p>
+                                <button
+                                    onClick={onBack}
+                                    className="px-8 py-3 rounded-2xl bg-primary text-white font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all"
+                                >
+                                    Try New Search
+                                </button>
                             </div>
                         )}
                     </div>

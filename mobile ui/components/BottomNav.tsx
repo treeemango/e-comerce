@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 
 interface BottomNavProps {
-    activeTab: string;
-    onTabChange: (tab: string) => void;
-    cartCount?: number;
-    notificationCount?: number;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+  cartCount?: number;
+  notificationCount?: number;
 }
 
 interface Ripple {
-    id: number;
-    x: number;
-    y: number;
+  id: number;
+  x: number;
+  y: number;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -55,11 +55,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   const getTabClass = (tabName: string) => {
     const isActive = activeTab === tabName;
-    return `relative flex flex-col items-center gap-1 w-1/5 py-2 px-1 cursor-pointer transition-all duration-300 rounded-xl overflow-hidden ${
-      isActive
-        ? 'text-primary transform scale-105'
-        : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-primary dark:hover:text-primary active:scale-95'
-    }`;
+    return `relative flex flex-col items-center gap-1 w-1/5 py-2 px-1 cursor-pointer transition-all duration-300 rounded-xl overflow-hidden ${isActive
+      ? 'text-primary transform scale-105'
+      : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-primary dark:hover:text-primary active:scale-95'
+      }`;
   };
 
   const tabs = [
@@ -72,70 +71,51 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <nav
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[520px] px-3 pb-safe z-50"
+      className="fixed bottom-3 left-4 right-4 z-50 animate-in slide-in-from-bottom-8 duration-700"
       role="navigation"
       aria-label="Main navigation"
     >
-      <div className="rounded-2xl bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl border border-gray-200/50 dark:border-gray-800/50 shadow-[0_-4px_20px_rgba(0,0,0,0.08),0_10px_30px_rgba(0,0,0,0.12)] py-2">
-        <div className="flex justify-around items-center text-[10px] relative">
-          {tabs.map((tab) => (
+      <div className="max-w-[420px] mx-auto glass rounded-[32px] shadow-premium p-2 flex items-center justify-around translate-y-[-env(safe-area-inset-bottom)]">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
             <button
               key={tab.id}
               onClick={(e) => handleTabClick(tab.id, e)}
-              onTouchStart={(e) => handleTabClick(tab.id, e)}
-              className={getTabClass(tab.id)}
-              aria-label={`${tab.label}${tab.badge ? ` (${tab.badge} items)` : ''}`}
-              aria-pressed={activeTab === tab.id}
+              className={`relative flex flex-col items-center justify-center py-2 px-1 min-w-[64px] transition-all duration-300 ${isActive ? 'text-primary' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
+                }`}
             >
-              {/* Ripple Effects */}
-              {ripples
-                .filter(ripple => ripples.length > 0) // Only show ripples for this button if any exist
-                .map((ripple) => (
-                  <span
-                    key={ripple.id}
-                    className="absolute rounded-full bg-white/30 dark:bg-white/20 animate-ping"
-                    style={{
-                      left: ripple.x - 20,
-                      top: ripple.y - 20,
-                      width: 40,
-                      height: 40,
-                      animationDuration: '0.6s'
-                    }}
-                  />
-                ))}
+              {/* Active Background Glow */}
+              {isActive && (
+                <div className="absolute inset-x-1 inset-y-1 bg-primary/10 rounded-2xl animate-in fade-in zoom-in duration-300" />
+              )}
 
-              {/* Icon Container */}
               <div className="relative">
-                <span className={`material-icons-outlined text-xl transition-transform duration-200 ${
-                  activeTab === tab.id ? 'scale-110' : ''
-                }`}>
+                <span className={`material-icons-round text-2xl transition-all duration-300 ${isActive ? 'scale-110 -translate-y-0.5' : 'scale-100'
+                  }`}>
                   {tab.icon}
                 </span>
 
-                {/* Badge */}
                 {tab.badge && (
-                  <span className={`absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center shadow-sm transition-all duration-300 ${
-                    activeTab === tab.id ? 'animate-bounce scale-110' : ''
-                  }`}>
+                  <span className={`absolute -top-1.5 -right-1.5 bg-price-red text-white text-[9px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center border-2 border-white dark:border-surface-dark shadow-sm transition-all duration-300 ${isActive ? 'scale-110' : ''
+                    }`}>
                     {tab.badge > 99 ? '99+' : tab.badge}
                   </span>
                 )}
               </div>
 
-              {/* Label */}
-              <span className={`font-medium transition-all duration-200 ${
-                activeTab === tab.id ? 'font-semibold' : ''
-              }`}>
+              <span className={`text-[10px] mt-1 font-black uppercase tracking-widest transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0 h-0 hidden'
+                }`}>
                 {tab.label}
               </span>
 
-              {/* Active Indicator */}
-              {activeTab === tab.id && (
-                <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full animate-in slide-in-from-top duration-200" />
+              {/* Dot Indicator */}
+              {isActive && (
+                <div className="absolute -bottom-1.5 w-1 h-1 bg-primary rounded-full" />
               )}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </nav>
   );

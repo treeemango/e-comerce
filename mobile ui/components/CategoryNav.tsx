@@ -11,7 +11,6 @@ interface CategoryNavProps {
 export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSelectCategory, onNavigateToCategories, onCategoryClick }) => {
   const [categories, setCategories] = useState<TrendingCategoryOverlay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,84 +62,43 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSe
     }
   }, [activeCategoryId, loading, categories]);
 
-  const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      const newIndex = Math.max(0, index - 1);
-      setFocusedIndex(newIndex);
-      scrollToButton(newIndex);
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      const newIndex = Math.min(categories.length, index + 1);
-      setFocusedIndex(newIndex);
-      scrollToButton(newIndex);
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      if (index === 0) {
-        onSelectCategory('');
-      } else if (categories[index - 1]) {
-        onSelectCategory(categories[index - 1].subcategory_id);
-      }
-    }
-  };
-
-  const scrollToButton = (index: number) => {
-    if (scrollRef.current) {
-      const buttons = scrollRef.current.querySelectorAll('button');
-      const targetButton = buttons[index];
-      if (targetButton) {
-        targetButton.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center'
-        });
-      }
-    }
-  };
-
   const skeletons = Array.from({ length: 8 });
 
   return (
     <nav
-      className="w-full bg-white dark:bg-surface-dark border-b border-gray-100 dark:border-gray-800"
+      className="w-full bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-gray-100/50 dark:border-gray-800/50 sticky top-0 z-30"
       role="navigation"
       aria-label="Product categories"
     >
       <div
         ref={scrollRef}
-        className="flex items-center gap-2 px-4 py-3 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory"
-        style={{
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch'
-        }}
+        className="flex items-center gap-2.5 px-4 py-3 overflow-x-auto hide-scrollbar scroll-smooth"
       >
-        {/* All Categories Button */}
+        {/* All Categories Button - Premium Style */}
         <button
-          className={`flex-shrink-0 px-4 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 min-h-[44px] min-w-[60px] snap-center focus:outline-none focus:ring-2 focus:ring-primary/50 ${activeCategoryId === '' || activeCategoryId === 'all'
-            ? 'bg-primary text-white shadow-md transform scale-105'
-            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95'
+          className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[12px] font-black uppercase tracking-wider transition-all duration-300 min-h-[44px] snap-center active:scale-95 ${activeCategoryId === '' || activeCategoryId === 'all'
+              ? 'bg-primary text-white shadow-lg shadow-primary/30'
+              : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-100 dark:border-gray-800'
             }`}
           onClick={() => onSelectCategory('')}
-          onKeyDown={(e) => handleKeyDown(e, 0)}
           aria-pressed={activeCategoryId === '' || activeCategoryId === 'all'}
-          tabIndex={0}
         >
-          All
+          <div className="flex items-center gap-2">
+            <span className="material-icons-round text-base">apps</span>
+            <span>All</span>
+          </div>
         </button>
 
-        {/* Category Buttons */}
+        {/* Category Buttons - Glass Chips */}
         {(loading ? skeletons : categories).map((item, idx) => {
           const isActive = activeCategoryId === (item?.subcategory_id || '');
-          const isFocused = focusedIndex === idx + 1;
 
           return (
             <button
               key={loading ? `skeleton-${idx}` : (item?.subcategory_id || idx)}
-              className={`flex-shrink-0 px-4 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 min-h-[44px] snap-center focus:outline-none focus:ring-2 focus:ring-primary/50 ${isActive
-                ? 'bg-primary text-white shadow-md transform scale-105'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95'
-                } ${isFocused ? 'ring-2 ring-primary/50' : ''} ${item?.is_hot ? 'ring-2 ring-red-400/50' : item?.is_trending ? 'ring-2 ring-orange-400/50' : ''
+              className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[12px] font-bold transition-all duration-300 min-h-[44px] snap-center active:scale-95 ${isActive
+                  ? 'bg-primary text-white shadow-lg shadow-primary/30'
+                  : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-100 dark:border-gray-800'
                 }`}
               onClick={() => {
                 if (!loading && item) {
@@ -151,23 +109,21 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSe
                   }
                 }
               }}
-              onKeyDown={(e) => handleKeyDown(e, idx + 1)}
               disabled={loading}
               aria-pressed={isActive}
-              tabIndex={0}
               title={loading ? undefined : item?.subcategory_name}
             >
               {loading ? (
-                <span className="block h-4 w-16 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                <span className="block h-4 w-16 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse" />
               ) : (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   {item?.is_hot && (
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" title="Hot category" />
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-sm shadow-red-500/50" title="Hot category" />
                   )}
                   {item?.is_trending && !item?.is_hot && (
-                    <span className="w-2 h-2 bg-orange-500 rounded-full" title="Trending category" />
+                    <span className="w-2 h-2 bg-orange-500 rounded-full shadow-sm shadow-orange-500/50" title="Trending category" />
                   )}
-                  <span className="truncate max-w-[120px]">
+                  <span className="truncate max-w-[100px]">
                     {item?.parent_category_name || 'Department'}
                   </span>
                 </div>
@@ -176,18 +132,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSe
           );
         })}
       </div>
-
-      {/* Active Indicator Line */}
-      <div className="relative h-0.5 bg-gray-200 dark:bg-gray-700">
-        <div
-          className="absolute top-0 h-full bg-primary transition-all duration-300 ease-out rounded-full"
-          style={{
-            width: '60px',
-            transform: `translateX(${focusedIndex >= 0 ? focusedIndex * 72 : 0}px)`,
-            opacity: focusedIndex >= 0 ? 1 : 0
-          }}
-        />
-      </div>
     </nav>
   );
 };
+

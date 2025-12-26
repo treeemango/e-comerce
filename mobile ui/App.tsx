@@ -38,6 +38,7 @@ import { MobileNotificationWrapper } from './components/MobileNotificationWrappe
 import { UserCoupon, BuyerOrder } from '@/types';
 import { formatPrice } from '@/lib/currency';
 import { useNotifications } from '@/components/NotificationContext';
+import { playCartAddSound } from '@/lib/sounds';
 import NotificationSystem from '@/components/NotificationSystem';
 import NotificationInbox from '@/components/NotificationInbox';
 import { WriteReviewModal } from '@/components/WriteReviewModal';
@@ -75,6 +76,7 @@ const App: React.FC = () => {
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [buyerMessageCount, setBuyerMessageCount] = useState(0);
     const [onboardingType, setOnboardingType] = useState<'seller' | 'driver' | null>(null);
+    const [cartToast, setCartToast] = useState<{ show: boolean, productName: string } | null>(null);
     const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
     const [visualSearchProduct, setVisualSearchProduct] = useState<Product | null>(null);
     const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
@@ -709,6 +711,16 @@ const App: React.FC = () => {
             }
             return [...prev, { product, quantity, variant_id }];
         });
+
+        // Provide feedback
+        setCartToast({ show: true, productName: product.title });
+        setTimeout(() => setCartToast(null), 3000);
+        playCartAddSound();
+
+        // Haptic feedback if available
+        if ('vibrate' in navigator) {
+            navigator.vibrate(20);
+        }
     };
 
     const updateCartQuantity = (productId: string | number | undefined, quantity: number, variantId?: string) => {
@@ -1108,6 +1120,11 @@ const App: React.FC = () => {
                     }}
                     onMessageSeller={handleMessageSeller}
                     user={userProfile as any}
+                    cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+                    onGoToCart={() => {
+                        setSelectedProduct(null);
+                        setActiveTab('cart');
+                    }}
                     onVisitStore={(vendorId) => {
                         setSelectedProduct(null);
                         setSelectedVendorId(vendorId);
@@ -1154,12 +1171,13 @@ const App: React.FC = () => {
                         onSearchClick={() => setIsSearchOpen(true)}
                         onCameraClick={() => setIsVisualSearchOpen(true)}
                         onUserClick={() => setIsAccountOpen(true)}
+                        onNotificationClick={() => setActiveAccountSection('notifications')}
                         userAvatar={userProfile?.avatar_url}
                         userName={userProfile?.name || userProfile?.email}
-                        cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
                         notificationCount={history.length + userCoupons.length}
                     />
                 </div>
+
             )}
 
             {/* Main Content */}
@@ -1294,6 +1312,31 @@ const App: React.FC = () => {
                         }
                     }}
                 />
+            )}
+            {/* Cart Toast Notification */}
+            {cartToast && (
+                <div className="fixed bottom-24 left-4 right-4 z-[100] animate-in slide-in-from-bottom-full duration-300">
+                    <div className="bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-emerald-500/50 backdrop-blur-md">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                                <span className="material-icons text-lg">shopping_cart</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Added to Cart</span>
+                                <span className="text-xs font-bold truncate max-w-[180px]">{cartToast.productName}</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setCartToast(null);
+                                setActiveTab('cart');
+                            }}
+                            className="bg-white text-emerald-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all shadow-sm"
+                        >
+                            View Cart
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

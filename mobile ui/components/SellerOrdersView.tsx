@@ -56,22 +56,25 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
     };
 
     return (
-        <div className="pb-24 bg-gray-50/50 min-h-screen">
-            <div className="bg-white sticky top-0 z-10 px-5 pt-4 pb-2 border-b border-gray-100 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black text-gray-900">Orders</h2>
+        <div className="pb-24 bg-gray-50 dark:bg-black min-h-screen">
+            <div className="bg-white dark:bg-gray-900 sticky top-0 z-10 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800 shadow-sm">
+                <div className="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Orders</h2>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{orders.length} Total</p>
+                    </div>
                     <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 flex items-center justify-center bg-gray-50 rounded-xl">
-                            <span className="material-icons-outlined text-gray-600 text-lg">search</span>
-                        </div>
-                        <div className="w-9 h-9 flex items-center justify-center bg-gray-50 rounded-xl">
-                            <span className="material-icons-outlined text-gray-600 text-lg">filter_list</span>
-                        </div>
+                        <button className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-2xl active:scale-90 transition-transform">
+                            <span className="material-icons-round text-gray-600 dark:text-gray-400 text-lg">search</span>
+                        </button>
+                        <button className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-2xl active:scale-90 transition-transform">
+                            <span className="material-icons-round text-gray-600 dark:text-gray-400 text-lg">filter_list</span>
+                        </button>
                     </div>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex gap-6 overflow-x-auto no-scrollbar pb-1">
+                {/* Premium Tabs */}
+                <div className="flex gap-1 overflow-x-auto hide-scrollbar pb-1">
                     {[
                         { id: 'all', label: 'All' },
                         { id: 'unshipped', label: 'Unshipped' },
@@ -83,9 +86,9 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`whitespace-nowrap pb-2 text-sm font-bold border-b-2 transition-all ${activeTab === tab.id
-                                ? 'border-orange-500 text-orange-600'
-                                : 'border-transparent text-gray-400 hover:text-gray-600'
+                            className={`whitespace-nowrap px-4 py-2 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all ${activeTab === tab.id
+                                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                                 }`}
                         >
                             {tab.label}

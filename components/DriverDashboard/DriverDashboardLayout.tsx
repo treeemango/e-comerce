@@ -19,47 +19,47 @@ const DriverDashboardLayout: React.FC<DriverDashboardLayoutProps> = ({ children,
     ];
 
     return (
-        <div className="min-h-screen bg-slate-50 flex font-display">
-            {/* Sidebar */}
-            <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-900 transition-all duration-300 flex flex-col fixed inset-y-0 z-20`}>
-                <div className="h-16 flex items-center px-6 border-b border-slate-800">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex font-display">
+            {/* Premium Sidebar */}
+            <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 transition-all duration-300 flex flex-col fixed inset-y-0 z-20`}>
+                <div className="h-16 flex items-center px-5 border-b border-slate-800/50">
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/20">
-                            <span className="material-icons text-white text-lg font-bold">local_shipping</span>
+                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/30">
+                            <span className="material-icons-round text-white text-lg">local_shipping</span>
                         </div>
                         {isSidebarOpen && (
                             <div className="whitespace-nowrap">
-                                <span className="text-white font-black text-sm tracking-tight">Driver</span>
-                                <span className="text-orange-500 font-black text-sm tracking-tight text-xs block -mt-1">PORTAL</span>
+                                <span className="text-white font-black text-sm tracking-tight block">Driver</span>
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">PORTAL</span>
                             </div>
                         )}
                     </div>
                 </div>
 
-                <nav className="flex-1 py-6 px-3 space-y-2">
+                <nav className="flex-1 py-6 px-3 space-y-1.5">
                     {menuItems.map((item) => (
                         <button
                             key={item.id}
                             onClick={() => onTabChange(item.id as any)}
                             className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all duration-200 group ${activeTab === item.id
-                                    ? 'bg-orange-500 text-white shadow-xl shadow-orange-500/20'
-                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-xl shadow-emerald-500/20'
+                                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                                 }`}
                         >
-                            <span className={`material-icons ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-orange-400 font-bold'}`}>
+                            <span className={`material-icons-round ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-emerald-400'}`}>
                                 {item.icon}
                             </span>
-                            {isSidebarOpen && <span className="font-bold text-sm tracking-wide">{item.label}</span>}
+                            {isSidebarOpen && <span className="font-bold text-sm">{item.label}</span>}
                         </button>
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-slate-800">
+                <div className="p-4 border-t border-slate-800/50">
                     <button
                         onClick={onSignOut}
-                        className="w-full flex items-center gap-4 px-3 py-3 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all group"
+                        className="w-full flex items-center gap-4 px-3 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all group"
                     >
-                        <span className="material-icons group-hover:text-red-400 font-bold">logout</span>
+                        <span className="material-icons-round group-hover:text-red-400">logout</span>
                         {isSidebarOpen && <span className="font-bold text-sm">Sign Out</span>}
                     </button>
                 </div>

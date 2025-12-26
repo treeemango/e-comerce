@@ -257,6 +257,36 @@ class SoundPlayer {
             console.warn('Could not play notification sound:', error);
         }
     }
+    /**
+     * Play a pleasant "add to cart" sound - snappy positive chirp
+     */
+    playCartAddSound() {
+        try {
+            const ctx = this.getContext();
+            if (ctx.state === 'suspended') ctx.resume();
+
+            const now = ctx.currentTime;
+
+            // Main snappy ping
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+            osc.start(now);
+            osc.stop(now + 0.15);
+        } catch (error) {
+            console.warn('Could not play cart add sound:', error);
+        }
+    }
 }
 
 // Export a singleton instance
@@ -269,3 +299,4 @@ export const playClickSound = () => soundPlayer.playClickSound();
 export const playWishlistAddSound = () => soundPlayer.playWishlistAddSound();
 export const playWishlistRemoveSound = () => soundPlayer.playWishlistRemoveSound();
 export const playNotificationSound = () => soundPlayer.playNotificationSound();
+export const playCartAddSound = () => soundPlayer.playCartAddSound();

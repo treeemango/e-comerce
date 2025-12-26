@@ -155,6 +155,7 @@ export interface VendorInfo {
     user_id?: string; // The seller_id from products
     business_name: string;
     business_description?: string;
+    logo_url?: string;
     join_date?: string;
     vendor_rating?: number;
     review_count?: number;
@@ -758,6 +759,10 @@ export interface SellerOrder {
     tax_rate?: number;
     delivery_fee?: number;
     fulfillment_type?: 'official_courier' | 'local_parcel';
+    tracking_number?: string | null;
+    carrier?: string | null;
+    shipped_at?: string | null;
+    shipment_proof_url?: string | null;
     parcel_details?: {
         company: string;
         waybill_number: string;

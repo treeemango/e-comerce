@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product } from '@/types';
+import { playCartAddSound } from '@/lib/sounds';
 
 interface ProductCardProps {
     product: Product;
@@ -112,7 +113,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
 
     return (
         <div
-            className="bg-surface-light dark:bg-surface-dark rounded-md overflow-hidden relative group shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-all cursor-pointer active:scale-95"
+            className="bg-surface-light dark:bg-surface-dark rounded-2xl overflow-hidden relative group shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer active:scale-[0.98] border border-gray-100/50 dark:border-gray-800/50"
             onClick={() => onProductClick?.(product)}
             onTouchStart={handlePressStart}
             onTouchEnd={handlePressEnd}
@@ -122,257 +123,126 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
             onMouseLeave={handlePressEnd}
         >
             {/* Image Container */}
-            <div className="aspect-square overflow-hidden bg-gray-200 dark:bg-gray-800 relative">
+            <div className="aspect-[4/5] overflow-hidden bg-gray-50 dark:bg-gray-900 relative">
                 <img
                     src={product.image || 'https://images.unsplash.com/photo-1560393464-5c69a73c5770?auto=format&fit=crop&q=80&w=400'}
                     alt={product.title}
-                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                 />
 
-                {/* Visual Search Button - Bottom Left */}
+                {/* Simplified Badges - Top Left */}
+                <div className="absolute top-2 left-2 flex flex-col gap-1.5 z-10 transition-transform duration-300">
+                    {discountPercent > 0 && (
+                        <div className="bg-price-red text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-sm">
+                            -{discountPercent}%
+                        </div>
+                    )}
+                    {dealBadge && (
+                        <div className={`${dealBadge.color} text-white text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm`}>
+                            <span className="material-icons-round text-[10px]">{dealBadge.icon}</span>
+                            {dealBadge.text}
+                        </div>
+                    )}
+                </div>
+
+                {/* Visual Search - Bottom Left */}
                 <div className="absolute bottom-3 left-3 z-10">
-                    <div
-                        className="w-8 h-8 rounded-full bg-[#fff] flex items-center justify-center cursor-pointer shadow-[0_2px_6px_2px_rgba(0,0,0,0.12)] active:scale-95 transition-transform"
+                    <button
+                        className="w-9 h-9 rounded-xl bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-90 transition-all border border-black/5"
                         onClick={(e) => {
                             e.stopPropagation();
                             onVisualSearch?.(product);
                         }}
                     >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            {/* Four Corner Brackets */}
-                            <path d="M7 3H5c-1.1 0-2 .9-2 2v2" />
-                            <path d="M17 3h2c1.1 0 2 .9 2 2v2" />
-                            <path d="M21 17v2c0 1.1-.9 2-2 2h-2" />
-                            <path d="M3 17v2c0 1.1.9 2 2 2h2" />
-                            {/* Central Lens */}
-                            <circle cx="12" cy="12" r="3.2" />
-                            <path d="M14.5 14.5L15.5 15.5" />
-                        </svg>
-                    </div>
+                        <span className="material-icons-round text-gray-900 text-lg">center_focus_weak</span>
+                    </button>
                 </div>
 
-                {/* Top Left Badges - Show only on press/hover */}
-                <div className={`absolute top-2 left-2 flex flex-col gap-1 transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
-                    {/* Deal Badge */}
-                    {dealBadge && (
-                        <div className={`${dealBadge.color} text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-lg`}>
-                            <span className="material-icons-round text-[10px]">{dealBadge.icon}</span>
-                            {dealBadge.text}
-                        </div>
-                    )}
-
-                    {/* New Badge */}
-                    {isNew && (
-                        <div className="bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                            NEW
-                        </div>
-                    )}
-
-                    {/* Featured Badge */}
+                {/* Featured/Hot Indicator - Bottom Right */}
+                <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1 items-end">
                     {product.is_featured && (
-                        <div className="bg-purple-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                            ⭐ FEATURED
+                        <div className="bg-amber-400 text-amber-950 p-1.5 rounded-xl shadow-lg backdrop-blur-md flex items-center justify-center">
+                            <span className="material-icons-round text-sm">auto_awesome</span>
                         </div>
                     )}
-                    {/* Bulk Deal Badge */}
-                    {product.has_quantity_discount && (
-                        <div className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
-                            <span className="material-icons-round text-[10px]">groups</span>
-                            BULK DEAL
-                        </div>
-                    )}
-                    {/* Buy X Get Y Badge */}
-                    {product.auto_discount_type === 'buy_x_get_y' && (
-                        <div className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
-                            <span className="material-icons-round text-[10px]">redeem</span>
-                            {`BUY ${product.auto_discount_buy_qty} GET ${product.auto_discount_get_qty}`}
-                        </div>
-                    )}
-                </div>
-
-                {/* Top Right Badges - Show only on press/hover */}
-                <div className={`absolute top-2 right-2 flex flex-col gap-1 items-end transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
-                    {/* Gallery Indicator */}
-                    {hasGallery && (
-                        <div className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 rounded-full">
-                            📷 {product.gallery_media.length}
-                        </div>
-                    )}
-
-                    {/* Discount Badge */}
-                    {discountPercent > 0 && (
-                        <div className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
-                            -{discountPercent}%
-                        </div>
-                    )}
-                </div>
-
-                {/* Countdown Timer - Show only on press/hover */}
-                {timeLeft && timeLeft !== 'Ended' && (
-                    <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ${isPressed ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                        <div className="bg-black/80 backdrop-blur-sm text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-                            ⏰ {timeLeft} left
-                        </div>
-                    </div>
-                )}
-
-                {/* Bottom Left - Brand/Seller - REMOVED from here to avoid collision with Visual Search */}
-
-                {/* Bottom Right - Brand, Delivery & Stock - Show only on press/hover */}
-                <div className={`absolute bottom-2 right-2 flex flex-col gap-1 items-end transition-all duration-300 ${isPressed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
-                    {/* Brand Name */}
-                    {product.brand_name && (
-                        <span className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium mb-1">
-                            {product.brand_name}
-                        </span>
-                    )}
-
-                    {/* Free Delivery */}
-                    {product.free_delivery && (
-                        <div className="bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
-                            🚚 FREE
-                        </div>
-                    )}
-
-                    {/* Express Delivery */}
-                    {product.is_express_delivery && (
-                        <div className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
-                            🚀 EXPRESS
-                        </div>
-                    )}
-
-                    {/* Low Stock Warning */}
                     {isLowStock && (
-                        <div className="bg-orange-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
-                            Only {product.stock} left!
+                        <div className="bg-orange-500/90 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md backdrop-blur-sm">
+                            FEW LEFT
                         </div>
                     )}
                 </div>
 
                 {/* Out of Stock Overlay */}
                 {product.in_stock === false && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <div className="bg-red-600 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-lg">
-                            OUT OF STOCK
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4">
+                        <div className="bg-white/90 text-black text-[10px] font-black px-3 py-1.5 rounded-full shadow-xl uppercase tracking-widest">
+                            Sold Out
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Content */}
-            <div className="p-3 relative">
+            {/* Content Section */}
+            <div className="p-3.5 space-y-2">
+                {/* Seller & Rating Line */}
+                <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter truncate max-w-[60%]">
+                        {product.brand_name || product.vendor?.business_name || 'Verified Seller'}
+                    </span>
+                    {product.rating && (
+                        <div className="flex items-center gap-0.5 bg-gray-50 dark:bg-white/5 px-1.5 py-0.5 rounded-lg border border-gray-100 dark:border-white/5">
+                            <span className="material-icons-round text-[10px] text-amber-400">star</span>
+                            <span className="text-[10px] font-black dark:text-gray-200">{product.rating.toFixed(1)}</span>
+                        </div>
+                    )}
+                </div>
+
                 {/* Title */}
-                <div className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 leading-tight mb-2 font-normal">
+                <div className="text-[13px] text-gray-700 dark:text-gray-300 line-clamp-2 leading-[1.3] font-medium min-h-[2.6em]">
                     {product.title}
                 </div>
 
-                {/* Rating & Reviews */}
-                {((product.rating ?? 0) > 0 && (product.reviews ?? 0) > 0) && (
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-1 text-[11px]">
-                            <span className="material-icons !text-[12px] text-gray-900 dark:text-gray-100">star</span>
-                            <span className="font-bold text-text-primary-light dark:text-text-primary-dark">{product.rating?.toFixed(1)}</span>
-                            <span className="text-gray-500 font-medium">({product.reviews || 0})</span>
-                        </div>
-
-                        {/* Seller Badges Line */}
-                        <div className="flex items-center gap-2">
-                            {/* Years Badge */}
-                            <div className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-[10px] font-bold text-gray-600 dark:text-gray-400">
-                                {product.seller_since ? `${new Date().getFullYear() - new Date(product.seller_since).getFullYear()}YRS` : '1YR'}
-                            </div>
-
-                            {/* Seller Rating Badge */}
-                            {product.seller_rating && (
-                                <div className="flex items-center gap-1 bg-[#127FFF]/10 dark:bg-[#127FFF]/20 px-1.5 py-0.5 rounded-full">
-                                    <span className="material-icons-round text-[#127FFF] text-xs">verified</span>
-                                    <span className="text-xs text-[#127FFF] font-bold">
-                                        Verified
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Delivery Info */}
-                {(product.free_delivery || product.delivery_time_estimate || product.deliveryScope || (product.delivery_locations && product.delivery_locations.length > 0)) && (
-                    <div className="flex flex-wrap items-center gap-2 text-[10.5px] mb-2">
-                        {(product.free_delivery || product.delivery_time_estimate) && (
-                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-slate-100 via-white to-slate-100 px-2.75 py-1 font-semibold text-slate-800 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm dark:from-slate-800/60 dark:via-slate-900/60 dark:to-slate-800/60 dark:text-slate-100 dark:ring-slate-700/70">
-                                <span className="material-icons !text-[13px] leading-none text-slate-500 dark:text-slate-300">
-                                    {product.is_express_delivery ? 'bolt' : 'local_shipping'}
-                                </span>
-                                <span className="leading-none">
-                                    {product.free_delivery ? 'Free Delivery' : `Delivery ${product.delivery_time_estimate}`}
-                                </span>
-                            </span>
-                        )}
-
-                        {(product.deliveryScope || (product.delivery_locations && product.delivery_locations.length > 0)) && (
-                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
-                                <span className="material-icons !text-[13px] leading-none">travel_explore</span>
-                                <span className="leading-none">
-                                    {product.delivery_locations && product.delivery_locations.length > 0
-                                        ? product.delivery_locations.join(', ')
-                                        : product.deliveryScope === 'nationwide' ? 'Nationwide' : 'Local'}
-                                </span>
-                            </span>
-                        )}
-
-                        {/* Vendor Country */}
-                        {product.vendor?.business_country && (
-                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
-                                <span className="material-icons !text-[13px] leading-none">public</span>
-                                <span className="leading-none">{product.vendor.business_country}</span>
-                            </span>
-                        )}
-                    </div>
-                )}
-
-
-                {/* Price Section */}
-                <div className="mb-2 pr-10 relative">
-                    <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-lg font-black text-gray-900 dark:text-white">
-                            {formatPrice(product.price || 0, product.currency)}
-                        </span>
-                        {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400">/{product.sale_unit}</span>}
+                {/* Price & Action */}
+                <div className="flex items-end justify-between gap-2 pt-1">
+                    <div className="flex flex-col">
                         {product.originalPrice && (
-                            <span className="text-sm line-through text-gray-500">
+                            <span className="text-[10px] line-through text-gray-400 mb-0.5">
                                 {formatPrice(product.originalPrice, product.currency)}
                             </span>
                         )}
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-base font-black text-black dark:text-white leading-none">
+                                {formatPrice(product.price || 0, product.currency)}
+                            </span>
+                            {product.sale_unit && (
+                                <span className="text-[9px] font-bold text-gray-400 uppercase">/{product.sale_unit}</span>
+                            )}
+                        </div>
                     </div>
+
                     {onAddToCart && (!product.listing_type || product.listing_type === 'direct_purchase') && (
                         <button
-                            className="absolute -right-2 top-0 h-10 w-10 flex items-center justify-center rounded-full bg-red-600 text-white shadow-lg active:scale-90 transition-transform z-10"
+                            className="w-10 h-10 rounded-2xl bg-primary text-white shadow-lg shadow-primary/20 active:scale-90 transition-transform flex items-center justify-center"
                             onClick={(e) => {
                                 e.stopPropagation();
+                                playCartAddSound();
+                                triggerHaptic();
                                 onAddToCart(product);
                             }}
                         >
-                            <span className="material-icons text-xl">add_shopping_cart</span>
+                            <span className="material-icons-round text-xl">add_shopping_cart</span>
                         </button>
-                    )}
-                    {/* Stock & MOQ Info */}
-                    <div className="flex flex-col gap-1 text-[11px] text-slate-500 mt-1">
-                        {product.stock ? (
-                            <span>{product.stock} {product.sale_unit || 'pieces'} (MOQ)</span>
-                        ) : (
-                            <span>1 piece (MOQ)</span>
-                        )}
-                    </div>
-
-                    {/* Savings */}
-                    {savings > 0 && (
-                        <div className="text-[11px] text-green-600 font-bold mt-1">
-                            Save {formatPrice(savings, product.currency)}
-                        </div>
                     )}
                 </div>
 
+                {/* Delivery Info */}
+                {product.free_delivery && (
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-600 dark:text-green-400 pt-1">
+                        <span className="material-icons-outlined text-xs">local_shipping</span>
+                        <span>Free Shipping</span>
+                    </div>
+                )}
             </div>
         </div>
     );

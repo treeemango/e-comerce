@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SellerOrder } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
 import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady, submitShipmentProof } from '../../lib/api';
+import { MediaService } from '../../lib/media';
 import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
 
 interface SellerOrderDetailsSheetProps {
@@ -32,6 +33,7 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
 
     const [shipmentProofUrl, setShipmentProofUrl] = useState('');
     const [isSubmittingProof, setIsSubmittingProof] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -70,7 +72,7 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                 const result = await fulfillParcelOrder(order.id, parcelService, waybillNo, collectionPoint);
                 console.log('fulfillParcelOrder result:', result);
                 if (result.success) {
-                    alert(`✅ Parcel shipped! Collection OTP: ${result.otp}\n\nBuyer will see this code in their app.`);
+                    alert(`✅ Parcel shipped! Mutual Protection Enabled.\n\nThe buyer will receive a secret 4-digit code in their app for secure collection.`);
                     onOrderUpdated?.();
                     onClose();
                 } else {
@@ -143,6 +145,23 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
         order.status?.toLowerCase() === 'unshipped' ||
         order.status?.toLowerCase() === 'ready_for_pickup';
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        try {
+            const sellerId = order.items?.[0]?.seller_id || 'unknown_seller';
+            const result = await MediaService.getInstance().uploadFile(file, sellerId);
+            setShipmentProofUrl(result.url);
+        } catch (err) {
+            console.error('Upload failed:', err);
+            alert('Failed to upload image.');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     const handleSubmitProof = async () => {
         if (!shipmentProofUrl.trim()) return;
         setIsSubmittingProof(true);
@@ -167,6 +186,11 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
         order.status?.toLowerCase() === 'unshipped';
 
     const currency = order.items?.[0]?.currency || 'USD';
+
+    const isLocalParcel = order.fulfillment_type === 'local_parcel' ||
+        order.shipping_method?.toLowerCase().includes('parcel') ||
+        order.carrier?.toLowerCase().includes('parcel') ||
+        !!order.parcel_details;
 
     return (
         <div className="fixed inset-0 z-[100] flex flex-col">
@@ -298,109 +322,7 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                         </div>
                     </div>
 
-                    {/* Fulfillment Selection */}
-                    {canShip && showTrackingInput && (
-                        <div className="space-y-4 animate-in slide-in-from-top duration-300">
-                            <div className="flex bg-gray-100 p-1 rounded-xl">
-                                <button
-                                    onClick={() => setFulfillmentMethod('courier')}
-                                    className={cn(
-                                        "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
-                                        fulfillmentMethod === 'courier' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-                                    )}
-                                >
-                                    Official Courier
-                                </button>
-                                <button
-                                    onClick={() => setFulfillmentMethod('parcel')}
-                                    className={cn(
-                                        "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
-                                        fulfillmentMethod === 'parcel' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-                                    )}
-                                >
-                                    Local Parcel
-                                </button>
-                            </div>
 
-                            {fulfillmentMethod === 'courier' ? (
-                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-                                    <label className="block text-sm font-bold text-blue-900 mb-2">
-                                        Tracking Number
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={trackingNumber}
-                                        onChange={(e) => setTrackingNumber(e.target.value)}
-                                        placeholder="e.g., 1Z999AA101234..."
-                                        className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <p className="text-[10px] text-blue-600 mt-2 font-medium italic">
-                                        * Leave blank if not available yet
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 space-y-3">
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase text-orange-900 mb-1">
-                                            Parcel Service / Shuttle Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={parcelService}
-                                            onChange={(e) => setParcelService(e.target.value)}
-                                            placeholder="e.g., EasyCoach, North Rift"
-                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase text-orange-900 mb-1">
-                                            Waybill Number
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={waybillNo}
-                                            onChange={(e) => setWaybillNo(e.target.value)}
-                                            placeholder="Enter waybill ID"
-                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase text-orange-900 mb-1">
-                                            Collection Office (Optional)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={collectionPoint}
-                                            onChange={(e) => setCollectionPoint(e.target.value)}
-                                            placeholder="e.g., Nairobi Office, Meru Stage"
-                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* OTP Verification for Parcel Orders */}
-                    {order.status?.toLowerCase() === 'shipped' && showOTPInput && (
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 animate-in zoom-in duration-300">
-                            <h3 className="text-sm font-black text-emerald-900 mb-3 flex items-center gap-2">
-                                <span className="material-icons text-lg">verified_user</span>
-                                Verify Collection
-                            </h3>
-                            <p className="text-xs text-emerald-700 mb-4 font-medium">
-                                Ask the buyer for their 4-digit collection code to finalize this delivery.
-                            </p>
-                            <input
-                                type="text"
-                                maxLength={4}
-                                value={otpCode}
-                                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                                placeholder="####"
-                                className="w-full text-center text-2xl tracking-[1em] font-black py-4 bg-white border-2 border-emerald-200 rounded-2xl focus:outline-none focus:border-emerald-500 text-emerald-900"
-                            />
-                        </div>
-                    )}
                 </div>
 
                 {/* Actions */}
@@ -437,37 +359,187 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                     Ship This Order
                                 </button>
                             ) : (
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => setShowTrackingInput(false)}
-                                        className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
-                                    >
-                                        <span className="material-icons">close</span>
-                                    </button>
-                                    <button
-                                        onClick={handleShipOrder}
-                                        disabled={isProcessing}
-                                        className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                    >
-                                        {isProcessing ? (
-                                            <>
-                                                <span className="material-icons animate-spin text-lg">sync</span>
-                                                Processing...
-                                            </>
+                                <div className="space-y-4 animate-in slide-in-from-bottom duration-300">
+                                    <div className="space-y-3">
+                                        <div className="flex bg-gray-100 p-1 rounded-xl">
+                                            <button
+                                                onClick={() => setFulfillmentMethod('courier')}
+                                                className={cn(
+                                                    "flex-1 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all",
+                                                    fulfillmentMethod === 'courier' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                                                )}
+                                            >
+                                                Courier
+                                            </button>
+                                            <button
+                                                onClick={() => setFulfillmentMethod('parcel')}
+                                                className={cn(
+                                                    "flex-1 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all",
+                                                    fulfillmentMethod === 'parcel' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                                                )}
+                                            >
+                                                Parcel
+                                            </button>
+                                        </div>
+
+                                        {fulfillmentMethod === 'courier' ? (
+                                            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                                                <label className="block text-[10px] font-black uppercase text-blue-900 mb-1.5">
+                                                    Tracking Number
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={trackingNumber}
+                                                    onChange={(e) => setTrackingNumber(e.target.value)}
+                                                    placeholder="Enter tracking ID"
+                                                    className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
                                         ) : (
-                                            <>
-                                                <span className="material-icons text-lg">check_circle</span>
-                                                Confirm {fulfillmentMethod === 'courier' ? 'Shipment' : 'Parcel Pickup'}
-                                            </>
+                                            <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3 space-y-2">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="block text-[9px] font-black uppercase text-orange-900 mb-1">Service</label>
+                                                        <input
+                                                            type="text"
+                                                            value={parcelService}
+                                                            onChange={(e) => setParcelService(e.target.value)}
+                                                            placeholder="EasyCoach..."
+                                                            className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg text-xs"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[9px] font-black uppercase text-orange-900 mb-1">Waybill</label>
+                                                        <input
+                                                            type="text"
+                                                            value={waybillNo}
+                                                            onChange={(e) => setWaybillNo(e.target.value)}
+                                                            placeholder="ID..."
+                                                            className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg text-xs"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase text-orange-900 mb-1">Office (Optional)</label>
+                                                    <input
+                                                        type="text"
+                                                        value={collectionPoint}
+                                                        onChange={(e) => setCollectionPoint(e.target.value)}
+                                                        placeholder="Nairobi Office..."
+                                                        className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg text-xs"
+                                                    />
+                                                </div>
+                                            </div>
                                         )}
-                                    </button>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setShowTrackingInput(false)}
+                                            className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
+                                        >
+                                            <span className="material-icons">close</span>
+                                        </button>
+                                        <button
+                                            onClick={handleShipOrder}
+                                            disabled={isProcessing}
+                                            className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isProcessing ? (
+                                                <>
+                                                    <span className="material-icons animate-spin text-lg">sync</span>
+                                                    Processing...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="material-icons text-lg">check_circle</span>
+                                                    Confirm Shipment
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     )}
 
                     {order.status?.toLowerCase() === 'shipped' && (
-                        <>
+                        <div className="px-1 space-y-4">
+                            {/* Verification Section */}
+                            {(isLocalParcel || showOTPInput) && (
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 space-y-4 animate-in zoom-in duration-300">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                                            <span className="material-icons text-emerald-600">verified_user</span>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-black text-emerald-900">Verify Collection</h3>
+                                            <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Mutual Protection</p>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-emerald-700 leading-relaxed font-medium">
+                                        Ask the buyer for their 4-digit code to release funds to your account.
+                                    </p>
+
+                                    <div className="space-y-4">
+                                        <input
+                                            type="text"
+                                            maxLength={4}
+                                            value={otpCode}
+                                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                            placeholder="####"
+                                            className="w-full text-center text-3xl tracking-[0.8em] font-black py-5 bg-white border-2 border-emerald-200 rounded-2xl focus:outline-none focus:border-emerald-500 text-emerald-900 shadow-inner"
+                                        />
+
+                                        <button
+                                            onClick={handleVerifyOTP}
+                                            disabled={isProcessing || otpCode.length !== 4}
+                                            className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isProcessing ? (
+                                                <span className="material-icons animate-spin text-lg">sync</span>
+                                            ) : (
+                                                <span className="material-icons text-lg">verified</span>
+                                            )}
+                                            Verify & Complete
+                                        </button>
+
+                                        {showOTPInput && !isLocalParcel && (
+                                            <button
+                                                onClick={() => setShowOTPInput(false)}
+                                                className="w-full py-2 text-emerald-600 text-[10px] font-bold uppercase tracking-widest text-center"
+                                            >
+                                                Cancel Manual Verification
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Standard Confirmation Info (Only if not already showing OTP form for parcel) */}
+                            {!isLocalParcel && !showOTPInput && (
+                                <div className="p-5 bg-blue-50 border border-blue-100 rounded-2xl space-y-4">
+                                    <div className="flex items-start gap-3">
+                                        <span className="material-icons text-blue-500 text-lg">hourglass_empty</span>
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-bold text-blue-900">Waiting for Confirmation</p>
+                                            <p className="text-[10px] text-blue-700 leading-relaxed">
+                                                The buyer can confirm receipt from their app. You can also manually verify their collection code (OTP).
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowOTPInput(true)}
+                                        className="w-full bg-white border border-blue-200 text-blue-600 py-3 rounded-xl font-bold text-xs active:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <span className="material-icons text-sm">task_alt</span>
+                                        Enter Collection Code
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Shipment Evidence Section */}
                             <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 animate-in fade-in duration-500">
                                 <h3 className="text-sm font-black text-rose-900 mb-2 flex items-center gap-2">
                                     <span className="material-icons text-lg">policy</span>
@@ -477,13 +549,39 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                     Upload a photo of your shipping receipt or waybill. This protects you if the buyer raises a dispute.
                                 </p>
                                 <div className="space-y-3">
-                                    <input
-                                        type="text"
-                                        value={shipmentProofUrl}
-                                        onChange={(e) => setShipmentProofUrl(e.target.value)}
-                                        placeholder="Paste Image URL / Proof Link"
-                                        className="w-full px-4 py-3 bg-white border border-rose-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                                    />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={shipmentProofUrl}
+                                            onChange={(e) => setShipmentProofUrl(e.target.value)}
+                                            placeholder="Paste URL or Upload"
+                                            className="flex-1 px-4 py-3 bg-white border border-rose-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                        />
+                                        <input
+                                            type="file"
+                                            id="shipment-proof-upload-mobile"
+                                            className="hidden"
+                                            accept="image/*"
+                                            capture="environment"
+                                            onChange={handleFileUpload}
+                                        />
+                                        <label
+                                            htmlFor="shipment-proof-upload-mobile"
+                                            className="px-4 bg-white border border-rose-200 text-rose-600 rounded-xl flex items-center justify-center active:bg-rose-50 transition-colors"
+                                        >
+                                            {isUploading ? (
+                                                <span className="material-icons animate-spin text-lg">sync</span>
+                                            ) : (
+                                                <span className="material-icons text-lg">photo_camera</span>
+                                            )}
+                                        </label>
+                                    </div>
+                                    {order.shipment_proof_url && (
+                                        <div className="p-2 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-lg border border-emerald-100 flex items-center gap-1">
+                                            <span className="material-icons text-xs">check_circle</span>
+                                            Proof already submitted
+                                        </div>
+                                    )}
                                     <button
                                         onClick={handleSubmitProof}
                                         disabled={isSubmittingProof || !shipmentProofUrl.trim()}
@@ -493,54 +591,7 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                     </button>
                                 </div>
                             </div>
-
-                            <div className="space-y-3">
-                                <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
-                                    <span className="material-icons text-blue-500 text-lg">hourglass_empty</span>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-bold text-blue-900">Waiting for Confirmation</p>
-                                        <p className="text-[10px] text-blue-700 leading-relaxed">
-                                            The buyer can now confirm receipt directly from their app. You can also manually verify their collection code (OTP) if you are at the handover point.
-                                        </p>
-                                    </div>
-                                </div>
-                                {!showOTPInput ? (
-                                    <button
-                                        onClick={() => setShowOTPInput(true)}
-                                        className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <span className="material-icons text-lg">task_alt</span>
-                                        Complete Delivery (OTP)
-                                    </button>
-                                ) : (
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setShowOTPInput(false)}
-                                            className="px-4 bg-gray-100 text-gray-400 rounded-2xl active:scale-[0.95] transition-all"
-                                        >
-                                            <span className="material-icons">close</span>
-                                        </button>
-                                        <button
-                                            onClick={handleVerifyOTP}
-                                            disabled={isProcessing}
-                                            className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                        >
-                                            {isProcessing ? (
-                                                <>
-                                                    <span className="material-icons animate-spin text-lg">sync</span>
-                                                    Verifying...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <span className="material-icons text-lg">verified</span>
-                                                    Verify & Complete
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </>
+                        </div>
                     )}
 
 

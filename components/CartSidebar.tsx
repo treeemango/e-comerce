@@ -60,50 +60,53 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                     }`}
             >
                 {/* Header */}
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-baseline gap-2">
-                            <span className="material-icons text-2xl text-slate-400">shopping_cart</span>
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 relative overflow-hidden">
+                    {/* Subtle background gradient */}
+                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-primary/5 rounded-full blur-[80px]"></div>
+
+                    <div className="flex items-center justify-between mb-6 relative z-10">
+                        <div className="flex items-baseline gap-3">
+                            <span className="material-icons-round text-2xl text-primary">shopping_cart</span>
                             <h2 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Subtotal</h2>
                         </div>
-                        <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                            <span className="material-icons text-slate-400">close</span>
+                        <button onClick={onClose} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors active:scale-90">
+                            <span className="material-icons-round text-slate-400">close</span>
                         </button>
                     </div>
 
-                    <div className="text-center mb-8">
-                        <span className="text-4xl font-black text-slate-900 dark:text-white font-mono">
+                    <div className="text-center mb-8 relative z-10">
+                        <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tight">
                             {symbol}{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                     </div>
 
-                    {/* Shipping Bar */}
-                    <div className="p-4 rounded-2xl bg-orange-50 dark:bg-orange-500/5 border border-orange-100 dark:border-orange-500/20">
+                    {/* Shipping Bar - Enhanced */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/10 dark:to-teal-500/10 border border-emerald-100 dark:border-emerald-500/20 relative z-10">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                                <span className="material-icons text-sm">check_circle</span>
+                                <span className="material-icons-round text-sm">local_shipping</span>
                                 Free shipping
                             </div>
                             <span className="text-[10px] font-bold text-slate-400">Goal: {symbol}50</span>
                         </div>
-                        <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-2.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700"
+                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-700 shadow-md shadow-emerald-500/30"
                                 style={{ width: `${shippingProgress}%` }}
                             />
                         </div>
                     </div>
 
-                    <div className="mt-8 space-y-3">
+                    <div className="mt-8 space-y-3 relative z-10">
                         <button
                             onClick={onCheckout}
-                            className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-slate-900/20"
+                            className="w-full bg-gradient-to-r from-primary to-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/30"
                         >
                             Checkout ({cartItems.length})
                         </button>
                         <button
                             onClick={onViewCart}
-                            className="w-full border-2 border-slate-100 dark:border-slate-800 py-3 rounded-2xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
+                            className="w-full border-2 border-slate-200 dark:border-slate-700 py-3 rounded-2xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
                         >
                             Go to cart
                         </button>

@@ -82,7 +82,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, dri
     }
 
     return (
-        <div className="bg-slate-900 min-h-screen text-white pb-24">
+        <div className="bg-gray-950 min-h-screen text-white pb-24">
             {verifyingJobId && activeJobs.find(j => j.id === verifyingJobId) && (
                 <MobileDeliveryDocs
                     orderId={activeJobs.find(j => j.id === verifyingJobId)!.order_id}
@@ -91,35 +91,44 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ partnerId, dri
                 />
             )}
 
-            {/* Driver Header */}
-            <div className="bg-slate-800 px-6 pt-16 pb-10 rounded-b-[3rem] shadow-2xl relative overflow-hidden">
-                <div className="absolute -top-10 -right-10 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl"></div>
+            {/* Premium Driver Header */}
+            <div className="bg-gradient-to-b from-gray-900 to-gray-950 px-6 pt-14 pb-10 rounded-b-[3rem] relative overflow-hidden border-b border-gray-800/50">
+                {/* Gradient glow orbs */}
+                <div className="absolute -top-20 -right-20 w-60 h-60 bg-primary/20 rounded-full blur-[100px]"></div>
+                <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-[80px]"></div>
+
                 <div className="relative z-10">
-                    <div className="flex justify-between items-start mb-6">
+                    <div className="flex justify-between items-start mb-8">
                         <div>
-                            <p className="text-orange-500 font-black text-xs uppercase tracking-widest mb-1">On Duty</p>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-lg shadow-emerald-500/50"></span>
+                                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">On Duty</span>
+                            </div>
                             <h1 className="text-3xl font-black tracking-tight">{driverName}</h1>
                         </div>
-                        <button onClick={onSignOut} className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400">
-                            <span className="material-icons text-sm">logout</span>
+                        <button onClick={onSignOut} className="w-12 h-12 rounded-2xl bg-gray-800/80 backdrop-blur-sm flex items-center justify-center text-gray-400 border border-gray-700/50 active:scale-90 transition-transform">
+                            <span className="material-icons-round text-lg">logout</span>
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div className="flex-1 bg-slate-700/50 backdrop-blur-sm p-4 rounded-3xl border border-slate-700">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Active Jobs</p>
-                            <p className="text-2xl font-black text-white">{activeJobs.length}</p>
+                    {/* Stats Row */}
+                    <div className="flex items-stretch gap-3">
+                        <div className="flex-1 bg-gray-800/60 backdrop-blur-md p-5 rounded-3xl border border-gray-700/50">
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Active Jobs</p>
+                            <p className="text-3xl font-black text-white">{activeJobs.length}</p>
                         </div>
                         <div
                             onClick={() => setCurrentView('earnings')}
-                            className="flex-1 bg-orange-500 p-4 rounded-3xl shadow-lg shadow-orange-500/20 active:scale-95 transition cursor-pointer"
+                            className="flex-1 bg-gradient-to-br from-primary to-orange-600 p-5 rounded-3xl shadow-xl shadow-primary/30 active:scale-95 transition-transform cursor-pointer relative overflow-hidden"
                         >
-                            <div className="flex justify-between items-start">
+                            {/* Shine effect */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-700"></div>
+                            <div className="flex justify-between items-start relative">
                                 <div>
-                                    <p className="text-[10px] font-bold text-orange-200 uppercase tracking-tighter mb-0.5">Revenue Today</p>
-                                    <p className="text-2xl font-black text-white">{formatCurrency(activeJobs.reduce((acc, curr) => acc + (curr.delivery_fee || 0), 0))}</p>
+                                    <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-1">Revenue Today</p>
+                                    <p className="text-3xl font-black text-white">{formatCurrency(activeJobs.reduce((acc, curr) => acc + (curr.delivery_fee || 0), 0))}</p>
                                 </div>
-                                <span className="material-icons text-orange-900/30 text-xl">chevron_right</span>
+                                <span className="material-icons-round text-white/30 text-lg">chevron_right</span>
                             </div>
                         </div>
                     </div>

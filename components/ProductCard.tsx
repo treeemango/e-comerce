@@ -350,20 +350,22 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
             </div>
           )}
 
-          {ranking ? (
+          {ranking && (
             <div className="mb-2">
               <span className="text-green-600 dark:text-green-400 text-xs font-bold hover:underline flex items-center gap-0.5">
                 #{ranking} Best-Selling Item <span className="font-normal text-slate-500 dark:text-slate-400">in Category</span>
                 <span className="material-icons text-[12px] text-slate-400">help</span>
               </span>
             </div>
-          ) : hasProductRating ? (
+          )}
+
+          {hasProductRating && (
             <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mb-2">
               <span className="material-icons !text-[12px] text-slate-900 dark:text-slate-100">star</span>
               <span className="font-bold text-slate-700 dark:text-slate-200">{product.rating?.toFixed(1)}</span>
               <span>({product.reviews})</span>
             </div>
-          ) : null}
+          )}
 
           {product.vendor && hasVendorRating && (
             <div className="mb-2 flex items-center justify-end gap-2">

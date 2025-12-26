@@ -101,40 +101,40 @@ const AdminDashboardLayout: React.FC<AdminDashboardLayoutProps> = ({
                 />
             )}
 
-            {/* Sidebar */}
+            {/* Premium Sidebar */}
             <aside
-                className={`fixed inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-800 to-slate-900 text-white z-50 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                className={`fixed inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white z-50 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     } md:translate-x-0`}
             >
                 {/* Sidebar Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
+                <div className="bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 p-6">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-shield-alt text-white text-xl"></i>
+                        <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg">
+                                <span className="material-icons-round text-white text-xl">admin_panel_settings</span>
                             </div>
                             <div>
-                                <h1 className="text-white text-lg font-bold">Admin Panel</h1>
-                                <p className="text-blue-100 text-sm">Management Dashboard</p>
+                                <h1 className="text-white text-base font-black tracking-tight">Admin Panel</h1>
+                                <p className="text-[10px] text-blue-100 font-bold uppercase tracking-widest">Management Hub</p>
                             </div>
                         </div>
                         <button
                             onClick={() => setIsSidebarOpen(false)}
-                            className="md:hidden text-white hover:text-blue-200"
+                            className="md:hidden text-white hover:text-blue-200 p-2 rounded-xl hover:bg-white/10 transition-all"
                         >
-                            <i className="fas fa-times text-xl"></i>
+                            <span className="material-icons-round">close</span>
                         </button>
                     </div>
                 </div>
 
                 {/* User Info */}
-                <div className="p-6 border-b border-gray-700">
-                    <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
-                            <i className="fas fa-user text-white"></i>
+                <div className="p-5 border-b border-gray-800/50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                            <span className="material-icons-round text-white">person</span>
                         </div>
                         <div className="flex-1">
-                            <p className="text-white font-medium">{user?.name || user?.email || 'Admin'}</p>
+                            <p className="text-white font-black text-sm">{user?.name || user?.email || 'Admin'}</p>
                             <div className="flex flex-col items-start mt-1">
                                 <PermissionBadge level={permissions?.permission_level} />
                             </div>
@@ -144,20 +144,20 @@ const AdminDashboardLayout: React.FC<AdminDashboardLayoutProps> = ({
 
                 {/* Navigation Menu */}
                 <nav className="flex-1 p-4 overflow-y-auto">
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         {menuItems.map((item) => (
                             <button
                                 key={item.id}
                                 onClick={() => handleMenuClick(item.id)}
-                                className={`w-full text-left px-3 py-3 rounded-lg flex items-center space-x-3 transition-all duration-200 ${activeTab === item.id
-                                    ? 'bg-blue-600 text-white shadow-lg'
-                                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all duration-200 ${activeTab === item.id
+                                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20'
+                                    : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
                                     }`}
                             >
                                 <i className={`${item.icon} w-5 h-5`}></i>
-                                <span className="flex-1">{item.label}</span>
+                                <span className="flex-1 font-bold text-sm">{item.label}</span>
                                 {item.badge !== undefined && item.badge > 0 && (
-                                    <span className="bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                                    <span className="bg-red-500 text-white text-[10px] font-black rounded-full w-6 h-6 flex items-center justify-center shadow-md">
                                         {item.badge}
                                     </span>
                                 )}
@@ -167,48 +167,48 @@ const AdminDashboardLayout: React.FC<AdminDashboardLayoutProps> = ({
                 </nav>
 
                 {/* Sidebar Footer */}
-                <div className="p-4 border-t border-gray-700">
+                <div className="p-4 border-t border-gray-800/50">
                     <button
                         onClick={onSignOut}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+                        className="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 font-bold text-sm shadow-lg shadow-red-600/20"
                     >
-                        <i className="fas fa-sign-out-alt"></i>
+                        <span className="material-icons-round text-lg">logout</span>
                         <span>Logout</span>
                     </button>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <div className="md:ml-64 min-h-screen">
-                {/* Top Header */}
-                <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+            <div className="md:ml-64 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+                {/* Premium Top Header */}
+                <header className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-gray-200/50 sticky top-0 z-30">
                     <div className="px-6 py-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
+                            <div className="flex items-center gap-4">
                                 <button
                                     onClick={() => setIsSidebarOpen(true)}
-                                    className="md:hidden bg-gray-100 hover:bg-gray-200 p-2 rounded-lg transition-colors duration-200"
+                                    className="md:hidden bg-gray-100 hover:bg-gray-200 p-2.5 rounded-xl transition-colors duration-200"
                                 >
-                                    <i className="fas fa-bars text-gray-600"></i>
+                                    <span className="material-icons-round text-gray-600">menu</span>
                                 </button>
                                 <div>
-                                    <h1 className="text-2xl font-bold text-gray-900">
+                                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">
                                         {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
                                     </h1>
-                                    <p className="text-gray-600 text-sm">Manage your e-commerce platform</p>
+                                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Manage your e-commerce platform</p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center space-x-4">
+                            <div className="flex items-center gap-3">
                                 {/* Real-time Status */}
-                                <div className="hidden md:flex items-center space-x-2">
-                                    <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span className="text-sm text-gray-600">Live</span>
+                                <div className="hidden md:flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
+                                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                    <span className="text-xs font-bold text-emerald-700">Live</span>
                                 </div>
 
                                 {/* Refresh Button */}
-                                <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center space-x-2">
-                                    <i className="fas fa-sync-alt"></i>
+                                <button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-2 font-bold text-sm shadow-lg shadow-blue-600/20">
+                                    <span className="material-icons-round text-sm">refresh</span>
                                     <span className="hidden sm:inline">Refresh</span>
                                 </button>
                             </div>

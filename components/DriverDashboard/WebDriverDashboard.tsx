@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { fetchActiveDeliveryJobs, markOrderDelivered } from '@/lib/api';
-import { DeliveryAssignment } from '@/types';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
+import {
+    fetchActiveDeliveryJobs,
+    markOrderDelivered,
+    fetchDriverEarnings,
+    fetchDriverStats,
+    fetchDriverHistory
+} from '../../lib/api';
+import { DeliveryAssignment } from '../../types';
 
 interface WebDriverDashboardProps {
     partnerId: string;
@@ -9,41 +15,89 @@ interface WebDriverDashboardProps {
 
 const WebDriverDashboard: React.FC<WebDriverDashboardProps> = ({ partnerId }) => {
     const [jobs, setJobs] = useState<DeliveryAssignment[]>([]);
+    const [historyJobs, setHistoryJobs] = useState<DeliveryAssignment[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+    const [realPartnerId, setRealPartnerId] = useState<string | null>(null);
 
+    const [stats, setStats] = useState({
+        todayRevenue: 0,
+        completionRate: 0,
+        rating: 0
+    });
+
+    // 1. Resolve Partner ID
     useEffect(() => {
-        const loadJobs = async () => {
+        const resolveId = async () => {
+            setLoading(true);
+            const { data: profile } = await supabase
+                .from('delivery_partners')
+                .select('id')
+                .eq('user_id', partnerId)
+                .single();
+
+            if (profile) {
+                setRealPartnerId(profile.id);
+            } else {
+                setLoading(false); // Stop loading if no profile
+            }
+        };
+        resolveId();
+    }, [partnerId]);
+
+    // 2. Fetch Data & Subscribe (Once Real ID is known)
+    useEffect(() => {
+        if (!realPartnerId) return;
+
+        const loadData = async () => {
             setLoading(true);
             try {
-                const data = await fetchActiveDeliveryJobs(partnerId);
-                setJobs(data);
+                // Parallel fetch
+                const [jobsData, earningsData, statsData] = await Promise.all([
+                    fetchActiveDeliveryJobs(realPartnerId),
+                    fetchDriverEarnings(realPartnerId),
+                    fetchDriverStats(realPartnerId)
+                ]);
+
+                setJobs(jobsData);
+                setStats({
+                    todayRevenue: earningsData.today,
+                    completionRate: statsData.completionRate,
+                    rating: statsData.rating
+                });
             } catch (error) {
-                console.error('Error loading jobs:', error);
+                console.error('Error loading dashboard data:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        loadJobs();
+        loadData();
 
         // Real-time subscription
         const subscription = supabase
-            .channel(`driver_jobs_${partnerId}`)
+            .channel(`driver_jobs_${realPartnerId}`)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
                 table: 'delivery_assignments',
-                filter: `partner_id=eq.${partnerId}`
+                filter: `partner_id=eq.${realPartnerId}`
             }, () => {
-                loadJobs();
+                fetchActiveDeliveryJobs(realPartnerId).then(setJobs);
             })
             .subscribe();
 
         return () => {
             supabase.removeChannel(subscription);
         };
-    }, [partnerId]);
+    }, [realPartnerId]);
+
+    // 3. Fetch History when tab changes
+    useEffect(() => {
+        if (activeTab === 'history' && realPartnerId && historyJobs.length === 0) {
+            fetchDriverHistory(realPartnerId).then(setHistoryJobs);
+        }
+    }, [activeTab, realPartnerId, historyJobs.length]);
 
     const handleMarkDelivered = async (orderId: string) => {
         if (!window.confirm('Mark this order as delivered?')) return;
@@ -51,7 +105,20 @@ const WebDriverDashboard: React.FC<WebDriverDashboardProps> = ({ partnerId }) =>
         try {
             const success = await markOrderDelivered(orderId);
             if (success) {
-                setJobs(prev => prev.filter(j => j.order_id !== orderId));
+                // Optimistic update
+                setJobs(jobs.filter(j => j.id !== orderId));
+                // Reload stats
+                if (realPartnerId) {
+                    const [earningsData, statsData] = await Promise.all([
+                        fetchDriverEarnings(realPartnerId),
+                        fetchDriverStats(realPartnerId)
+                    ]);
+                    setStats({
+                        todayRevenue: earningsData.today,
+                        completionRate: statsData.completionRate,
+                        rating: statsData.rating
+                    });
+                }
             } else {
                 alert('Action failed: Could not mark as delivered.');
             }
@@ -74,9 +141,9 @@ const WebDriverDashboard: React.FC<WebDriverDashboardProps> = ({ partnerId }) =>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {[
                     { label: 'Active Tasks', value: jobs.length, icon: 'local_shipping', color: 'text-orange-600', bg: 'bg-orange-50' },
-                    { label: 'Today Revenue', value: '£42.50', icon: 'payments', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                    { label: 'Completion Rate', value: '98%', icon: 'verified', color: 'text-blue-600', bg: 'bg-blue-50' },
-                    { label: 'Rating', value: '4.9', icon: 'star', color: 'text-amber-500', bg: 'bg-amber-50' },
+                    { label: 'Today Revenue', value: stats.todayRevenue > 0 ? `KES ${stats.todayRevenue}` : 'KES 0', icon: 'payments', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                    { label: 'Completion Rate', value: `${stats.completionRate}%`, icon: 'verified', color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { label: 'Rating', value: stats.rating || 'N/A', icon: 'star', color: 'text-amber-500', bg: 'bg-amber-50' },
                 ].map((stat, i) => (
                     <div key={i} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <div className="flex items-center justify-between mb-4">
@@ -113,7 +180,7 @@ const WebDriverDashboard: React.FC<WebDriverDashboardProps> = ({ partnerId }) =>
                         </div>
                     </div>
 
-                    {jobs.length === 0 ? (
+                    {activeTab === 'current' && jobs.length === 0 ? (
                         <div className="bg-white rounded-2xl p-12 border-2 border-dashed border-slate-200 text-center">
                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <span className="material-icons text-slate-300 text-3xl">inbox</span>
@@ -121,9 +188,17 @@ const WebDriverDashboard: React.FC<WebDriverDashboardProps> = ({ partnerId }) =>
                             <h3 className="text-lg font-bold text-slate-900">No active jobs</h3>
                             <p className="text-slate-500 text-sm mt-1">You're all caught up! New orders will appear here automatically.</p>
                         </div>
+                    ) : activeTab === 'history' && historyJobs.length === 0 ? (
+                        <div className="bg-white rounded-2xl p-12 border-2 border-dashed border-slate-200 text-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <span className="material-icons text-slate-300 text-3xl">history</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900">No history yet</h3>
+                            <p className="text-slate-500 text-sm mt-1">Completed deliveries will appear here.</p>
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-4">
-                            {jobs.map((job) => (
+                            {(activeTab === 'current' ? jobs : historyJobs).map((job) => (
                                 <div key={job.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
                                     <div className="p-6">
                                         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
