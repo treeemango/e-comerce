@@ -13,9 +13,12 @@ export const SITE_CONFIG = {
     currency: 'KES',
     locale: 'en_KE',
     socialMedia: {
-        twitter: '@JuaExpress',
-        facebook: 'https://facebook.com/juaexpress',
-        instagram: '@juaexpress',
+        twitter: '@juaexpress1',
+        facebook: 'https://www.facebook.com/people/Juaexpress/61585676611998/',
+        instagram: '@juaexpress_online',
+        tiktok: '@juaexpress_online',
+        pinterest: 'https://www.pinterest.com/juaexpress01/',
+        youtube: 'https://www.youtube.com/@JuaExpress',
     },
 };
 
@@ -42,6 +45,9 @@ export function generateOrganizationSchema() {
             SITE_CONFIG.socialMedia.facebook,
             `https://twitter.com/${SITE_CONFIG.socialMedia.twitter.replace('@', '')}`,
             `https://instagram.com/${SITE_CONFIG.socialMedia.instagram.replace('@', '')}`,
+            `https://tiktok.com/${SITE_CONFIG.socialMedia.tiktok}`,
+            SITE_CONFIG.socialMedia.pinterest,
+            SITE_CONFIG.socialMedia.youtube,
         ],
     };
 }

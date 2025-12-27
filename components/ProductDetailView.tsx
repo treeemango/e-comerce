@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier } from '../types';
+import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier, RelatedProduct } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, RelatedProduct, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist } from '../lib/api';
+import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist } from '../lib/api';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
 import { playFollowSound, playUnfollowSound, playWishlistAddSound, playWishlistRemoveSound } from '../lib/sounds';
@@ -382,7 +382,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      category_ids: [],
                      brand_ids: [],
                      price_min: null,
-                     price_max: null
+                     price_max: null,
+                     attributes: {},
+                     conditions: [],
+                     delivery_locations: [],
+                     vendor_countries: []
                   });
                   // Slice to limit results as fetchFilteredProducts doesn't support limit param directly
                   setUseCaseItems(results.filter(p => p.id.toString() !== product.id?.toString()).slice(0, 6));
@@ -507,6 +511,25 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          console.error('Error toggling follow:', error);
       } finally {
          setIsFollowLoading(false);
+      }
+   };
+
+   const handleShare = async () => {
+      const shareData = {
+         title: product.title,
+         text: `Check out ${product.title} on JuaExpress!`,
+         url: window.location.href
+      };
+
+      if (navigator.share) {
+         try {
+            await navigator.share(shareData);
+         } catch (err) {
+            console.error('Error sharing:', err);
+         }
+      } else {
+         navigator.clipboard.writeText(window.location.href);
+         alert('Link copied to clipboard!');
       }
    };
 
@@ -780,7 +803,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   )}
 
                   <div className="absolute bottom-4 right-4 flex gap-2">
-                     <button className="bg-white/90 dark:bg-black/50 p-2 rounded-full shadow hover:bg-white dark:hover:bg-black transition-colors">
+                     <button
+                        onClick={handleShare}
+                        className="bg-white/90 dark:bg-black/50 p-2 rounded-full shadow hover:bg-white dark:hover:bg-black transition-colors"
+                        title="Share this product"
+                     >
                         <span className="material-icons text-slate-700 dark:text-white">share</span>
                      </button>
                      <button
@@ -814,9 +841,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            {product.deliveryTimeEstimate || (product.deliveryTimeDays ? `${product.deliveryTimeDays} day${product.deliveryTimeDays === 1 ? '' : 's'}` : '')}
                         </span>
                      )}
-                     <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
-                        <span className="material-icons text-[12px]">account_balance_wallet</span> {formatPrice(4, currencyCode)} Credit for delay
-                     </span>
+                     {(product.delayCredit ?? 0) > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-shop-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm">
+                           <span className="material-icons text-[12px]">account_balance_wallet</span> {formatPrice(product.delayCredit, currencyCode)} Credit for delay
+                        </span>
+                     )}
                   </div>
 
                   <h1 className="text-xl md:text-2xl font-medium text-slate-900 dark:text-white mb-2 leading-snug">
@@ -832,6 +861,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      <a href="#reviews" className="text-slate-500 hover:underline">({product.reviews?.toLocaleString?.() ?? product.reviews})</a>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
                      <span className="text-slate-500">{soldLabel}</span>
+
                   </div>
 
                   <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 mb-6">
@@ -1288,8 +1318,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  onClick={handleFollowToggle}
                                  disabled={isFollowLoading}
                                  className={`flex-1 px-4 py-3 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${isFollowing
-                                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-                                       : 'border-2 border-purple-500 text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                                    : 'border-2 border-purple-500 text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20'
                                     } ${isFollowLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                               >
                                  <span className="material-icons-round text-sm">{isFollowing ? 'check' : 'add'}</span>
@@ -1326,6 +1356,12 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Category</div>
                         <div className="px-6 py-4 text-slate-600 dark:text-slate-400">{product.category || 'N/A'}</div>
                      </div>
+                     {product.condition && (
+                        <div className="grid grid-cols-2 text-sm">
+                           <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Condition</div>
+                           <div className="px-6 py-4 text-slate-600 dark:text-slate-400 capitalize">{product.condition.replace('_', ' ')}</div>
+                        </div>
+                     )}
                      {product.brand && (
                         <div className="grid grid-cols-2 text-sm">
                            <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Brand</div>

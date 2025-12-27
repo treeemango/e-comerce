@@ -287,7 +287,8 @@ BEGIN
           ad.buy_qty as auto_discount_buy_qty,
           ad.get_qty as auto_discount_get_qty,
           ad.min_requirement_value as auto_discount_min_requirement,
-          p.listing_type
+          p.listing_type,
+          p.condition -- ✅ ADDED
       FROM products p
       JOIN product_variants v ON p.id = v.product_id AND v.is_default = true
       LEFT JOIN active_coupons ac ON p.id = ac.product_id
@@ -401,7 +402,8 @@ BEGIN
           fp.auto_discount_get_qty,
           fp.auto_discount_min_requirement,
           fp.sales_count,
-          fp.listing_type
+          fp.listing_type,
+          fp.condition
       FROM filtered_products fp
       WHERE fp.stock >= min_stock
         AND (fp.rating IS NULL OR fp.rating >= min_rating)
@@ -443,7 +445,8 @@ BEGIN
           ps.auto_discount_get_qty,
           ps.auto_discount_min_requirement,
           ps.sales_count,
-          ps.listing_type
+          ps.listing_type,
+          ps.condition
       FROM product_scores ps
       ORDER BY ps.product_id, ps.calculated_score DESC
   ),
@@ -493,7 +496,8 @@ BEGIN
           'auto_discount_get_qty', rp.auto_discount_get_qty,
           'auto_discount_min_requirement', rp.auto_discount_min_requirement,
           'sales_count', rp.sales_count,
-          'listing_type', rp.listing_type
+          'listing_type', rp.listing_type,
+          'condition', rp.condition
       )
   ) INTO product_results
   FROM ranked_products rp;

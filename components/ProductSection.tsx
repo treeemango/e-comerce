@@ -46,7 +46,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     price_max: null,
     attributes: {},
     delivery_locations: [],
-    vendor_countries: []
+    vendor_countries: [],
+    conditions: []
   });
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
@@ -85,6 +86,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     (appliedFilters.price_min !== null || appliedFilters.price_max !== null ? 1 : 0) +
     appliedFilters.delivery_locations.length +
     appliedFilters.vendor_countries.length +
+    (appliedFilters.conditions?.length || 0) +
     Object.values(appliedFilters.attributes).reduce((acc: number, curr) => acc + (curr as string[]).length, 0);
 
 
@@ -117,7 +119,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       price_max: null,
       attributes: {},
       delivery_locations: [],
-      vendor_countries: []
+      vendor_countries: [],
+      conditions: []
     });
     setActiveFilter(null);
     setShowVerticalFilters(false);
@@ -172,7 +175,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
           price_max: null,
           attributes: {},
           delivery_locations: [],
-          vendor_countries: []
+          vendor_countries: [],
+          conditions: []
         });
       }
     }
@@ -268,6 +272,15 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     }));
   };
 
+  const toggleConditionFilter = (condition: string) => {
+    setAppliedFilters(prev => ({
+      ...prev,
+      conditions: (prev.conditions || []).includes(condition)
+        ? (prev.conditions || []).filter(c => c !== condition)
+        : [...(prev.conditions || []), condition]
+    }));
+  };
+
   const clearAllFilters = () => {
     setAppliedFilters({
       category_ids: [],
@@ -276,7 +289,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       price_max: null,
       attributes: {},
       delivery_locations: [],
-      vendor_countries: []
+      vendor_countries: [],
+      conditions: []
     });
   };
 
@@ -329,7 +343,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
         price_max: null,
         attributes: {},
         delivery_locations: [],
-        vendor_countries: []
+        vendor_countries: [],
+        conditions: []
       });
     }
   };
@@ -339,7 +354,8 @@ const ProductSection: React.FC<ProductSectionProps> = ({
       appliedFilters.brand_ids.length > 0 ||
       appliedFilters.price_min !== null ||
       appliedFilters.price_max !== null ||
-      appliedFilters.delivery_locations.length > 0;
+      appliedFilters.delivery_locations.length > 0 ||
+      (appliedFilters.conditions?.length || 0) > 0;
   };
 
   // Filter logic for non-search views
@@ -675,6 +691,25 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                   </button>
                 )}
 
+                {/* Condition Filter Pill */}
+                {searchFilters && searchFilters.conditions && searchFilters.conditions.length > 0 && (
+                  <button
+                    onClick={() => setActiveFilter(activeFilter === 'condition' ? null : 'condition')}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'condition' || (appliedFilters.conditions?.length || 0) > 0
+                      ? 'bg-black text-white border-black shadow-sm'
+                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                      }`}
+                  >
+                    Condition
+                    {(appliedFilters.conditions?.length || 0) > 0 && (
+                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                        {appliedFilters.conditions?.length}
+                      </span>
+                    )}
+                    <span className="material-icons text-base">expand_more</span>
+                  </button>
+                )}
+
                 {/* Dynamic Attribute Filter Pills */}
                 {searchFilters && Object.keys(searchFilters.attributes).length > 0 &&
                   Object.entries(searchFilters.attributes).map(([attributeName, attributeValues]: [string, AttributeValue[]]) => {
@@ -826,6 +861,28 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                       </div>
                     )}
 
+                    {/* Condition Content */}
+                    {activeFilter === 'condition' && searchFilters && searchFilters.conditions && (
+                      <div className="flex flex-wrap gap-2">
+                        {searchFilters.conditions.map((cond) => {
+                          const isSelected = (appliedFilters.conditions || []).includes(cond.condition);
+                          const label = cond.condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                          return (
+                            <button
+                              key={cond.condition}
+                              onClick={() => toggleConditionFilter(cond.condition)}
+                              className={`px-4 py-2 rounded-full text-sm border transition-all ${isSelected
+                                ? 'bg-black border-black text-white'
+                                : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-gray-400'
+                                }`}
+                            >
+                              {label} <span className="opacity-60 text-xs ml-1">({cond.product_count})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Attribute Content */}
                     {activeFilter && searchFilters?.attributes[activeFilter] && (
                       <div className="flex flex-wrap gap-3">
@@ -898,6 +955,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                         else if (activeFilter === 'price') setPriceRange(null, null);
                         else if (activeFilter === 'delivery') setAppliedFilters(prev => ({ ...prev, delivery_locations: [] }));
                         else if (activeFilter === 'country') setAppliedFilters(prev => ({ ...prev, vendor_countries: [] }));
+                        else if (activeFilter === 'condition') setAppliedFilters(prev => ({ ...prev, conditions: [] }));
                         else if (activeFilter) setAppliedFilters(prev => {
                           const newAttrs = { ...prev.attributes };
                           delete newAttrs[activeFilter];
@@ -992,6 +1050,39 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                             <span className="text-sm text-gray-700 dark:text-gray-300">{brand.brand_name}</span>
                           </label>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Conditions */}
+                  {searchFilters?.conditions && searchFilters.conditions.length > 0 && (
+                    <div>
+                      <h3 className="font-medium mb-3 text-gray-900 dark:text-white">Condition</h3>
+                      <div className="space-y-2">
+                        {searchFilters.conditions.map((cond) => {
+                          const isSelected = (appliedFilters.conditions || []).includes(cond.condition);
+                          const label = cond.condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                          return (
+                            <label key={cond.condition} className="flex items-center gap-3 cursor-pointer group">
+                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected
+                                ? 'bg-black border-black'
+                                : 'border-gray-300 group-hover:border-gray-400'
+                                }`}>
+                                {isSelected && <span className="material-icons text-white text-[10px]">check</span>}
+                              </div>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={isSelected}
+                                onChange={() => toggleConditionFilter(cond.condition)}
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300">
+                                {label}
+                                <span className="ml-1 text-xs text-gray-400">({cond.product_count})</span>
+                              </span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

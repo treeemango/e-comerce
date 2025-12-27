@@ -249,6 +249,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [deliveryTime, setDeliveryTime] = useState('');
     const [deliveryTimeDays, setDeliveryTimeDays] = useState<number>(1);
     const [isExpressDelivery, setIsExpressDelivery] = useState(false);
+    const [delayCredit, setDelayCredit] = useState<number>(0);
     const [minOrderForFreeDelivery, setMinOrderForFreeDelivery] = useState<number>(0);
     const [deliveryLocations, setDeliveryLocations] = useState<string[]>([]);
     const [deliveryLocationInput, setDeliveryLocationInput] = useState('');
@@ -259,6 +260,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [useCaseInput, setUseCaseInput] = useState('');
     const [occasionInput, setOccasionInput] = useState('');
     const [listingType, setListingType] = useState<'direct_purchase' | 'inquiry' | 'reservation'>('direct_purchase');
+    const [condition, setCondition] = useState<'new' | 'used' | 'refurbished' | 'open_box' | 'digital'>('new');
     const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
 
     // Media State
@@ -325,10 +327,11 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
             return {
                 sku: existing?.sku || `${title.substring(0, 3).toUpperCase()}-${Object.values(combo).join('-').toUpperCase()}-${Date.now().toString().slice(-4)}`,
-                price: existing?.price || basePrice,
+                // Use proper type checking instead of || which treats 0 as falsy
+                price: (typeof existing?.price === 'number' && !isNaN(existing.price)) ? existing.price : basePrice,
                 compare_at_price: anchorPrice,
                 original_price: anchorPrice,
-                stock: typeof existing?.stock === 'number' ? existing.stock : (existing as any)?.quantity ?? baseStock,
+                stock: (typeof existing?.stock === 'number' && !isNaN(existing.stock)) ? existing.stock : baseStock,
                 options: combo,
                 is_default: false,
                 image_url: existing?.image_url
@@ -839,8 +842,26 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
     // Final Submission
     const handleSubmit = async () => {
-        if (!categoryId || !title || !basePrice) {
-            alert('Please fill in all required fields (Title, Category, Price).');
+        // More robust validation
+        if (!categoryId || !categoryId.trim()) {
+            alert('Please select a category for your product.');
+            return;
+        }
+
+        if (!title || !title.trim()) {
+            alert('Please enter a product title.');
+            return;
+        }
+
+        // Check for simple product pricing
+        if (!hasVariants && (basePrice === undefined || basePrice === null || basePrice < 0)) {
+            alert('Please set a valid price for your product.');
+            return;
+        }
+
+        // Check for variant pricing (at least one variant must have a price)
+        if (hasVariants && (!variants || variants.length === 0 || !variants.some(v => v.price > 0))) {
+            alert('Please set prices for at least one product variant.');
             return;
         }
 
@@ -921,6 +942,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 min_order_value: Number.isFinite(minOrderValue) ? minOrderValue : 0,
                 min_order_for_free_delivery: Number.isFinite(minOrderForFreeDelivery) ? minOrderForFreeDelivery : 0,
                 is_express_delivery: isExpressDelivery,
+                delay_credit: Number.isFinite(delayCredit) ? delayCredit : 0,
                 seo_title: seoTitle,
                 meta_description: metaDescription,
                 url_slug: slug,
@@ -935,7 +957,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 attributes: finalAttributes,
                 variants: preparedVariants,
                 media: allMedia.map((m, i) => ({ ...m, position: i })),
-                listing_type: listingType
+                listing_type: listingType,
+                condition: condition
             };
 
             const pid = await createProductFull(
@@ -1084,24 +1107,25 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Purchase Mode *</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Product Condition *</label>
                                     <div className="grid grid-cols-3 gap-2">
                                         {[
-                                            { id: 'direct_purchase', icon: 'shopping_cart', label: 'Direct', color: 'orange' },
-                                            { id: 'inquiry', icon: 'chat', label: 'Inquiry', color: 'blue' },
-                                            { id: 'reservation', icon: 'event_available', label: 'Reserve', color: 'emerald' }
-                                        ].map((mode) => (
+                                            { id: 'new', label: 'New', color: 'orange' },
+                                            { id: 'used', label: 'Used', color: 'blue' },
+                                            { id: 'refurbished', label: 'Refurbished', color: 'emerald' },
+                                            { id: 'open_box', label: 'Open Box', color: 'purple' },
+                                            { id: 'digital', label: 'Digital', color: 'gray' }
+                                        ].map((c) => (
                                             <button
-                                                key={mode.id}
+                                                key={c.id}
                                                 type="button"
-                                                onClick={() => setListingType(mode.id as any)}
-                                                className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-all ${listingType === mode.id
-                                                    ? `border-${mode.color}-500 bg-${mode.color}-50 text-${mode.color}-700`
-                                                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                                                onClick={() => setCondition(c.id as any)}
+                                                className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-all ${condition === c.id
+                                                    ? `border-${c.color}-500 bg-${c.color}-50 text-${c.color}-700`
+                                                    : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'
                                                     }`}
                                             >
-                                                <span className="material-icons text-lg mb-1">{mode.icon}</span>
-                                                <span className="text-[10px] font-bold uppercase tracking-tight">{mode.label}</span>
+                                                <span className="text-[10px] font-bold uppercase tracking-tight">{c.label}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1324,12 +1348,51 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     </div>
                                 </div>
 
-                                {/* Purchase Mode / Listing Type */}
-                                <div className="pt-8 border-t border-gray-100">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
-                                        <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
+                            {/* Product Type Selection - Moved from Step 3 */}
+                            <div className="pt-6 border-t border-gray-100 animate-fade-in">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                                    <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                        <span className="material-icons text-lg">inventory_2</span>
+                                        Product Type
+                                    </h4>
+                                    <p className="text-sm text-blue-700 mb-4">Choose how you'll sell this product. You can change this later if needed.</p>
+
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setHasVariants(!hasVariants)}
+                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${hasVariants ? 'bg-orange-600' : 'bg-gray-200'}`}
+                                            >
+                                                <span
+                                                    className={`${hasVariants ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                                                />
+                                            </button>
+                                            <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
+                                        </div>
                                     </div>
+
+                                    <div className="mt-3 p-3 bg-white rounded border">
+                                        {!hasVariants ? (
+                                            <div className="text-sm text-gray-600">
+                                                <strong>Simple Product:</strong> Single price and stock level. Best for products without variations (e.g., a single book, toy, or accessory).
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-gray-600">
+                                                <strong>Multiple Variants:</strong> Different prices and stock for variations (e.g., different sizes, colors). Each combination becomes a separate purchasable item.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Purchase Mode / Listing Type */}
+                            <div className="pt-8 border-t border-gray-100">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
+                                    <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
+                                </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {[
                                             { id: 'direct_purchase', icon: 'shopping_cart', title: 'Add to Cart', desc: 'Standard checkout', color: 'orange' },
@@ -1623,83 +1686,57 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h2 className="text-xl font-bold text-gray-900">Variants & Pricing</h2>
-                                    <p className="text-sm text-gray-500">Define product options (Size, Color) or set simple pricing.</p>
+                                    <p className="text-sm text-gray-500">
+                                        {hasVariants
+                                            ? "Configure pricing and stock for each variant combination."
+                                            : "Set pricing and stock for your simple product."
+                                        }
+                                    </p>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => setHasVariants(!hasVariants)}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${hasVariants ? 'bg-orange-600' : 'bg-gray-200'}`}
-                                    >
-                                        <span
-                                            className={`${hasVariants ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
-                                        />
-                                    </button>
-                                    <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
+                                <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <span className="text-sm font-medium text-blue-800">
+                                        Product Type: <span className="font-bold">{hasVariants ? 'Multiple Variants' : 'Simple Product'}</span>
+                                    </span>
                                 </div>
+                            </div>
 
-                                {hasVariants && (
-                                    <div className="flex gap-4 p-4 bg-orange-50 rounded-lg border border-orange-100 animate-fade-in">
-                                        <div className="flex-1">
-                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Currency</label>
-                                            <select
-                                                value={currency}
-                                                onChange={e => setCurrency(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 text-xs font-bold rounded-lg px-3 py-2 focus:border-orange-500 outline-none shadow-sm"
-                                            >
-                                                {SUPPORTED_CURRENCIES.map(c => (
-                                                    <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Pricing Unit</label>
-                                            <select
-                                                value={pricingUnit}
-                                                onChange={e => setPricingUnit(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 text-xs font-bold rounded-lg px-3 py-2 focus:border-orange-500 outline-none shadow-sm"
-                                            >
-                                                {['piece', 'kg', 'g', 'L', 'ml', 'meter', 'box', 'pack', 'pair', 'dozen'].map(u => (
-                                                    <option key={u} value={u}>{u}</option>
-                                                ))}
-                                            </select>
-                                        </div>
+                            {/* Global Currency & Unit Selection - Always visible */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                                <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                                    <span className="material-icons text-lg">attach_money</span>
+                                    Currency & Pricing Unit
+                                </h4>
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Currency</label>
+                                        <select
+                                            value={currency}
+                                            onChange={e => setCurrency(e.target.value)}
+                                            className="w-full bg-white border border-blue-200 text-xs font-bold rounded-lg px-3 py-2 focus:border-blue-500 outline-none"
+                                        >
+                                            {SUPPORTED_CURRENCIES.map(c => (
+                                                <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
+                                            ))}
+                                        </select>
                                     </div>
-                                )}
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Pricing Unit</label>
+                                        <select
+                                            value={pricingUnit}
+                                            onChange={e => setPricingUnit(e.target.value)}
+                                            className="w-full bg-white border border-blue-200 text-xs font-bold rounded-lg px-3 py-2 focus:border-blue-500 outline-none"
+                                        >
+                                            {['piece', 'kg', 'g', 'L', 'ml', 'meter', 'box', 'pack', 'pair', 'dozen'].map(u => (
+                                                <option key={u} value={u}>{u}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             {!hasVariants ? (
                                 <div className="bg-orange-50 border border-orange-100 rounded-lg p-6 animate-fade-in">
                                     <h3 className="font-semibold text-gray-900 mb-4">Standard Pricing</h3>
-
-                                    {/* Currency & Unit Selection - Moved to top */}
-                                    <div className="flex gap-4 pb-4 mb-4 border-b border-orange-100">
-                                        <div className="flex-1">
-                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Currency</label>
-                                            <select
-                                                value={currency}
-                                                onChange={e => setCurrency(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 text-xs font-bold rounded-lg px-3 py-1.5 focus:border-orange-500 outline-none"
-                                            >
-                                                {SUPPORTED_CURRENCIES.map(c => (
-                                                    <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Unit</label>
-                                            <select
-                                                value={pricingUnit}
-                                                onChange={e => setPricingUnit(e.target.value)}
-                                                className="w-full bg-white border border-gray-200 text-xs font-bold rounded-lg px-3 py-1.5 focus:border-orange-500 outline-none"
-                                            >
-                                                {['piece', 'kg', 'g', 'L', 'ml', 'meter', 'box', 'pack', 'pair', 'dozen'].map(u => (
-                                                    <option key={u} value={u}>{u}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
 
                                     {/* Price Inputs */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2063,7 +2100,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     Delivery & Shipping
                                 </h3>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Cost</label>
                                         <div className="relative">
@@ -2109,6 +2146,22 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                             className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                             placeholder="1"
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Delay Credit</label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
+                                            <input
+                                                type="number"
+                                                value={delayCredit}
+                                                onChange={(e) => setDelayCredit(parseFloat(e.target.value) || 0)}
+                                                className="w-full border border-gray-300 rounded-lg pl-8 pr-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                                placeholder="0.00"
+                                                min={0}
+                                                step="0.01"
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 mt-1">Credit given for delivery delays</p>
                                     </div>
                                 </div>
 

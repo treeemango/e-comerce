@@ -129,14 +129,14 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         <h3 className="font-black text-sm text-white uppercase tracking-widest mb-6">Connect with JuaExpress</h3>
                         <div className="flex gap-3">
                             {[
-                                { icon: 'camera_alt', color: 'from-pink-500 to-purple-600', glow: 'shadow-pink-500/30' },
-                                { icon: 'facebook', color: 'from-blue-600 to-blue-700', glow: 'shadow-blue-500/30', isLetter: true, letter: 'f' },
-                                { icon: 'close', color: 'from-gray-700 to-gray-800', glow: 'shadow-gray-500/30', isLetter: true, letter: 'X' },
-                                { icon: 'music_note', color: 'from-gray-900 to-black', glow: 'shadow-gray-500/20' },
-                                { icon: 'smart_display', color: 'from-red-600 to-red-700', glow: 'shadow-red-500/30' },
-                                { icon: 'push_pin', color: 'from-red-500 to-red-600', glow: 'shadow-red-500/30', isLetter: true, letter: 'P' },
+                                { icon: 'camera_alt', color: 'from-pink-500 to-purple-600', glow: 'shadow-pink-500/30', href: 'https://www.instagram.com/juaexpress_online/' },
+                                { icon: 'facebook', color: 'from-blue-600 to-blue-700', glow: 'shadow-blue-500/30', isLetter: true, letter: 'f', href: 'https://www.facebook.com/people/Juaexpress/61585676611998/' },
+                                { icon: 'close', color: 'from-gray-700 to-gray-800', glow: 'shadow-gray-500/30', isLetter: true, letter: 'X', href: 'https://x.com/juaexpress1' },
+                                { icon: 'music_note', color: 'from-gray-900 to-black', glow: 'shadow-gray-500/20', href: 'https://www.tiktok.com/@juaexpress_online?lang=en' },
+                                { icon: 'smart_display', color: 'from-red-600 to-red-700', glow: 'shadow-red-500/30', href: 'https://www.youtube.com/@JuaExpress' },
+                                { icon: 'push_pin', color: 'from-red-500 to-red-600', glow: 'shadow-red-500/30', isLetter: true, letter: 'P', href: 'https://www.pinterest.com/juaexpress01/' },
                             ].map((social, i) => (
-                                <a key={i} href="#" className={`w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br ${social.color} shadow-lg ${social.glow} hover:scale-110 active:scale-95 transition-all duration-300`}>
+                                <a key={i} href={social.href} target="_blank" rel="noopener noreferrer" className={`w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br ${social.color} shadow-lg ${social.glow} hover:scale-110 active:scale-95 transition-all duration-300`}>
                                     {social.isLetter ? (
                                         <span className="font-black text-lg text-white">{social.letter}</span>
                                     ) : (

@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, RelatedProduct, fetchProductVariants, getFollowStatus, toggleFollowStore } from '@/lib/api';
-import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant } from '@/types';
+import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore } from '@/lib/api';
+import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant, RelatedProduct } from '@/types';
 import { playWishlistAddSound, playWishlistRemoveSound, playFollowSound, playUnfollowSound, playCartAddSound } from '@/lib/sounds';
 import { ProductCard } from './ProductCard';
 import ProductQuestions from '../../components/ProductDetails/ProductQuestions';
 import { ReviewSection } from '../../components/ReviewSection';
+import { formatPrice } from '@/lib/currency';
 
 interface ProductDetailsProps {
     product: Product;
@@ -568,6 +569,15 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 Get by {deliveryEstimate.date}
                             </span>
                         </div>
+                        {/* Delay Credit Badge */}
+                        {(product.delayCredit ?? 0) > 0 && (
+                            <div className="bg-red-50 dark:bg-red-900/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border border-red-100 dark:border-red-800">
+                                <span className="material-icons-round text-sm text-red-600">account_balance_wallet</span>
+                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">
+                                    {formatPrice(product.delayCredit!, product.currency || 'USD')} Credit for delay
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Title */}
@@ -854,6 +864,12 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                     <span className="font-black text-gray-500 uppercase tracking-widest">Category</span>
                                     <span className="font-bold text-gray-900 dark:text-white text-right">{product.category || 'N/A'}</span>
                                 </div>
+                                {product.condition && (
+                                    <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
+                                        <span className="font-black text-gray-500 uppercase tracking-widest">Condition</span>
+                                        <span className="font-bold text-gray-900 dark:text-white text-right capitalize">{product.condition.replace('_', ' ')}</span>
+                                    </div>
+                                )}
                                 {product.brand && (
                                     <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
                                         <span className="font-black text-gray-500 uppercase tracking-widest">Brand</span>

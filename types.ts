@@ -10,6 +10,8 @@ export type ProductStatus =
     | 'rejected'
     | 'suspended';
 
+export type ProductCondition = 'new' | 'used' | 'refurbished' | 'open_box' | 'digital';
+
 export interface Product {
     id: string | number;
     title: string;
@@ -36,6 +38,7 @@ export interface Product {
     deliveryTimeEstimate?: string;
     deliveryTimeDays?: number;
     isExpressDelivery?: boolean;
+    delayCredit?: number;          // Credit amount for delivery delays
     deliveryScope?: string;
     deliveryText?: string;
     delivery_locations?: string[]; // New: Listing specific locations 
@@ -99,6 +102,7 @@ export interface Product {
     auto_discount_get_qty?: number;
     auto_discount_min_requirement?: number;
     auto_discount_name?: string;
+    condition?: ProductCondition;
 
     // Mobile UI specific (migrated from legacy)
     soldCount?: number;
@@ -235,6 +239,11 @@ export interface VendorCountryFilter {
     product_count: number;
 }
 
+export interface ConditionFilter {
+    condition: string;
+    product_count: number;
+}
+
 export interface SearchFilters {
     categories: CategoryFilter[];
     brands: BrandFilter[];
@@ -242,6 +251,7 @@ export interface SearchFilters {
     attributes: Record<string, AttributeValue[]>;
     delivery_locations: DeliveryLocationFilter[];
     vendor_countries: VendorCountryFilter[];
+    conditions: ConditionFilter[];
     visual_match_count: number;
     total_products: number;
     has_visual_search: boolean;
@@ -257,6 +267,7 @@ export interface AppliedFilters {
     attributes?: Record<string, string[]>;
     delivery_locations?: string[];
     vendor_countries?: string[];
+    conditions?: string[];
     rating_min?: number | null;
 }
 
@@ -723,6 +734,7 @@ export interface CreateProductPayload {
     min_order_value?: number;
     min_order_for_free_delivery?: number;
     is_express_delivery?: boolean;
+    delay_credit?: number;
     seo_title?: string;
     meta_description?: string;
     url_slug?: string;
@@ -738,6 +750,7 @@ export interface CreateProductPayload {
     variants: ProductVariantData[];
     media: MediaUploadData[];
     listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
+    condition?: ProductCondition;
     quantity_discounts?: QuantityDiscountTier[];
 }
 
@@ -1152,6 +1165,7 @@ export interface PendingProduct {
     price: number;
     currency?: string;
     status: 'pending' | 'approved' | 'rejected';
+    condition?: ProductCondition;
     submitted_at: string;
     image_url?: string;
     description?: string;
@@ -1172,6 +1186,7 @@ export interface PendingProduct {
     delivery_locations?: string[];
     free_delivery?: boolean;
     is_express_delivery?: boolean;
+    delay_credit?: number;
     sale_unit?: string;
     // Additional seller fields
     tags?: string[];

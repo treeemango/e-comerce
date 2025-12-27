@@ -57,6 +57,15 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
         }));
     };
 
+    const toggleCondition = (condition: string) => {
+        setLocalFilters(prev => ({
+            ...prev,
+            conditions: (prev.conditions || []).includes(condition)
+                ? (prev.conditions || []).filter(c => c !== condition)
+                : [...(prev.conditions || []), condition]
+        }));
+    };
+
     const handleApply = () => {
         onApplyFilters(localFilters);
         onClose();
@@ -70,7 +79,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
             price_max: null,
             attributes: {},
             delivery_locations: [],
-            vendor_countries: []
+            vendor_countries: [],
+            conditions: []
         };
         setLocalFilters(resetFilters);
         onApplyFilters(resetFilters);
@@ -82,6 +92,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
             case 'categories': return localFilters.category_ids.length;
             case 'brands': return localFilters.brand_ids.length;
             case 'countries': return localFilters.vendor_countries.length;
+            case 'conditions': return (localFilters.conditions?.length || 0);
             case 'price': return (localFilters.price_min || localFilters.price_max) ? 1 : 0;
             default: return 0;
         }
@@ -91,7 +102,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
         { id: 'categories', name: 'Categories', icon: 'category' },
         { id: 'brands', name: 'Brands', icon: 'loyalty' },
         { id: 'price', name: 'Price Range', icon: 'payments' },
-        { id: 'countries', name: 'Countries', icon: 'public' }
+        { id: 'countries', name: 'Countries', icon: 'public' },
+        { id: 'conditions', name: 'Condition', icon: 'new_releases' }
     ];
 
     return (
@@ -154,8 +166,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                                     key={cat.id}
                                                     onClick={() => toggleCategory(cat.id)}
                                                     className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all ${isActive
-                                                            ? 'bg-primary/5 border-primary shadow-sm'
-                                                            : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 active:scale-[0.98]'
+                                                        ? 'bg-primary/5 border-primary shadow-sm'
+                                                        : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 active:scale-[0.98]'
                                                         }`}
                                                 >
                                                     <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isActive ? 'bg-primary border-primary' : 'border-gray-200 dark:border-gray-700'
@@ -186,8 +198,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                                     key={brand.id}
                                                     onClick={() => toggleBrand(brand.id)}
                                                     className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all ${isActive
-                                                            ? 'bg-primary/5 border-primary'
-                                                            : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'
+                                                        ? 'bg-primary/5 border-primary'
+                                                        : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'
                                                         }`}
                                                 >
                                                     <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center ${isActive ? 'bg-primary border-primary' : 'border-gray-200 dark:border-gray-700'
@@ -258,8 +270,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                                     key={vc.country}
                                                     onClick={() => toggleCountry(vc.country)}
                                                     className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all ${isActive
-                                                            ? 'bg-primary/5 border-primary shadow-sm'
-                                                            : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'
+                                                        ? 'bg-primary/5 border-primary shadow-sm'
+                                                        : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'
                                                         }`}
                                                 >
                                                     <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isActive ? 'bg-primary border-primary' : 'border-gray-200 dark:border-gray-700'
@@ -268,6 +280,39 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                                     </div>
                                                     <span className={`text-[13px] font-bold ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'}`}>
                                                         {vc.country}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedSection === 'conditions' && (
+                                <div className="space-y-4">
+                                    <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Product Condition</h3>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {filters?.conditions?.map((cond) => {
+                                            const isActive = (localFilters.conditions || []).includes(cond.condition);
+                                            const label = cond.condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                            return (
+                                                <button
+                                                    key={cond.condition}
+                                                    onClick={() => toggleCondition(cond.condition)}
+                                                    className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all ${isActive
+                                                        ? 'bg-primary/5 border-primary shadow-sm'
+                                                        : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'
+                                                        }`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isActive ? 'bg-primary border-primary' : 'border-gray-200 dark:border-gray-700'
+                                                        }`}>
+                                                        {isActive && <span className="material-icons-round text-white text-sm">check</span>}
+                                                    </div>
+                                                    <span className={`text-[13px] font-bold ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'}`}>
+                                                        {label}
+                                                    </span>
+                                                    <span className="ml-auto text-[10px] font-black text-gray-400">
+                                                        {cond.product_count}
                                                     </span>
                                                 </button>
                                             );

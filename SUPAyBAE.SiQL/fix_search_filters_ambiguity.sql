@@ -4,6 +4,7 @@
 -- Added vendor_countries filter to allow filtering by vendor's country.
 
 DROP FUNCTION IF EXISTS get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC);
+DROP FUNCTION IF EXISTS get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC, TEXT[]);
 
 CREATE OR REPLACE FUNCTION get_unified_search_filters(
   search_query TEXT DEFAULT NULL,
@@ -13,7 +14,8 @@ CREATE OR REPLACE FUNCTION get_unified_search_filters(
   price_min NUMERIC DEFAULT NULL,
   price_max NUMERIC DEFAULT NULL,
   attribute_filters JSONB DEFAULT '{}'::jsonb,
-  similarity_threshold NUMERIC DEFAULT 0.65
+  similarity_threshold NUMERIC DEFAULT 0.65,
+  condition_filters TEXT[] DEFAULT NULL
 )
 RETURNS JSON AS $$
 DECLARE
@@ -39,6 +41,7 @@ BEGIN
       p.category_id, 
       p.brand_id,
       p.seller_id,
+      p.condition,
       pv.price AS product_price, 
       p.delivery_locations,
       CASE
@@ -71,6 +74,7 @@ BEGIN
       )
       AND (category_ids IS NULL OR p.category_id = ANY(category_ids))
       AND (brand_ids IS NULL OR p.brand_id = ANY(brand_ids))
+      AND (condition_filters IS NULL OR p.condition::text = ANY(condition_filters))
       AND (
           (price_min IS NULL OR pv.price IS NULL OR pv.price >= price_min) 
           AND (price_max IS NULL OR pv.price IS NULL OR pv.price <= price_max)
@@ -136,6 +140,14 @@ BEGIN
     GROUP BY v.address_country
     ORDER BY COUNT(DISTINCT sr.id) DESC
     LIMIT 50
+  ),
+  condition_counts AS (
+    SELECT
+      condition::text AS condition,
+      COUNT(DISTINCT sr.id) AS product_count
+    FROM search_results sr
+    WHERE condition IS NOT NULL
+    GROUP BY condition
   ),
   filter_data AS (
     SELECT
@@ -203,6 +215,14 @@ BEGIN
         ) vc
       ) AS vendor_countries,
       (
+        SELECT COALESCE(json_agg(row_to_json(cd)), '[]'::json)
+        FROM (
+           SELECT condition, product_count
+           FROM condition_counts
+           ORDER BY product_count DESC
+        ) cd
+      ) AS conditions,
+      (
         SELECT COUNT(*)
         FROM search_results
         WHERE visual_similarity IS NOT NULL
@@ -222,6 +242,7 @@ BEGIN
     'attributes', json_build_object(),
     'delivery_locations', json_build_array(),
     'vendor_countries', json_build_array(),
+    'conditions', json_build_array(),
     'visual_match_count', 0,
     'total_products', 0,
     'has_visual_search', false,
@@ -231,7 +252,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC) TO anon;
+GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC, TEXT[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC, TEXT[]) TO anon;
 
-COMMENT ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC) IS 'Return search filter metadata for current combined text and visual search context, including vendor countries.';
+COMMENT ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC, TEXT[]) IS 'Return search filter metadata for current combined text and visual search context, including product conditions.';

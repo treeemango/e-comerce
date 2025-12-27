@@ -178,6 +178,7 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[300px]">Product name</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Condition</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Units</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Price</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -220,6 +221,14 @@ const ManageProductsView: React.FC<ManageProductsViewProps> = ({ onAddProduct, s
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-600">{product.categoryName || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${product.condition === 'new'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                                                }`}>
+                                                {(product.condition || 'new').replace('_', ' ')}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-gray-900">{product.stock ?? 0}</td>
                                         <td className="px-4 py-3 text-sm text-gray-900 font-bold">{product.currency || '$'}{product.price}</td>
                                         <td className="px-4 py-3">

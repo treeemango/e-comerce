@@ -286,6 +286,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
                 <span>{reviewsCount} Reviews</span>
                 <span className="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
                 <span>{soldLabel}</span>
+
               </div>
 
               <div className="mt-4 flex items-baseline gap-2">

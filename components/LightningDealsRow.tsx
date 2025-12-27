@@ -82,6 +82,7 @@ const LightningDealCard: React.FC<{
       coupon_discount_percent: deal.coupon_discount_percent,
       personalization_score: deal.personalization_score,
       in_stock: deal.in_stock,
+      condition: deal.condition,
     };
   }, [deal, loading, mediaList, primaryImage]);
 
@@ -213,6 +214,8 @@ const LightningDealCard: React.FC<{
                 {deal.tag ?? 'Limited'}
               </div>
             )}
+
+
 
             {/* Discount Badge - Top Right */}
             <div

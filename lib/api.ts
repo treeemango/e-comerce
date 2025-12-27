@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences, SellerStats, SellerOrderSummary, SellerAnalyticsSummary } from '@/types';
+import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences, SellerStats, SellerOrderSummary, SellerAnalyticsSummary, RelatedProduct } from '@/types';
 
 export type { NavbarCategory, PersonalizedNavbarCategory };
 
@@ -39,6 +39,7 @@ export interface LightningDealItem {
     soldCount?: number;
     stock?: number;
     listing_type?: 'direct_purchase' | 'inquiry' | 'reservation';
+    condition?: 'new' | 'used' | 'refurbished' | 'open_box' | 'digital';
     vendor?: VendorInfo;
 }
 
@@ -171,6 +172,7 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             reviews: item.review_count || item.reviews || 0,
             soldCount: item.sales_count || item.sold_count || 0,
             stock: item.stock || 0,
+            condition: item.condition || undefined,
             listing_type: item.listing_type || 'direct_purchase'
         };
     });
@@ -302,6 +304,7 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
             auto_discount_name: item.auto_discount_name,
             soldCount: item.sales_count || item.sold_count || 0,
             stock: item.stock || 0,
+            condition: item.condition || undefined,
             listing_type: item.listing_type || 'direct_purchase'
         };
     });
@@ -376,6 +379,7 @@ export const fetchDealsProducts = async (
                 reviews: 0,
                 image: primaryImage,
                 stock: item.stock ?? item.stock_quantity ?? undefined,
+                condition: item.condition || undefined,
                 media: mediaItems,
                 deliveryTimeEstimate: item.delivery_time_estimate || undefined,
                 deliveryTimeDays: item.delivery_time_days || undefined,
@@ -549,6 +553,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
             deliveryTimeDays: item.delivery_time_days || undefined,
             isExpressDelivery: item.is_express_delivery ?? false,
             deliveryScope: item.delivery_scope || undefined,
+            delayCredit: item.delay_credit ?? 0,
             delivery_locations: item.delivery_locations || [], // ✅ Added
             sale_unit: item.sale_unit || undefined, // ✅ Unit of measurement
             deliveryText: item.free_delivery ? 'Free delivery' : undefined,
@@ -597,6 +602,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
                 }
                 : undefined,
             listing_type: item.listing_type || 'direct_purchase',
+            condition: item.condition || 'new',
         } as Product;
     });
 };
@@ -687,7 +693,8 @@ export const fetchSearchFilters = async (
             price_min: appliedFilters.price_min,
             price_max: appliedFilters.price_max,
             attribute_filters: Object.keys(appliedFilters.attributes).length > 0 ? appliedFilters.attributes : null,
-            similarity_threshold: 0.65
+            similarity_threshold: 0.65,
+            condition_filters: appliedFilters.conditions && appliedFilters.conditions.length > 0 ? appliedFilters.conditions : null
         });
 
     if (error) {
@@ -711,6 +718,7 @@ export const fetchSearchFilters = async (
         attributes: data?.attributes || {},
         delivery_locations: data?.delivery_locations || [],
         vendor_countries: data?.vendor_countries || [],
+        conditions: data?.conditions || [],
         visual_match_count: data?.visual_match_count || 0,
         total_products: data?.total_products || 0,
         has_visual_search: data?.has_visual_search || false,
@@ -916,7 +924,8 @@ export const fetchBestSellingProducts = async (
         gallery_media: [],
         deal_type: 'standard',
         listing_type: 'direct_purchase',
-        in_stock: true
+        in_stock: true,
+        condition: item.condition || 'new'
     }));
 };
 
@@ -954,7 +963,8 @@ export const fetchTopRatedProducts = async (
         gallery_media: [],
         deal_type: 'standard',
         listing_type: 'direct_purchase',
-        in_stock: true
+        in_stock: true,
+        condition: item.condition || 'new'
     }));
 };
 
@@ -1025,6 +1035,9 @@ export const fetchFilteredProducts = async (
     if (appliedFilters.price_max !== null) {
         query = query.lte('price', appliedFilters.price_max);
     }
+    if (appliedFilters.conditions && appliedFilters.conditions.length > 0) {
+        query = query.in('condition', appliedFilters.conditions);
+    }
 
     const { data, error } = await query;
 
@@ -1059,6 +1072,7 @@ export const fetchFilteredProducts = async (
         deliveryTimeDays: item.delivery_time_days || undefined,
         isExpressDelivery: item.is_express_delivery ?? false,
         deliveryScope: item.delivery_scope || undefined,
+        delayCredit: item.delay_credit ?? 0,
         delivery_locations: item.delivery_locations || [], // ✅ Added
         sale_unit: item.sale_unit || undefined, // ✅ Unit of measurement
         description: item.description,
@@ -1089,7 +1103,8 @@ export const fetchFilteredProducts = async (
         personalization_score: item.personalization_score || undefined,
         in_stock: typeof item.in_stock === 'boolean' ? item.in_stock : (item.stock ?? 0) > 0,
         has_quantity_discount: item.has_quantity_discount ?? false,
-        listing_type: item.listing_type || 'direct_purchase'
+        listing_type: item.listing_type || 'direct_purchase',
+        condition: item.condition || 'new'
     }));
 
     // Fetch vendor information for filtered products
@@ -2024,10 +2039,7 @@ export const saveUserAddress = async (userId: string, address: Omit<UserAddress,
 
 
 
-export interface RelatedProduct extends Product {
-    relation_type: 'same' | 'similar';
-    similarity_score: number;
-}
+
 
 export const fetchRelatedProducts = async (productId: string): Promise<{ same: RelatedProduct[], similar: RelatedProduct[] }> => {
     console.log('Fetching related products for:', productId);
@@ -4715,9 +4727,9 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                 media:media!media_product_fk (id, image_url, is_main, media_type, images(image_embedding)),
                 product_variants (id, price, stock, sku, image_url, options, is_default),
                 quantity_discounts (min_quantity, unit_price),
-                description, status, currency, tags,
+                description, status, currency, tags, condition,
                 seo_title, meta_description, use_case_tags, occasion_tags,
-                delivery_scope,
+                delivery_scope, delay_credit,
                 listing_type, has_quantity_discount, free_delivery, is_express_delivery, delivery_locations, sale_unit
             `)
             .eq('status', 'pending')
@@ -4774,6 +4786,7 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                 category_name: p.categories?.name || 'Uncategorized',
                 price: price,
                 status: p.status as 'pending' | 'approved' | 'rejected',
+                condition: p.condition,
                 submitted_at: p.submitted_at || p.created_at,
                 description: p.description,
                 image_url: mainMedia?.image_url,
@@ -4806,7 +4819,9 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
                 delivery_scope: p.delivery_scope,
                 // Derive stock and sku from the default variant
                 stock: variants.find(v => v.is_default)?.stock ?? variants[0]?.stock,
-                sku: variants.find(v => v.is_default)?.sku ?? variants[0]?.sku
+                sku: variants.find(v => v.is_default)?.sku ?? variants[0]?.sku,
+                delay_credit: p.delay_credit ?? 0,
+                delayCredit: p.delay_credit ?? 0
             };
         });
     } catch (error) {
@@ -5413,6 +5428,51 @@ export const createProductFull = async (
     }
 
     return data; // Should return the new product ID
+};
+
+export const createProductsBulk = async (
+    sellerId: string,
+    products: {
+        payload: CreateProductPayload;
+        variants: any[];
+        media: any[];
+        attributes: any[];
+        quantityDiscounts?: QuantityDiscountTier[];
+    }[],
+    onProgress?: (current: number, total: number) => void
+): Promise<{ success: string[]; failed: { index: number; error: string }[] }> => {
+    const results = {
+        success: [] as string[],
+        failed: [] as { index: number; error: string }[]
+    };
+
+    for (let i = 0; i < products.length; i++) {
+        const item = products[i];
+        try {
+            const pid = await createProductFull(
+                sellerId,
+                item.payload,
+                item.variants,
+                item.media,
+                item.attributes,
+                item.quantityDiscounts || []
+            );
+
+            if (pid) {
+                results.success.push(pid);
+            } else {
+                results.failed.push({ index: i, error: 'Failed to create product' });
+            }
+        } catch (err: any) {
+            results.failed.push({ index: i, error: err.message || 'Unknown error' });
+        }
+
+        if (onProgress) {
+            onProgress(i + 1, products.length);
+        }
+    }
+
+    return results;
 };
 
 
@@ -7136,3 +7196,119 @@ export const fetchPlatformKPIs = async (): Promise<PlatformKPIs> => {
         };
     }
 };
+
+// ==========================================
+// REFERRAL SYSTEM APIs
+// ==========================================
+
+export interface ReferralCode {
+    code: string;
+    created_at: string;
+}
+
+export interface ReferralStats {
+    total_referrals: number;
+    pending_rewards: number;
+    total_earned: number;
+    referral_code: string;
+}
+
+/**
+ * Get or create a referral code for the current user
+ */
+export const fetchReferralCode = async (): Promise<string | null> => {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return null;
+
+        // Try direct select first
+        const { data, error } = await supabase
+            .from('referral_codes')
+            .select('code')
+            .eq('user_id', user.id)
+            .single();
+
+        if (data) return data.code;
+
+        // If no code, try creating one via RPC
+        if (!data || error) {
+            const { data: newCode, error: createError } = await supabase
+                .rpc('ensure_referral_code');
+
+            if (createError) {
+                console.error('Error creating referral code:', createError);
+                return null;
+            }
+            return newCode;
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Error fetching referral code:', error);
+        return null;
+    }
+};
+
+/**
+ * Get referral statistics for the user
+ */
+export const fetchReferralStats = async (): Promise<ReferralStats> => {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { total_referrals: 0, pending_rewards: 0, total_earned: 0, referral_code: '' };
+
+        // Get code
+        const code = await fetchReferralCode();
+
+        // Get referrals count
+        const { count, error } = await supabase
+            .from('referrals')
+            .select('*', { count: 'exact', head: true })
+            .eq('referrer_id', user.id);
+
+        // Calculate earnings (mock logic for now, or based on 'rewarded' status)
+        // Ideally we sum up a 'rewards' table, but for now let's just count 'completed' referrals * fixed amount
+        const { count: completedCount } = await supabase
+            .from('referrals')
+            .select('*', { count: 'exact', head: true })
+            .eq('referrer_id', user.id)
+            .eq('status', 'completed'); // 'completed' means they made a purchase
+
+        const REWARD_PER_REFERRAL = 10; // $10 or equivalent
+
+        return {
+            total_referrals: count || 0,
+            pending_rewards: 0, // Logic to be implemented
+            total_earned: (completedCount || 0) * REWARD_PER_REFERRAL,
+            referral_code: code || ''
+        };
+    } catch (error) {
+        console.error('Error fetching referral stats:', error);
+        return { total_referrals: 0, pending_rewards: 0, total_earned: 0, referral_code: '' };
+    }
+};
+
+/**
+ * Validate and apply a referral code during signup/onboarding
+ */
+export const applyReferralCode = async (code: string): Promise<boolean> => {
+    try {
+        // Validate code exists
+        const { data, error } = await supabase
+            .from('referral_codes')
+            .select('user_id')
+            .eq('code', code.toUpperCase())
+            .single();
+
+        if (error || !data) return false;
+
+        // In a real flow, we would store this in the session or 'referrals' table 
+        // linked to the currently authenticated user (if signed up).
+        // For now, we return true to indicate it's valid.
+
+        return true;
+    } catch (error) {
+        return false;
+    }
+};
+

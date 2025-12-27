@@ -68,6 +68,14 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                         <span className="px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-white shadow-sm">
                             {getCurrencySymbol(product.currency || 'USD')}{product.price.toFixed(2)}
                         </span>
+                        {product.condition && (
+                            <span className={`px-3 py-1 text-xs font-semibold rounded-full border shadow-sm ${product.condition === 'new'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                : 'bg-blue-50 text-blue-700 border-blue-100'
+                                }`}>
+                                {product.condition.charAt(0).toUpperCase() + product.condition.slice(1).replace('_', ' ')}
+                            </span>
+                        )}
                     </div>
 
                     <div className="absolute bottom-3 right-3 text-xs text-white bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full flex items-center gap-2 shadow-md">
@@ -137,6 +145,13 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-100">
                                 <i className="fas fa-bolt" />
                                 Express
+                            </span>
+                        )}
+                        {/* Credit for Delay Badge */}
+                        {(product.delay_credit ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-100">
+                                <i className="fas fa-wallet" />
+                                {getCurrencySymbol(product.currency)}{product.delay_credit} Credit for Delay
                             </span>
                         )}
                     </div>
@@ -269,6 +284,13 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                                         <DetailTile label="Price" value={`${getCurrencySymbol(product.currency || 'USD')}${product.price.toFixed(2)}`} icon="fa-tag" />
                                         <DetailTile label="Submitted" value={new Date(product.submitted_at).toLocaleString()} icon="fa-clock" />
                                         {product.brand_name && <DetailTile label="Brand" value={product.brand_name} icon="fa-certificate" />}
+                                        {product.condition && (
+                                            <DetailTile
+                                                label="Condition"
+                                                value={product.condition.charAt(0).toUpperCase() + product.condition.slice(1).replace('_', ' ')}
+                                                icon="fa-star"
+                                            />
+                                        )}
                                         {product.options && product.options.length > 0 && (
                                             <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                                                 <div className="text-xs uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-2">

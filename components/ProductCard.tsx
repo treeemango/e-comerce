@@ -204,6 +204,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                 <span className="material-icons text-[10px]">redeem</span> {`Buy ${product.auto_discount_buy_qty} get ${product.auto_discount_get_qty}`}
               </span>
             )}
+
           </div>
 
           {/* Deal Type Specific Badges - Top Right */}
@@ -413,7 +414,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                     </span>
                   </span>
                 )}
-                {locationLabel && (
+                {/* Only show country badge if no specific delivery_locations are set */}
+                {locationLabel && !(product.delivery_locations && product.delivery_locations.length > 0) && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
                     <span className="material-icons !text-[13px] leading-none">public</span>
                     <span className="leading-none">{locationLabel}</span>

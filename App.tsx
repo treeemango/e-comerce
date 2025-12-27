@@ -1069,7 +1069,7 @@ const App: React.FC = () => {
                 onSuccess={() => setDashboardTab('manage-products')}
               />
             )}
-            {dashboardTab === 'add-products-upload' && <AddProductsUploadView />}
+            {dashboardTab === 'add-products-upload' && <AddProductsUploadView sellerId={user?.id || ''} />}
             {dashboardTab === 'pricing-health' && <PricingHealthView sellerId={user?.id || ''} />}
             {dashboardTab === 'product-compliance' && <ProductComplianceView sellerId={user?.id || ''} />}
             {dashboardTab === 'orders' && <OrdersView sellerId={user?.id} />}

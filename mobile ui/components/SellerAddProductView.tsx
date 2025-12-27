@@ -20,8 +20,9 @@ import {
     MediaUploadData,
     ProductAttributeData,
     ProductVariantData,
-    QuantityDiscountTier
-} from '../../types';
+    QuantityDiscountTier,
+    ProductCondition
+} from '@/types';
 import { SearchableSelect } from './SearchableSelect';
 
 interface SellerAddProductViewProps {
@@ -34,7 +35,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
 }
 
-const STEPS = ['Basics', 'Attributes', 'Variants', 'Pricing', 'Media', 'SEO'];
+const STEPS = ['Basics', 'Attributes', 'Pricing & Variants', 'Media', 'SEO'];
 
 const DELIVERY_SCOPE_OPTIONS = [
     { value: 'nationwide', label: 'Nationwide', detail: 'Across the whole country' },
@@ -99,6 +100,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [deliveryTime, setDeliveryTime] = useState('');
     const [deliveryTimeDays, setDeliveryTimeDays] = useState(1);
     const [isExpressDelivery, setIsExpressDelivery] = useState(false);
+    const [delayCredit, setDelayCredit] = useState('0');
     const [freeDelivery, setFreeDelivery] = useState(false);
     const [minOrderValue, setMinOrderValue] = useState('0');
     const [minOrderForFreeDelivery, setMinOrderForFreeDelivery] = useState('0');
@@ -108,6 +110,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [deliveryLocationInput, setDeliveryLocationInput] = useState('');
     const [isChoice, setIsChoice] = useState(false);
     const [listingType, setListingType] = useState<'direct_purchase' | 'inquiry' | 'reservation'>('direct_purchase');
+    const [condition, setCondition] = useState<ProductCondition>('new');
     const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
 
 
@@ -254,23 +257,36 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
         };
 
         const combos = generateCombinations(variantOptions);
-        const baseP = parseFloat(price) || 0;
-        const baseS = parseInt(stock) || 0;
+        const baseP = parseFloat(price) || 10; // Default to 10 if no base price set
+        const baseS = parseInt(stock) || 1;   // Default to 1 if no base stock set
 
         // Create variants, preserving existing data if matching options found
-        const newVariants = combos.map(combo => {
-            const existing = variants.find(v => JSON.stringify(v.options) === JSON.stringify(combo));
+        const newVariants = combos.map((combo, idx) => {
+            // Robust comparison instead of JSON.stringify to prevent order issues
+            const existing = variants.find(v => {
+                const keysV = Object.keys(v.options);
+                const keysC = Object.keys(combo);
+                if (keysV.length !== keysC.length) return false;
+                return keysV.every(k => v.options[k] === combo[k]);
+            });
+
             return {
                 sku: existing?.sku || `${title.substring(0, 3).toUpperCase()}-${Object.values(combo).join('-').toUpperCase()}-${Date.now().toString().slice(-4)}`,
-                price: existing?.price || baseP,
-                compare_at_price: existing?.compare_at_price || parseFloat(compareAtPrice) || undefined,
-                original_price: existing?.original_price || parseFloat(compareAtPrice) || undefined, // legacy
-                stock: typeof existing?.stock === 'number' ? existing.stock : baseS,
+                price: (typeof existing?.price === 'number' && !isNaN(existing.price)) ? existing.price : baseP,
+                compare_at_price: (typeof existing?.compare_at_price === 'number' && !isNaN(existing.compare_at_price)) ? existing.compare_at_price : undefined,
+                original_price: (typeof existing?.original_price === 'number' && !isNaN(existing.original_price)) ? existing.original_price : undefined,
+                stock: (typeof existing?.stock === 'number' && !isNaN(existing.stock)) ? existing.stock : baseS,
                 options: combo,
-                is_default: false,
+                is_default: existing ? existing.is_default : (idx === 0), // Preserve or default to first
                 image_url: existing?.image_url
             };
         });
+
+        // Ensure exactly one default exists if we have variants
+        if (newVariants.length > 0 && !newVariants.some(v => v.is_default)) {
+            newVariants[0].is_default = true;
+        }
+
         setVariants(newVariants);
     }, [variantOptions, hasVariants, title]); // Don't depend on price/stock changes to avoid overwriting custom variant edits
 
@@ -379,8 +395,21 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const handleNext = () => {
         if (currentStep === 0) {
             if (!title || !categoryId) { alert("Title and Category are required."); return; }
-        } else if (currentStep === 3) {
-            if (!price) { alert("Base Price is required."); return; }
+        } else if (currentStep === 2) {
+            // For variants, validate that at least one variant has a price
+            if (hasVariants) {
+                const hasValidPrice = variants.some(v => v.price > 0);
+                if (!hasValidPrice) {
+                    alert("At least one variant must have a price set.");
+                    return;
+                }
+            } else {
+                // For simple products, require base price
+                if (!price) {
+                    alert("Selling Price is required.");
+                    return;
+                }
+            }
         }
         if (currentStep < STEPS.length - 1) setCurrentStep(prev => prev + 1);
     };
@@ -471,8 +500,14 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     };
 
     const handleSubmit = async () => {
-        if (!categoryId || !title || !price) {
-            alert('Please fill in all required fields (Title, Category, Price).');
+        if (!categoryId || !title) {
+            alert('Please fill in required fields: Title and Category.');
+            return;
+        }
+
+        // Price Validation Logic
+        if (!hasVariants && !price) {
+            alert('Please set a Selling Price.');
             return;
         }
 
@@ -505,21 +540,44 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 options: {},
                 is_default: true
             }]).map(v => {
-                const rrp = (typeof v.compare_at_price === 'number' && v.compare_at_price > v.price)
-                    ? v.compare_at_price
-                    : v.price;
-                const discountPercent = (rrp > v.price)
-                    ? Math.round(((rrp - v.price) / rrp) * 100)
+                // If variant price is 0 AND base price is set, use base price (user hasn't edited this variant)
+                // If variant price is set to a non-zero value, preserve it
+                // If both are 0, that's an error state - require price input
+                const variantHasCustomPrice = (typeof v.price === 'number' && !isNaN(v.price) && v.price > 0);
+                const safePrice = variantHasCustomPrice ? v.price : (numPrice > 0 ? numPrice : 0);
+
+                const safeStock = (typeof v.stock === 'number' && !isNaN(v.stock)) ? v.stock : numStock;
+                const safeCompare = (typeof v.compare_at_price === 'number' && !isNaN(v.compare_at_price)) ? v.compare_at_price : undefined;
+
+                const rrp = (typeof safeCompare === 'number' && safeCompare > safePrice)
+                    ? safeCompare
+                    : safePrice;
+                const discountPercent = (rrp > safePrice)
+                    ? Math.round(((rrp - safePrice) / rrp) * 100)
                     : 0;
 
                 return {
                     ...v,
-                    compare_at_price: v.compare_at_price || rrp, // Ensure it's never NULL for RPC if we want strike-through parity
-                    original_price: v.compare_at_price || rrp,
+                    price: safePrice,
+                    stock: safeStock,
+                    compare_at_price: safeCompare || rrp,
+                    original_price: safeCompare || rrp,
                     rrp,
                     discount_percent: discountPercent
                 };
             });
+
+            // Validate that all variants have a valid price
+            const invalidVariants = preparedVariants.filter(v => v.price <= 0);
+            if (invalidVariants.length > 0) {
+                alert(`Please set a price for all variants (or provide a default price).\n\nMissing price for: ${invalidVariants.map(v => Object.values(v.options).join('/')).join(', ')}`);
+                setIsSubmitting(false);
+                return;
+            }
+
+            // DEBUG: Log variant data to console
+            console.log('🔍 Prepared Variants:', JSON.stringify(preparedVariants, null, 2));
+            console.log('🔍 Delivery Locations:', deliveryLocations);
 
             // Dynamically look up Pricing Unit attribute UUID to avoid syntax errors
             const pricingUnitAttr = availableAttributes.find(a => a.name.toLowerCase().includes('unit'));
@@ -541,10 +599,8 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 }
             }
 
-            // Append detailed delivery locations to time estimate for visibility
-            const fullDeliveryTime = deliveryLocations.length > 0
-                ? `${deliveryTime} (${deliveryLocations.join(', ')})`
-                : deliveryTime;
+            // Delivery locations are stored separately in the delivery_locations field
+            const fullDeliveryTime = deliveryTime;
 
             const payload = {
                 title,
@@ -568,6 +624,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 delivery_time_estimate: fullDeliveryTime,
                 delivery_time_days: Number.isFinite(deliveryTimeDays) ? deliveryTimeDays : 1,
                 is_express_delivery: isExpressDelivery,
+                delay_credit: parseFloat(delayCredit) || 0,
                 free_delivery: freeDelivery,
                 min_order_value: parseFloat(minOrderValue) || 0,
                 min_order_for_free_delivery: parseFloat(minOrderForFreeDelivery) || 0,
@@ -576,7 +633,8 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 sale_unit: pricingUnit,
                 is_active: true,
                 listing_type: listingType,
-                quantity_discounts: quantityDiscounts
+                quantity_discounts: quantityDiscounts,
+                condition: condition
             };
 
             const pid = await createProductFull(sellerId, payload, preparedVariants, payload.media, finalAttributes, quantityDiscounts);
@@ -835,6 +893,83 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                 ))}
                             </div>
                         </div>
+
+                        {/* Product Type Selection - Early decision */}
+                        <div className="pt-6 border-t border-gray-100">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                    <span className="material-icons text-lg">inventory_2</span>
+                                    Product Type
+                                </h4>
+                                <p className="text-sm text-blue-700 mb-4">Choose how you'll sell this product.</p>
+
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
+                                        <div
+                                            onClick={() => setHasVariants(!hasVariants)}
+                                            className={`w-12 h-6 rounded-full p-1 transition-colors cursor-pointer ${hasVariants ? "bg-orange-500" : "bg-gray-300"}`}
+                                        >
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${hasVariants ? "translate-x-6" : ""}`} />
+                                        </div>
+                                        <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 p-3 bg-white rounded border">
+                                    {!hasVariants ? (
+                                        <div className="text-sm text-gray-600">
+                                            <strong>Simple Product:</strong> Single price and stock level. Best for products without variations.
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-gray-600">
+                                            <strong>Multiple Variants:</strong> Different prices and stock for variations. Each combination becomes a separate purchasable item.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Product Condition */}
+                        <div className="pt-6 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-4">
+                                <label className="text-xs font-bold uppercase text-gray-900 tracking-wider">Product Condition</label>
+                                <div className="px-2 py-0.5 bg-orange-100 text-orange-600 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {[
+                                    { id: 'new', icon: 'new_releases', title: 'New', desc: 'Factory sealed' },
+                                    { id: 'used', icon: 'history', title: 'Used', desc: 'Previously owned' },
+                                    { id: 'refurbished', icon: 'build', title: 'Refurbished', desc: 'Restored to new' },
+                                    { id: 'open_box', icon: 'inventory_2', title: 'Open Box', desc: 'Opened but unused' },
+                                    { id: 'digital', icon: 'cloud_download', title: 'Digital', desc: 'Digital delivery' }
+                                ].map((cond) => (
+                                    <button
+                                        key={cond.id}
+                                        type="button"
+                                        onClick={() => setCondition(cond.id as ProductCondition)}
+                                        className={cn(
+                                            "relative flex flex-col items-center p-4 rounded-xl border-2 transition-all text-center",
+                                            condition === cond.id
+                                                ? "border-orange-400 bg-orange-50/50 shadow-sm"
+                                                : "border-gray-100 bg-white"
+                                        )}
+                                    >
+                                        <div className={cn(
+                                            "w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors",
+                                            condition === cond.id ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-400"
+                                        )}>
+                                            <span className="material-icons text-xl">{cond.icon}</span>
+                                        </div>
+                                        <div className={cn("font-bold text-sm", condition === cond.id ? "text-orange-900" : "text-gray-900")}>{cond.title}</div>
+                                        <div className="text-[9px] text-gray-500 uppercase font-bold mt-0.5">{cond.desc}</div>
+                                        {condition === cond.id && (
+                                            <span className="absolute top-2 right-2 material-icons text-orange-500 text-base">check_circle</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -903,16 +1038,38 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                     </div>
                 )}
 
-                {/* Step 2: Variants */}
+                {/* Step 2: Pricing & Variants */}
                 {currentStep === 2 && (
                     <div className="space-y-5 animate-in slide-in-from-right-8 duration-300">
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
-                            <span className="font-bold text-gray-900">This product has variants?</span>
-                            <div
-                                onClick={() => setHasVariants(!hasVariants)}
-                                className={cn("w-12 h-6 rounded-full p-1 transition-colors cursor-pointer", hasVariants ? "bg-orange-500" : "bg-gray-300")}
-                            >
-                                <div className={cn("w-4 h-4 bg-white rounded-full shadow-sm transition-transform", hasVariants ? "translate-x-6" : "")} />
+
+                        {/* Pricing Unit & Currency - Always visible */}
+                        <div className="space-y-4 pt-4">
+                            <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing Unit & Currency</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="flex flex-col justify-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Currency</label>
+                                    <select
+                                        value={currency}
+                                        onChange={e => setCurrency(e.target.value)}
+                                        className="bg-white border text-xs font-bold rounded-lg px-2 py-1.5 focus:border-orange-500 outline-none"
+                                    >
+                                        {SUPPORTED_CURRENCIES.map(c => (
+                                            <option key={c.code} value={c.code}>{c.code}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex flex-col justify-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Unit</label>
+                                    <select
+                                        value={pricingUnit}
+                                        onChange={e => setPricingUnit(e.target.value)}
+                                        className="bg-white border text-xs font-bold rounded-lg px-2 py-1.5 focus:border-orange-500 outline-none"
+                                    >
+                                        {['piece', 'kg', 'g', 'L', 'ml', 'meter', 'box', 'pack', 'pair', 'dozen'].map(u => (
+                                            <option key={u} value={u}>{u}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -1039,38 +1196,6 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                             </>
                         )}
 
-                        {hasVariants && (
-                            <div className="space-y-4 pt-4 border-t border-gray-50">
-                                <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing Unit & Currency</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="flex flex-col justify-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Currency</label>
-                                        <select
-                                            value={currency}
-                                            onChange={e => setCurrency(e.target.value)}
-                                            className="bg-white border text-xs font-bold rounded-lg px-2 py-1.5 focus:border-orange-500 outline-none"
-                                        >
-                                            {SUPPORTED_CURRENCIES.map(c => (
-                                                <option key={c.code} value={c.code}>{c.code}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="flex flex-col justify-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Unit</label>
-                                        <select
-                                            value={pricingUnit}
-                                            onChange={e => setPricingUnit(e.target.value)}
-                                            className="bg-white border text-xs font-bold rounded-lg px-2 py-1.5 focus:border-orange-500 outline-none"
-                                        >
-                                            {['piece', 'kg', 'g', 'L', 'ml', 'meter', 'box', 'pack', 'pair', 'dozen'].map(u => (
-                                                <option key={u} value={u}>{u}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
                         <div className="space-y-4 mt-4">
                             <h3 className="text-sm font-bold uppercase text-gray-500">Preview Variants ({variants.length})</h3>
                             <div className="max-h-80 overflow-y-auto space-y-3 pt-2">
@@ -1102,8 +1227,29 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                             </div>
 
                                             <div className="flex-1">
-                                                <div className="font-bold text-gray-900 mb-1">{Object.values(v.options).join(' / ')}</div>
-                                                <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{v.sku}</div>
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <div className="font-bold text-gray-900 mb-1">{Object.values(v.options).join(' / ')}</div>
+                                                        <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{v.sku}</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const n = variants.map((varItem, idx) => ({
+                                                                ...varItem,
+                                                                is_default: idx === i
+                                                            }));
+                                                            setVariants(n);
+                                                        }}
+                                                        className={cn(
+                                                            "px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border transition-all",
+                                                            v.is_default
+                                                                ? "bg-green-100 text-green-700 border-green-200"
+                                                                : "bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100"
+                                                        )}
+                                                    >
+                                                        {v.is_default ? "Default" : "Make Default"}
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -1118,7 +1264,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                                         type="number"
                                                         value={v.price}
                                                         onChange={e => {
-                                                            const n = [...variants]; n[i].price = parseFloat(e.target.value); setVariants(n);
+                                                            const n = [...variants];
+                                                            const parsed = parseFloat(e.target.value);
+                                                            n[i].price = isNaN(parsed) ? 0 : parsed;
+                                                            setVariants(n);
                                                         }}
                                                         className="w-full border-none bg-gray-50 rounded-lg py-2 pl-8 pr-3 text-[11px] font-bold focus:ring-2 focus:ring-orange-500"
                                                         placeholder="Price"
@@ -1154,7 +1303,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                                         type="number"
                                                         value={v.stock}
                                                         onChange={e => {
-                                                            const n = [...variants]; n[i].stock = parseInt(e.target.value) || 0; setVariants(n);
+                                                            const n = [...variants];
+                                                            const parsed = parseInt(e.target.value);
+                                                            n[i].stock = isNaN(parsed) ? 0 : parsed;
+                                                            setVariants(n);
                                                         }}
                                                         className="w-full border-none bg-gray-50 rounded-lg py-2 pl-8 pr-3 text-[11px] font-bold focus:ring-2 focus:ring-orange-500"
                                                         placeholder="Qty"
@@ -1210,32 +1362,36 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                 </>
                             )}
 
-                            <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing & Inventory</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Base Price *</label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
-                                        <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-12 pr-16 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg" />
-                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold uppercase">/ {pricingUnit}</span>
+                            {!hasVariants && (
+                                <>
+                                    <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing & Inventory</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Selling Price *</label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
+                                                <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-12 pr-16 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg" />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold uppercase">/ {pricingUnit}</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Original RRP (for discount)</label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
+                                                <input type="number" value={compareAtPrice} onChange={e => setCompareAtPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-12 pr-16 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg text-gray-500" />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold uppercase">/ {pricingUnit}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Original Price</label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
-                                        <input type="number" value={compareAtPrice} onChange={e => setCompareAtPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-12 pr-16 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg text-gray-500" />
-                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold uppercase">/ {pricingUnit}</span>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Base Stock</label>
+                                        <div className="relative">
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">inventory_2</span></span>
+                                            <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full border p-3 pl-12 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold" />
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Base Stock</label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">inventory_2</span></span>
-                                    <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full border p-3 pl-12 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold" />
-                                </div>
-                            </div>
+                                </>
+                            )}
 
                             {/* Wholesale Tiers */}
                             <div className="pt-6 border-t border-gray-100">
@@ -1456,6 +1612,22 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     </div>
                                 </div>
                             )}
+
+                            {/* Credit for Delay */}
+                            <div className="space-y-1 mt-4">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Credit for Delay</label>
+                                <p className="text-[9px] text-gray-400 px-1 mb-1">Credit amount offered if delivery is delayed</p>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
+                                    <input
+                                        type="number"
+                                        value={delayCredit}
+                                        onChange={e => setDelayCredit(e.target.value)}
+                                        placeholder="0.00"
+                                        className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none"
+                                    />
+                                </div>
+                            </div>
 
                             <div className="grid grid-cols-2 gap-4 mt-4">
                                 <div className="space-y-1">

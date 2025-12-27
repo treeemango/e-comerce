@@ -252,6 +252,7 @@ SELECT
     p.min_order_for_free_delivery,
     p.delivery_scope,
     p.sale_unit,
+    p.delay_credit,
 
     -- SEO & Tech
     p.url_slug,
@@ -286,6 +287,7 @@ SELECT
     p.created_at,
     p.updated_at,
     p.listing_type,
+    p.condition, -- ✅ ADDED
     p.updated_at AS metrics_updated_at
 
 FROM public.products p
@@ -382,6 +384,7 @@ SELECT
     auto_discount_min_requirement,
     auto_discount_name,
     listing_type,
+    condition, -- ✅ ADDED
     stock_state,
     variants
 FROM public.product_unified_view;
