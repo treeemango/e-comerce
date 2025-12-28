@@ -4,7 +4,7 @@ interface BottomNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   cartCount?: number;
-  notificationCount?: number;
+  messageCount?: number;
 }
 
 interface Ripple {
@@ -17,7 +17,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   onTabChange,
   cartCount = 0,
-  notificationCount = 0
+  messageCount = 0
 }) => {
   const [ripples, setRipples] = useState<Ripple[]>([]);
 
@@ -64,8 +64,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const tabs = [
     { id: 'home', icon: 'home', label: 'Home', badge: null },
     { id: 'categories', icon: 'category', label: 'Categories', badge: null },
+    { id: 'messages', icon: 'chat_bubble_outline', label: 'Messages', badge: messageCount > 0 ? messageCount : null },
     { id: 'you', icon: 'storefront', label: 'Seller', badge: null },
-    { id: 'support', icon: 'support_agent', label: 'Support', badge: notificationCount > 0 ? notificationCount : null },
     { id: 'cart', icon: 'shopping_cart', label: 'Cart', badge: cartCount > 0 ? cartCount : null }
   ];
 
@@ -78,16 +78,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       <div className="max-w-[420px] mx-auto glass rounded-[32px] shadow-premium p-2 flex items-center justify-around translate-y-[-env(safe-area-inset-bottom)]">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
+          const isMessages = tab.id === 'messages';
+
+          // Custom color classes based on module
+          const activeTextClass = isMessages ? 'text-red-500' : 'text-primary';
+          const activeBgClass = isMessages ? 'bg-red-500/10' : 'bg-primary/10';
+          const activeIndicatorClass = isMessages ? 'bg-red-500' : 'bg-primary';
+
           return (
             <button
               key={tab.id}
               onClick={(e) => handleTabClick(tab.id, e)}
-              className={`relative flex flex-col items-center justify-center py-2 px-1 min-w-[64px] transition-all duration-300 ${isActive ? 'text-primary' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
+              className={`relative flex flex-col items-center justify-center py-2 px-1 min-w-[64px] transition-all duration-300 ${isActive
+                ? activeTextClass
+                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
                 }`}
             >
               {/* Active Background Glow */}
               {isActive && (
-                <div className="absolute inset-x-1 inset-y-1 bg-primary/10 rounded-2xl animate-in fade-in zoom-in duration-300" />
+                <div className={`absolute inset-x-1 inset-y-1 ${activeBgClass} rounded-2xl animate-in fade-in zoom-in duration-300`} />
               )}
 
               <div className="relative">
@@ -97,7 +106,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 </span>
 
                 {tab.badge && (
-                  <span className={`absolute -top-1.5 -right-1.5 bg-price-red text-white text-[9px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center border-2 border-white dark:border-surface-dark shadow-sm transition-all duration-300 ${isActive ? 'scale-110' : ''
+                  <span className={`absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center border border-white dark:border-black shadow-sm transition-all duration-300 ${isActive ? 'scale-110' : ''
                     }`}>
                     {tab.badge > 99 ? '99+' : tab.badge}
                   </span>
@@ -111,7 +120,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
               {/* Dot Indicator */}
               {isActive && (
-                <div className="absolute -bottom-1.5 w-1 h-1 bg-primary rounded-full" />
+                <div className={`absolute -bottom-1.5 w-1 h-1 ${activeIndicatorClass} rounded-full`} />
               )}
             </button>
           );

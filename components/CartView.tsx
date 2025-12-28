@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
-import { getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
+import { useMemo } from 'react';
 import { applyCoupon, fetchUserCoupons } from '@/lib/api';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
@@ -32,13 +33,63 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
 
     const items = Object.values(groupedItems) as (Product & { quantity: number })[];
 
-    const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const shipping = subtotal > 120 ? 0 : 12;
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        items.forEach(item => {
+            const key = `${item.id}:${item.variant_id || 'default'}`;
+            vals.push({ id: `item-${key}`, amount: item.price, currency: item.currency || 'USD' });
+        });
+
+        // Convert shipping and free shipping threshold too
+        vals.push({ id: 'shipping-rate', amount: 12, currency: 'USD' });
+        vals.push({ id: 'free-shipping-threshold', amount: 120, currency: 'USD' });
+
+        return vals;
+    }, [items]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedAmount = (id: string, fallback: number) => {
+        return convertedValues[id]?.convertedAmount ?? fallback;
+    };
+
+    const getConvertedPrice = (id: string, fallback: number, currency: string) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, currency);
+    };
+
+    const subtotal = items.reduce((sum, item) => {
+        const key = `${item.id}:${item.variant_id || 'default'}`;
+        const price = getConvertedAmount(`item-${key}`, item.price);
+        return sum + (price * item.quantity);
+    }, 0);
+
+    const shippingThreshold = getConvertedAmount('free-shipping-threshold', 120);
+    const shippingRate = getConvertedAmount('shipping-rate', 12);
+
+    const shipping = subtotal > shippingThreshold ? 0 : shippingRate;
     const initialTotal = Math.max(0, subtotal + shipping - discount);
 
-    // If we have promoResult, use its finalTotal
-    const finalTotal = promoResult ? Math.max(0, promoResult.finalTotal + shipping - discount) : initialTotal;
-    const bulkSavings = promoResult ? promoResult.totalSavings : 0;
+    // For promoResult, we need to convert the calculated totals per item
+    const convertedPromoItems = useMemo(() => {
+        if (!promoResult) return [];
+        return promoResult.items.map(res => {
+            const key = `${res.product.id}:${res.product.variant_id || 'default'}`;
+            const conv = convertedValues[`item-${key}`];
+            const rate = conv?.rate ?? 1;
+
+            return {
+                ...res,
+                convertedTotal: res.total * rate,
+                convertedDiscountedPrice: res.discountedPrice * rate
+            };
+        });
+    }, [promoResult, convertedValues]);
+
+    const finalSubtotal = subtotal;
+    const finalPromoTotal = promoResult ? convertedPromoItems.reduce((sum, i) => sum + i.convertedTotal, 0) : initialTotal;
+
+    const finalTotal = promoResult ? Math.max(0, finalPromoTotal + shipping - discount) : initialTotal;
+    const bulkSavings = promoResult ? Math.max(0, subtotal - finalPromoTotal) : 0;
     const totalSavings = bulkSavings + discount;
     const uniqueCount = items.length;
 
@@ -193,12 +244,15 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                             </div>
                                             <div className="text-right">
                                                 {(() => {
-                                                    const resultsInfo = promoResult?.items.find(pi => pi.product.id === item.id);
+                                                    const resultsInfo = convertedPromoItems.find(pi => pi.product.id === item.id);
+                                                    const key = `${item.id}:${item.variant_id || 'default'}`;
+                                                    const itemPriceDisplay = getConvertedPrice(`item-${key}`, item.price, item.currency || 'USD');
+                                                    const discountedPriceDisplay = resultsInfo ? formatPrice(resultsInfo.convertedDiscountedPrice, preferredCurrency) : itemPriceDisplay;
+
                                                     return (
                                                         <>
                                                             <p className="font-bold text-lg text-gray-900">
-                                                                {getCurrencySymbol(item.currency)}
-                                                                {(resultsInfo?.discountedPrice || item.price).toFixed(2)}
+                                                                {discountedPriceDisplay}
                                                             </p>
                                                             {resultsInfo?.appliedPromotions.map((promo, idx) => (
                                                                 <p key={idx} className={`text-[10px] font-bold uppercase tracking-wider ${promo.type === 'quantity_discount' ? 'text-emerald-600' : 'text-indigo-600'}`}>
@@ -209,7 +263,7 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                                             {resultsInfo && resultsInfo.appliedPromotions.some(p => p.description.toLowerCase().includes('buy')) && (
                                                                 <div className="mt-2">
                                                                     <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
-                                                                        Item total: {getCurrencySymbol(item.currency)}{resultsInfo.total.toFixed(2)}
+                                                                        Item total: {formatPrice(resultsInfo.convertedTotal, preferredCurrency)}
                                                                     </span>
                                                                 </div>
                                                             )}
@@ -283,11 +337,11 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                             <div className="space-y-3 text-sm text-gray-700">
                                 <div className="flex justify-between">
                                     <span>Subtotal</span>
-                                    <span>{getCurrencySymbol(items[0]?.currency)}{subtotal.toFixed(2)}</span>
+                                    <span>{formatPrice(subtotal, preferredCurrency)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span>Shipping</span>
-                                    <span>{shipping === 0 ? 'Free' : `${getCurrencySymbol(items[0]?.currency)}${shipping.toFixed(2)}`}</span>
+                                    <span>{shipping === 0 ? 'Free' : formatPrice(shipping, preferredCurrency)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span>Items</span>
@@ -296,18 +350,18 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                                 {discount > 0 && (
                                     <div className="flex justify-between text-rose-600 font-medium">
                                         <span>Coupon Discount</span>
-                                        <span>-{getCurrencySymbol(items[0]?.currency)}{discount.toFixed(2)}</span>
+                                        <span>-{formatPrice(discount, preferredCurrency)}</span>
                                     </div>
                                 )}
                                 {bulkSavings > 0 && (
                                     <div className="flex justify-between text-emerald-600 font-medium">
                                         <span>Bulk Savings</span>
-                                        <span>-{getCurrencySymbol(items[0]?.currency)}{bulkSavings.toFixed(2)}</span>
+                                        <span>-{formatPrice(bulkSavings, preferredCurrency)}</span>
                                     </div>
                                 )}
                                 <div className="border-t pt-3 flex justify-between text-base font-bold text-gray-900">
                                     <span>Total</span>
-                                    <span>{getCurrencySymbol(items[0]?.currency)}{finalTotal.toFixed(2)}</span>
+                                    <span>{formatPrice(finalTotal, preferredCurrency)}</span>
                                 </div>
                             </div>
 
@@ -340,8 +394,8 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                             <div className="flex items-start gap-3">
                                 <span className="material-icons text-2xl">local_shipping</span>
                                 <div className="space-y-1">
-                                    <p className="font-semibold text-sm">Free express shipping over $120</p>
-                                    <p className="text-xs opacity-90">You're {getCurrencySymbol(items[0]?.currency)}{Math.max(0, 120 - subtotal).toFixed(2)} away from free delivery.</p>
+                                    <p className="font-semibold text-sm">Free express shipping over {formatPrice(shippingThreshold, preferredCurrency)}</p>
+                                    <p className="text-xs opacity-90">You're {formatPrice(Math.max(0, shippingThreshold - subtotal), preferredCurrency)} away from free delivery.</p>
                                 </div>
                             </div>
                         </div>

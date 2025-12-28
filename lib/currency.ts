@@ -1,4 +1,14 @@
-// Currency formatting utilities
+// Currency formatting utilities with conversion support
+import {
+    getExchangeRate,
+    convertCurrency,
+    detectUserCurrency,
+    setPreferredCurrency,
+    getPreferredCurrency,
+    formatCurrency as formatCurrencyIntl,
+    normalizeCurrencyCode,
+    type CurrencyConversion
+} from './currency-service';
 
 // Currency symbol mapping
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -101,14 +111,14 @@ export const SUPPORTED_CURRENCIES = [
 /**
  * Get the currency symbol for a given currency code
  */
-export function getCurrencySymbol(currencyCode: string = 'USD'): string {
+export function getCurrencySymbol(currencyCode: string = getUserCurrency()): string {
     return CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || currencyCode;
 }
 
 /**
  * Format a price with the appropriate currency symbol
  */
-export function formatPrice(amount: number, currencyCode: string = 'USD'): string {
+export function formatPrice(amount: number, currencyCode: string = getUserCurrency()): string {
     const symbol = getCurrencySymbol(currencyCode);
     const validAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
     return `${symbol}${validAmount.toFixed(2)}`;
@@ -117,7 +127,7 @@ export function formatPrice(amount: number, currencyCode: string = 'USD'): strin
 /**
  * Format a price with split integer and decimal parts (for styling)
  */
-export function formatPriceParts(amount: number, currencyCode: string = 'USD'): {
+export function formatPriceParts(amount: number, currencyCode: string = getUserCurrency()): {
     symbol: string;
     integer: string;
     decimal: string;
@@ -126,4 +136,164 @@ export function formatPriceParts(amount: number, currencyCode: string = 'USD'): 
     const validAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
     const [integer, decimal] = validAmount.toFixed(2).split('.');
     return { symbol, integer, decimal };
+}
+
+// ============================================================================
+// CURRENCY CONVERSION FUNCTIONS (NEW)
+// ============================================================================
+
+/**
+ * Convert an amount between currencies with caching
+ */
+export async function convertAmount(
+    amount: number,
+    fromCurrency: string,
+    toCurrency: string
+): Promise<number | null> {
+    const conversion = await convertCurrency(amount, fromCurrency, toCurrency);
+    return conversion ? conversion.convertedAmount : null;
+}
+
+/**
+ * Get exchange rate between two currencies
+ */
+export async function getConversionRate(
+    fromCurrency: string,
+    toCurrency: string
+): Promise<number | null> {
+    return getExchangeRate(fromCurrency, toCurrency);
+}
+
+/**
+ * Format price with automatic conversion to user's preferred currency
+ */
+export async function formatPriceWithConversion(
+    amount: number,
+    productCurrency: string,
+    userCurrency?: string
+): Promise<{
+    originalPrice: string;
+    convertedPrice: string | null;
+    conversion: CurrencyConversion | null;
+}> {
+    const from = normalizeCurrencyCode(productCurrency);
+    const to = userCurrency ? normalizeCurrencyCode(userCurrency) : normalizeCurrencyCode(getPreferredCurrency());
+
+    const originalPrice = formatPrice(amount, from);
+
+    if (from === to) {
+        return {
+            originalPrice,
+            convertedPrice: null,
+            conversion: null
+        };
+    }
+
+    const conversion = await convertCurrency(amount, from, to);
+
+    if (!conversion) {
+        return {
+            originalPrice,
+            convertedPrice: null,
+            conversion: null
+        };
+    }
+
+    const convertedPrice = formatCurrencyIntl(conversion.convertedAmount, userCurrency);
+
+    return {
+        originalPrice,
+        convertedPrice,
+        conversion
+    };
+}
+
+/**
+ * Get user's preferred currency
+ */
+export function getUserCurrency(): string {
+    return getPreferredCurrency();
+}
+
+/**
+ * Set user's preferred currency
+ */
+export function setUserCurrency(currency: string): void {
+    setPreferredCurrency(currency);
+}
+
+/**
+ * Auto-detect user's currency from locale/IP
+ */
+export async function autoDetectCurrency(): Promise<string> {
+    return detectUserCurrency();
+}
+
+/**
+ * Format currency using Intl.NumberFormat with fallback
+ */
+export function formatPriceIntl(amount: number, currency: string, locale?: string): string {
+    return formatCurrencyIntl(amount, currency, locale);
+}
+
+// ============================================================================
+// REACT HOOKS (NEW)
+// ============================================================================
+
+import { useState, useEffect } from 'react';
+
+/**
+ * Hook to handle currency conversion for one or more values
+ */
+export function useCurrencyConverter(
+    values: { amount: number; currency: string; id: string }[],
+    targetCurrency?: string
+) {
+    const [convertedValues, setConvertedValues] = useState<Record<string, {
+        original: string;
+        converted: string | null;
+        amount: number;
+    }>>({});
+    const [isLoading, setIsLoading] = useState(true);
+    const [preferredCurrency, setPreferredCurrencyState] = useState(getUserCurrency());
+    const resolvedTargetCurrency = targetCurrency || getUserCurrency();
+
+    useEffect(() => {
+        const loadConversions = async () => {
+            setIsLoading(true);
+            const userCurrency = resolvedTargetCurrency;
+            setPreferredCurrencyState(userCurrency);
+
+            const newConverted: Record<string, any> = {};
+
+            await Promise.all(values.map(async (v) => {
+                if (v.amount === undefined || v.amount === null) {
+                    newConverted[v.id] = {
+                        original: '',
+                        converted: null,
+                        amount: 0
+                    };
+                    return;
+                }
+
+                const result = await formatPriceWithConversion(v.amount, v.currency, userCurrency);
+                newConverted[v.id] = {
+                    original: result.originalPrice,
+                    converted: result.convertedPrice,
+                    amount: result.conversion?.convertedAmount ?? v.amount
+                };
+            }));
+
+            setConvertedValues(newConverted);
+            setIsLoading(false);
+        };
+
+        if (values.length > 0) {
+            loadConversions();
+        } else {
+            setIsLoading(false);
+        }
+    }, [JSON.stringify(values), resolvedTargetCurrency]);
+
+    return { convertedValues, isLoading, preferredCurrency };
 }

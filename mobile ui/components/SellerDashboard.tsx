@@ -10,7 +10,8 @@ import {
   SellerOrder,
   Product,
 } from '../../types';
-import { formatCurrency, cn } from '../../lib/utils';
+import { cn } from '../../lib/utils';
+import { useCurrencyConverter, formatPrice } from '../../lib/currency';
 import { createPortal } from 'react-dom';
 
 // Sub-components
@@ -22,6 +23,7 @@ import { SellerCreateCouponView } from './SellerCreateCouponView';
 import { SellerMessagesView } from './SellerMessagesView';
 import { SellerCreateAutomaticDiscountView } from './SellerCreateAutomaticDiscountView';
 import { SellerManageQuantityDiscountsView } from './SellerManageQuantityDiscountsView';
+import { SellerDiscountProductView } from './SellerDiscountProductView';
 import { SellerWalletView } from './SellerWalletView';
 import { SellerOrderDetailsSheet } from './SellerOrderDetailsSheet';
 import { SellerReviewsView } from './SellerReviewsView';
@@ -64,8 +66,26 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
   const [showCreateAutomaticDiscount, setShowCreateAutomaticDiscount] = useState(false);
-  const [selectedProductForDiscounts, setSelectedProductForDiscounts] = useState<Product | null>(null);
+  const [selectedProductForPricing, setSelectedProductForPricing] = useState<Product | null>(null);
+  const [selectedProductForBulkPricing, setSelectedProductForBulkPricing] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SellerOrder | null>(null);
+
+  const refreshInventory = async () => {
+    if (!sellerId) return;
+    try {
+      const invData = await fetchFilteredProducts('', {
+        category_ids: [],
+        brand_ids: [],
+        price_min: null,
+        price_max: null,
+        attributes: {},
+        delivery_locations: []
+      }, sellerId);
+      setProducts(invData);
+    } catch (e) {
+      console.error('Failed to refresh products', e);
+    }
+  };
 
   // Initial Data Load
   useEffect(() => {
@@ -103,31 +123,54 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const lowStockItems = useMemo(() => products.filter(i => (i.stock || 0) < 5), [products]);
   const recentOrders = useMemo(() => orders.slice(0, 3), [orders]);
 
+  // Currency conversion for dashboard monetary values
+  const priceValues = useMemo(() => {
+    const vals: { id: string; amount: number; currency: string }[] = [];
+
+    vals.push({ id: 'total-sales', amount: stats?.total_sales ?? 0, currency: 'USD' });
+    vals.push({ id: 'sales-7d', amount: stats?.sales_7d ?? 0, currency: 'USD' });
+
+    lowStockItems.forEach((item, idx) => {
+      vals.push({ id: `low-stock-${idx}`, amount: item.price ?? item.current_price ?? 0, currency: item.currency || 'USD' });
+    });
+
+    return vals;
+  }, [stats, lowStockItems]);
+
+  const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+  const getConvertedPrice = (id: string, fallback: number) => {
+    return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+  };
+
   const dashboardCards = useMemo(
     () => [
       {
         title: 'Gross sales',
-        value: formatCurrency(stats?.total_sales ?? 0),
-        sub: stats?.sales_7d ? `${formatCurrency(stats.sales_7d)} last 7d` : 'Live from Seller Center',
+        value: getConvertedPrice('total-sales', stats?.total_sales ?? 0),
+        sub: stats?.sales_7d ? `${getConvertedPrice('sales-7d', stats.sales_7d)} last 7d` : 'Live from Seller Center',
         accent: 'from-emerald-400/80 to-emerald-600/80',
-        icon: 'payments'
+        icon: 'payments',
+        actionTab: 'analytics' as const,
       },
       {
         title: 'Active Products',
         value: stats?.total_products?.toString() ?? '0',
         sub: `${lowStockItems.length} low stock`,
         accent: 'from-blue-400/80 to-blue-600/80',
-        icon: 'inventory_2'
+        icon: 'inventory_2',
+        actionTab: 'products' as const,
       },
       {
         title: 'Messages',
         value: unreadCount.toString(),
         sub: 'Unread inquiries',
         accent: 'from-purple-400/80 to-purple-600/80',
-        icon: 'chat'
+        icon: 'chat',
+        actionTab: 'messages' as const,
       },
     ],
-    [stats, lowStockItems.length, unreadCount]
+    [stats, lowStockItems.length, unreadCount, convertedValues]
   );
 
   // Handlers
@@ -137,7 +180,8 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
     setShowAddProduct(false);
     setShowCreateCoupon(false);
     setShowCreateAutomaticDiscount(false);
-    setSelectedProductForDiscounts(null);
+    setSelectedProductForPricing(null);
+    setSelectedProductForBulkPricing(null);
   };
 
   // --- Render Content ---
@@ -150,7 +194,8 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             products={products}
             loading={loading}
             onCreateProduct={() => setShowAddProduct(true)}
-            onEditProduct={(p) => setSelectedProductForDiscounts(p)}
+            onDiscountProduct={(p) => setSelectedProductForPricing(p)}
+            onBulkPricing={(p) => setSelectedProductForBulkPricing(p)}
           />
         );
       case 'orders':
@@ -293,8 +338,10 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
               {/* Premium Stats Cards */}
               <div className="grid grid-cols-3 gap-3">
                 {dashboardCards.map((card, idx) => (
-                  <div
+                  <button
                     key={idx}
+                    type="button"
+                    onClick={() => setActiveTab(card.actionTab)}
                     className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md shadow-gray-100/50 dark:shadow-none border border-gray-100 dark:border-gray-700 relative overflow-hidden group active:scale-95 transition-transform"
                   >
                     <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${card.accent} blur-2xl opacity-20 rounded-full translate-x-1/3 -translate-y-1/3 group-hover:opacity-30 transition-opacity`} />
@@ -305,7 +352,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
                       <div className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{card.value}</div>
                       <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">{card.title}</div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -361,7 +408,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
                         <span className="text-[9px] font-black text-red-500 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-lg uppercase">
                           {item.stock ?? item.current_stock ?? 0} left
                         </span>
-                        <span className="text-[11px] font-bold text-gray-900 dark:text-white">{formatCurrency(item.price ?? item.current_price ?? 0, item.currency || 'USD')}</span>
+                        <span className="text-[11px] font-bold text-gray-900 dark:text-white">{getConvertedPrice(`low-stock-${lowStockItems.indexOf(item)}`, item.price ?? item.current_price ?? 0)}</span>
                       </div>
                     </div>
                   ))}
@@ -424,13 +471,29 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
         document.body
       )}
 
-      {selectedProductForDiscounts && createPortal(
+      {selectedProductForPricing && createPortal(
+        <div className="fixed inset-0 z-50">
+          <SellerDiscountProductView
+            product={selectedProductForPricing}
+            onClose={() => setSelectedProductForPricing(null)}
+            onSuccess={async () => {
+              setSelectedProductForPricing(null);
+              await refreshInventory();
+              handleRefresh();
+            }}
+          />
+        </div>,
+        document.body
+      )}
+
+      {selectedProductForBulkPricing && createPortal(
         <div className="fixed inset-0 z-50">
           <SellerManageQuantityDiscountsView
-            product={selectedProductForDiscounts}
-            onClose={() => setSelectedProductForDiscounts(null)}
-            onSuccess={() => {
-              setSelectedProductForDiscounts(null);
+            product={selectedProductForBulkPricing}
+            onClose={() => setSelectedProductForBulkPricing(null)}
+            onSuccess={async () => {
+              setSelectedProductForBulkPricing(null);
+              await refreshInventory();
               handleRefresh();
             }}
           />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { fetchTrendingCategoriesOverlay, TrendingCategoryOverlay } from '@/lib/api';
-import { ValueProps } from './ValueProps';
+
 
 interface CategoriesPageProps {
     selectedDepartmentId?: string;
@@ -57,7 +57,7 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
 
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-black">
-            <ValueProps />
+
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Premium Sidebar */}
@@ -72,8 +72,8 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
                                 key={parent.id}
                                 onClick={() => setSelectedParentId(parent.id)}
                                 className={`w-full text-left py-4 px-4 text-[13px] leading-tight transition-all duration-300 relative group ${isSelected
-                                        ? 'bg-primary/5 dark:bg-primary/10 text-primary font-black'
-                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 font-medium'
+                                    ? 'bg-primary/5 dark:bg-primary/10 text-primary font-black'
+                                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 font-medium'
                                     }`}
                             >
                                 {isSelected && (

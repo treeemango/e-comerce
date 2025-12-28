@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fetchLightningDeals, LightningDealItem } from '@/lib/api';
-import { formatPrice } from '@/lib/currency';
+import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 import { Product } from '@/types';
 
 interface MobileLightningDealsRowProps {
@@ -25,6 +25,22 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
         } finally {
             setLoading(false);
         }
+    };
+
+    // Currency conversion for deal prices - MUST be before any early returns
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        deals.forEach((deal, idx) => {
+            vals.push({ id: `deal-${idx}-price`, amount: deal.price, currency: deal.currency || 'USD' });
+            vals.push({ id: `deal-${idx}-original`, amount: deal.originalPrice, currency: deal.currency || 'USD' });
+        });
+        return vals;
+    }, [deals]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (idx: number, id: string, fallback: number) => {
+        return convertedValues[`deal-${idx}-${id}`]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
     };
 
     if (loading) {
@@ -106,10 +122,10 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
                             </div>
                             <div className="p-2">
                                 <div className="text-sm font-bold text-red-600 dark:text-red-400">
-                                    {formatPrice(deal.price, deal.currency)}
+                                    {getConvertedPrice(deals.indexOf(deal), 'price', deal.price)}
                                 </div>
                                 <div className="text-[10px] text-gray-400 line-through">
-                                    {formatPrice(deal.originalPrice, deal.currency)}
+                                    {getConvertedPrice(deals.indexOf(deal), 'original', deal.originalPrice)}
                                 </div>
                                 <div className="mt-1 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div

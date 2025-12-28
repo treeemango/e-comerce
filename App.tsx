@@ -70,6 +70,7 @@ const UserManagementView = lazy(() => import('./components/AdminDashboard/UserMa
 const OrderManagementView = lazy(() => import('./components/AdminDashboard/OrderManagement/OrderManagementView'));
 const ContentManagementView = lazy(() => import('./components/AdminDashboard/ContentManagement/ContentManagementView'));
 const ActivityLogView = lazy(() => import('./components/AdminDashboard/ActivityLog/ActivityLogView'));
+const FeedbackSupportView = lazy(() => import('./components/AdminDashboard/FeedbackSupportView'));
 const ModerationQueueView = lazy(() => import('./components/AdminDashboard/ModerationQueueView'));
 
 // Driver Dashboard (lazy)
@@ -96,7 +97,7 @@ const LoadingFallback = () => (
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
-  const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity' | 'feedback'>('overview');
   const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -892,12 +893,14 @@ const App: React.FC = () => {
           <TopRatedView
             onProductClick={handleProductClick}
             products={products}
+            onAddToCart={addToCart}
           />
         )}
         {currentView === 'best-selling' && (
           <BestSellersView
             onProductClick={handleProductClick}
             products={products}
+            onAddToCart={addToCart}
           />
         )}
         {currentView === 'deals' && (
@@ -1018,6 +1021,7 @@ const App: React.FC = () => {
             onNavigate={handleAccountPageClick}
             onVisitStore={handleVisitStore}
             activeConversationId={activeConversationId}
+            onAddToCart={addToCart}
           />
         )}
         {currentView === 'buyer-auth' && (
@@ -1149,7 +1153,8 @@ const App: React.FC = () => {
             {adminTab === 'moderation' && <ModerationQueueView />}
             {adminTab === 'finances' && <PayoutApprovalsView />}
             {adminTab === 'content' && <ContentManagementView permissions={adminPermissions!} />}
-            {adminTab === 'activity' && <ActivityLogView />}
+            {adminTab === 'activity' && <ActivityLogView permissions={adminPermissions!} />}
+            {adminTab === 'feedback' && <FeedbackSupportView />}
           </AdminDashboardLayout>
         )}
         {currentView === 'driver-dashboard' && (
@@ -1255,6 +1260,7 @@ const App: React.FC = () => {
           recentOrders={recentOrders}
           isOpen={isActivityHubOpen}
           onClose={() => setIsActivityHubOpen(false)}
+          onOpen={() => setIsActivityHubOpen(true)}
           activePane={activityHubTab}
           onPaneChange={setActivityHubTab}
         />

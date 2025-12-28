@@ -175,6 +175,8 @@ export interface VendorInfo {
     seller_since?: string;
     follower_count?: number;
     is_following?: boolean;
+    banner_url?: string;
+    certificates?: MediaItem[];
 }
 
 export interface VendorBadge {
@@ -1117,6 +1119,7 @@ export const ADMIN_TABS: AdminTabConfig[] = [
     { id: 'content', label: 'Content Management', icon: 'fas fa-folder', requiredLevel: 'content_manager' },
     { id: 'activity', label: 'Activity Log', icon: 'fas fa-history', requiredLevel: 'senior_admin' },
     { id: 'team', label: 'Team Management', icon: 'fas fa-user-shield', requiredLevel: 'super_admin' },
+    { id: 'feedback', label: 'Feedback & Support', icon: 'fas fa-bug', requiredLevel: 'content_manager' },
 ];
 
 // Admin Dashboard Stats

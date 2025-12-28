@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fetchAdminDashboardStats, hasResourcePermission, fetchPlatformRevenue, fetchVerificationQueue, approvePayoutRequest } from '@/lib/api';
 import type { AdminDashboardStats, AdminPermissions, PlatformRevenueAnalytics, VerificationQueueItem, PayoutRequest } from '@/types';
 import { supabase } from '@/lib/supabase';
 import AdminKPIsWidget from './AdminKPIsWidget';
+import { useCurrencyConverter, formatPrice, getCurrencySymbol } from '@/lib/currency';
 
 interface StatsCardProps {
     title: string;
@@ -116,6 +117,35 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ permissions }) =>
     const canVerifySellers = hasResourcePermission(permissions?.permissions, 'sellers', 'verify');
     const canManageUsers = hasResourcePermission(permissions?.permissions, 'users', 'read');
 
+    // Currency conversion for all monetary values
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+
+        // Total revenue
+        if (stats?.total_revenue) {
+            vals.push({ id: 'gmv-revenue', amount: stats.total_revenue, currency: 'USD' });
+        }
+
+        // Revenue chart data
+        revenueData.forEach((item, idx) => {
+            vals.push({ id: `rev-${idx}-total`, amount: item.total_revenue || 0, currency: 'USD' });
+            vals.push({ id: `rev-${idx}-commission`, amount: item.platform_commission || 0, currency: 'USD' });
+        });
+
+        // Payout requests
+        payoutRequests.forEach((req, idx) => {
+            vals.push({ id: `payout-${idx}`, amount: req.amount, currency: 'USD' });
+        });
+
+        return vals;
+    }, [stats, revenueData, payoutRequests]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+    };
+
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center h-96 gap-4">
@@ -174,7 +204,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ permissions }) =>
                 />
                 <StatsCard
                     title="GMV Revenue"
-                    value={`$${(stats?.total_revenue || 0).toLocaleString()}`}
+                    value={getConvertedPrice('gmv-revenue', stats?.total_revenue || 0)}
                     icon="payments"
                     color="orange"
                     trend={{ value: '+24.5%', isPositive: true }}
@@ -248,7 +278,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ permissions }) =>
                         ) : revenueData.map((item, idx) => (
                             <div key={idx} className="flex-1 flex flex-col items-center group relative h-full">
                                 <div className="absolute -top-12 scale-0 group-hover:scale-100 transition-all duration-300 bg-slate-900 text-white text-[10px] font-black px-3 py-2 rounded-xl shadow-2xl z-20 whitespace-nowrap">
-                                    Commission: ${(item.platform_commission || 0).toLocaleString()}
+                                    Commission: {getConvertedPrice(`rev-${idx}-commission`, item.platform_commission || 0)}
                                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 rotate-45"></div>
                                 </div>
                                 <div className="w-full h-full flex flex-col justify-end gap-1 px-1">
@@ -295,7 +325,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ permissions }) =>
                                         <span className="material-icons text-slate-400 group-hover:text-indigo-600">{req.payment_method === 'bank_transfer' ? 'account_balance' : 'smartphone'}</span>
                                     </div>
                                     <div>
-                                        <p className="text-lg font-black text-slate-800 tracking-tighter">${req.amount.toLocaleString()}</p>
+                                        <p className="text-lg font-black text-slate-800 tracking-tighter">{getConvertedPrice(`payout-${payoutRequests.indexOf(req)}`, req.amount)}</p>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">{req.payment_method.replace('_', ' ')}</span>
                                             <span className="w-1 h-1 rounded-full bg-slate-200"></span>

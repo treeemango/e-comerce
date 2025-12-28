@@ -1,5 +1,6 @@
 import React from 'react';
 import { LoyaltyProfile } from '../types';
+import { OrderPrice } from './OrderPrice';
 import './LoyaltyTierBadge.css';
 
 interface LoyaltyTierBadgeProps {
@@ -70,7 +71,7 @@ const LoyaltyTierBadge: React.FC<LoyaltyTierBadgeProps> = ({
                             {loyaltyProfile.loyalty_points.toLocaleString()} Points
                         </div>
                         <div className="text-gray-300">
-                            £{loyaltyProfile.lifetime_spend.toLocaleString()} Lifetime Spend
+                            <OrderPrice amount={loyaltyProfile.lifetime_spend} currency="USD" /> Lifetime Spend
                         </div>
                     </div>
                     {/* Tooltip arrow */}

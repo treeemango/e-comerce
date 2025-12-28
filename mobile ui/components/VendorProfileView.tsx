@@ -140,13 +140,12 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
             </div>
 
             {/* Banner Section */}
-            <div className="relative h-48 sm:h-64 overflow-hidden bg-gray-200">
+            <div className="relative h-48 w-full overflow-hidden">
                 {vendor.banner_url ? (
                     <img src={vendor.banner_url} alt="" className="w-full h-full object-cover" />
                 ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-orange-400 to-rose-500 opacity-80" />
+                    <div className="w-full h-full bg-gradient-to-br from-orange-400 to-rose-500" />
                 )}
-                {/* Overlay Gradient */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             </div>
 
@@ -186,7 +185,7 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                         </button>
                     </div>
 
-                    <div className="mb-6">
+                    <div className="mb-6 text-left">
                         <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight mb-1">
                             {vendor.business_name}
                             {vendor.is_verified && (
@@ -194,34 +193,82 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                             )}
                         </h2>
                         <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest">
-                            <span>{vendor.business_country || 'Independent Seller'}</span>
+                            <span className="flex items-center gap-1">
+                                <span className="material-icons text-xs text-blue-500">public</span>
+                                {vendor.business_country || 'Independent Seller'}
+                            </span>
                             <span className="w-1 h-1 bg-gray-300 rounded-full" />
                             <span>Since {new Date(vendor.seller_since || Date.now()).getFullYear()}</span>
                         </div>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-3 gap-2 py-6 border-y border-gray-50 dark:border-gray-800/50">
-                        <div className="text-center">
-                            <div className="flex items-center justify-center gap-0.5 mb-1 text-gray-900 dark:text-white">
-                                <span className="material-icons text-orange-500 text-sm">star</span>
-                                <span className="font-black text-base">{vendor.vendor_rating?.toFixed(1) || '0.0'}</span>
+                    {/* Stats Grid (2x2) */}
+                    <div className="grid grid-cols-2 gap-4 py-6 border-y border-gray-50 dark:border-gray-800/50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center">
+                                <span className="material-icons text-amber-500 text-lg">star</span>
                             </div>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rating</div>
+                            <div>
+                                <div className="font-black text-base text-gray-900 dark:text-white leading-none mb-0.5">{vendor.vendor_rating?.toFixed(1) || '0.0'}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Rating</div>
+                            </div>
                         </div>
-                        <div className="text-center border-x border-gray-50 dark:border-gray-800/50 px-2">
-                            <div className="font-black text-base text-gray-900 dark:text-white mb-1">
-                                {vendor.completed_orders || 0}
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
+                                <span className="material-icons text-blue-500 text-lg">shopping_bag</span>
                             </div>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Orders</div>
+                            <div>
+                                <div className="font-black text-base text-gray-900 dark:text-white leading-none mb-0.5">{vendor.completed_orders || 0}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Orders</div>
+                            </div>
                         </div>
-                        <div className="text-center">
-                            <div className="font-black text-base text-gray-900 dark:text-white mb-1">
-                                {followerCount >= 1000 ? `${(followerCount / 1000).toFixed(1)}k` : followerCount}
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+                                <span className="material-icons text-orange-500 text-lg">groups</span>
                             </div>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Followers</div>
+                            <div>
+                                <div className="font-black text-base text-gray-900 dark:text-white leading-none mb-0.5">
+                                    {followerCount >= 1000 ? `${(followerCount / 1000).toFixed(1)}k` : followerCount}
+                                </div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Followers</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+                                <span className="material-icons text-emerald-500 text-lg">inventory_2</span>
+                            </div>
+                            <div>
+                                <div className="font-black text-base text-gray-900 dark:text-white leading-none mb-0.5">{vendor.total_products || 0}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
+                            </div>
                         </div>
                     </div>
+
+                    {/* Documents & Certificates Section */}
+                    {vendor.certificates && vendor.certificates.length > 0 && (
+                        <div className="mt-6 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Business Authentication</h4>
+                                <span className="text-[9px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded-full uppercase tracking-widest border border-blue-100 dark:border-blue-500/20">Verified</span>
+                            </div>
+                            <div className="flex flex-col gap-2 text-left">
+                                {vendor.certificates.map((cert) => (
+                                    <div key={cert.id} className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5">
+                                        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
+                                            <span className="material-icons text-blue-500">verified_user</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-black text-gray-900 dark:text-white truncate">{cert.name}</p>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Publicly Registered Store</p>
+                                        </div>
+                                        <button className="p-2 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-white/10 active:scale-90 transition-all">
+                                            <span className="material-icons text-sm text-gray-600 dark:text-gray-400">visibility</span>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <p className="mt-6 text-sm text-gray-600 dark:text-gray-300 leading-relaxed font-medium">
                         {vendor.business_description || 'No description available.'}
@@ -253,6 +300,7 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                                 key={p.id || idx}
                                 product={p}
                                 onProductClick={onProductClick}
+                                showSellerLine={false}
                             />
                         ))}
                     </div>

@@ -108,6 +108,7 @@ export const BestSellersScreen: React.FC<BestSellersScreenProps> = ({
                                     product={product}
                                     onProductClick={onProductClick}
                                     onVisualSearch={onVisualSearch}
+                                    showSellerLine={false}
                                 />
 
                                 {/* Sales Indicator */}

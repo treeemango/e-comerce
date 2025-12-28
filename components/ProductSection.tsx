@@ -4,7 +4,7 @@ import ProductCard from './ProductCard';
 import { Product, SearchFilters, AppliedFilters, VisualCategory, AttributeValue, CategoryFilter, BrandFilter, Breadcrumb } from '../types';
 import { fetchSearchFilters, fetchFilteredProducts, fetchNavbarCategories, NavbarCategory } from '../lib/api';
 import ProductCardSkeleton from './ProductCardSkeleton';
-import { getCurrencySymbol } from '../lib/currency';
+import { getCurrencySymbol, useCurrencyConverter, convertAmount, getUserCurrency } from '../lib/currency';
 
 interface ProductSectionProps {
   isFiveStarView?: boolean;
@@ -396,10 +396,71 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     setVisibleCount(baseline);
   }, [displayedProducts.length, gridColumns, searchQuery, categoryIdsHash]);
 
+  // Currency Conversion Logic for Price Filter
+  const userCurrency = getUserCurrency();
+  const [localMinPrice, setLocalMinPrice] = useState<string>('');
+  const [localMaxPrice, setLocalMaxPrice] = useState<string>('');
+  const [isApplyingPrice, setIsApplyingPrice] = useState(false);
+
+  const { convertedValues: priceRangeConverted } = useCurrencyConverter(
+    searchFilters?.price_range ? [
+      { amount: searchFilters.price_range.min_price, currency: searchFilters.price_range.currency || 'USD', id: 'min' },
+      { amount: searchFilters.price_range.max_price, currency: searchFilters.price_range.currency || 'USD', id: 'max' }
+    ] : []
+  );
+
+  // Sync local inputs with applied filters (converting Base -> User)
+  useEffect(() => {
+    if (activeFilter === 'price') {
+      const syncPrices = async () => {
+        const baseCurrency = searchFilters?.price_range.currency || 'USD';
+
+        if (appliedFilters.price_min !== null) {
+          const val = await convertAmount(appliedFilters.price_min, baseCurrency, userCurrency);
+          setLocalMinPrice(val !== null ? val.toFixed(0) : '');
+        } else {
+          setLocalMinPrice('');
+        }
+
+        if (appliedFilters.price_max !== null) {
+          const val = await convertAmount(appliedFilters.price_max, baseCurrency, userCurrency);
+          setLocalMaxPrice(val !== null ? val.toFixed(0) : '');
+        } else {
+          setLocalMaxPrice('');
+        }
+      };
+      syncPrices();
+    }
+  }, [activeFilter, appliedFilters.price_min, appliedFilters.price_max, userCurrency, searchFilters?.price_range.currency]);
+
+  const applyPriceFilter = async () => {
+    setIsApplyingPrice(true);
+    try {
+      const baseCurrency = searchFilters?.price_range.currency || 'USD';
+      let min = null;
+      let max = null;
+
+      if (localMinPrice) {
+        // Convert User -> Base
+        min = await convertAmount(parseFloat(localMinPrice), userCurrency, baseCurrency);
+      }
+      if (localMaxPrice) {
+        max = await convertAmount(parseFloat(localMaxPrice), userCurrency, baseCurrency);
+      }
+
+      setAppliedFilters(prev => ({ ...prev, price_min: min, price_max: max }));
+      setActiveFilter(null);
+    } catch (e) {
+      console.error("Price conversion failed", e);
+    } finally {
+      setIsApplyingPrice(false);
+    }
+  };
+
+
+
   const visibleProducts = orderedProducts.slice(0, visibleCount);
   const hasMoreProducts = visibleCount < orderedProducts.length;
-
-
 
   return (
     <section>
@@ -788,33 +849,39 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                     {activeFilter === 'price' && searchFilters && (
                       <div className="space-y-4 max-w-sm">
                         <div className="text-sm text-gray-500">
-                          Range: {priceCurrencySymbol}{searchFilters.price_range.min_price.toFixed(2)} - {priceCurrencySymbol}{searchFilters.price_range.max_price.toFixed(2)}
+                          Range: {priceRangeConverted?.min?.converted || priceRangeConverted?.min?.original || `${priceCurrencySymbol}${searchFilters.price_range.min_price}`} - {priceRangeConverted?.max?.converted || priceRangeConverted?.max?.original || `${priceCurrencySymbol}${searchFilters.price_range.max_price}`}
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Min Price</label>
+                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Min Price ({getCurrencySymbol(userCurrency)})</label>
                             <input
                               type="number"
-                              value={appliedFilters.price_min || ''}
-                              onChange={(e) => setAppliedFilters(prev => ({ ...prev, price_min: e.target.value ? parseFloat(e.target.value) : null }))}
-                              placeholder={searchFilters.price_range.min_price.toString()}
+                              value={localMinPrice}
+                              onChange={(e) => setLocalMinPrice(e.target.value)}
+                              placeholder={priceRangeConverted?.min?.amount?.toFixed(0) || searchFilters.price_range.min_price.toString()}
                               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-black"
                             />
                           </div>
                           <div>
-                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Max Price</label>
+                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Max Price ({getCurrencySymbol(userCurrency)})</label>
                             <input
                               type="number"
-                              value={appliedFilters.price_max || ''}
-                              onChange={(e) => setAppliedFilters(prev => ({ ...prev, price_max: e.target.value ? parseFloat(e.target.value) : null }))}
-                              placeholder={searchFilters.price_range.max_price.toString()}
+                              value={localMaxPrice}
+                              onChange={(e) => setLocalMaxPrice(e.target.value)}
+                              placeholder={priceRangeConverted?.max?.amount?.toFixed(0) || searchFilters.price_range.max_price.toString()}
                               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-black"
                             />
                           </div>
                         </div>
                         <div className="flex gap-2">
                           <button onClick={() => setPriceRange(null, null)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Clear</button>
-                          <button onClick={() => setActiveFilter(null)} className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800">Apply</button>
+                          <button
+                            onClick={applyPriceFilter}
+                            disabled={isApplyingPrice}
+                            className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                          >
+                            {isApplyingPrice ? 'Applying...' : 'Apply'}
+                          </button>
                         </div>
                       </div>
                     )}

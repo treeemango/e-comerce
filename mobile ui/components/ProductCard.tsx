@@ -1,28 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Product } from '@/types';
 import { playCartAddSound } from '@/lib/sounds';
+import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 
 interface ProductCardProps {
     product: Product;
     onProductClick?: (product: Product) => void;
     onVisualSearch?: (product: Product) => void;
     onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
+    showSellerLine?: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, onVisualSearch, onAddToCart }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, onVisualSearch, onAddToCart, showSellerLine = false }) => {
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isPressed, setIsPressed] = useState(false);
 
-    const formatPrice = (price: number, currency?: string) => {
-        try {
-            return new Intl.NumberFormat('en', {
-                style: 'currency',
-                currency: currency || 'USD',
-                maximumFractionDigits: 2,
-            }).format(price);
-        } catch (e) {
-            return `${currency ? currency + ' ' : ''}${price}`;
+    // Currency conversion for product prices
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        vals.push({ id: 'current-price', amount: product.price || 0, currency: product.currency || 'USD' });
+        if (product.originalPrice) {
+            vals.push({ id: 'original-price', amount: product.originalPrice, currency: product.currency || 'USD' });
         }
+        return vals;
+    }, [product.price, product.originalPrice, product.currency]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
     };
 
     // Haptic feedback function gated by user activation to avoid browser intervention warnings
@@ -134,7 +140,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                 {/* Simplified Badges - Top Left */}
                 <div className="absolute top-2 left-2 flex flex-col gap-1.5 z-10 transition-transform duration-300">
                     {discountPercent > 0 && (
-                        <div className="bg-price-red text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-sm">
+                        <div className="bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-sm">
                             -{discountPercent}%
                         </div>
                     )}
@@ -186,11 +192,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
             {/* Content Section */}
             <div className="p-3.5 space-y-2">
                 {/* Seller & Rating Line */}
-                <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter truncate max-w-[60%]">
-                        {product.brand_name || product.vendor?.business_name || 'Verified Seller'}
-                    </span>
-                    {product.rating && (
+                <div className={`flex items-center ${showSellerLine ? 'justify-between' : 'justify-end'}`}>
+                    {showSellerLine && (
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter truncate max-w-[60%]">
+                            {product.brand_name?.toLowerCase() === 'unbranded' ? '' : (product.brand_name || product.vendor?.business_name || 'Verified Seller')}
+                        </span>
+                    )}
+                    {(product.rating ?? 0) > 0 && (
                         <div className="flex items-center gap-0.5 bg-gray-50 dark:bg-white/5 px-1.5 py-0.5 rounded-lg border border-gray-100 dark:border-white/5">
                             <span className="material-icons-round text-[10px] text-amber-400">star</span>
                             <span className="text-[10px] font-black dark:text-gray-200">{product.rating.toFixed(1)}</span>
@@ -208,12 +216,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                     <div className="flex flex-col">
                         {product.originalPrice && (
                             <span className="text-[10px] line-through text-gray-400 mb-0.5">
-                                {formatPrice(product.originalPrice, product.currency)}
+                                {getConvertedPrice('original-price', product.originalPrice)}
                             </span>
                         )}
                         <div className="flex items-baseline gap-1">
-                            <span className="text-base font-black text-black dark:text-white leading-none">
-                                {formatPrice(product.price || 0, product.currency)}
+                            <span className="text-base font-black text-red-600 dark:text-red-500 leading-none">
+                                {getConvertedPrice('current-price', product.price || 0)}
                             </span>
                             {product.sale_unit && (
                                 <span className="text-[9px] font-bold text-gray-400 uppercase">/{product.sale_unit}</span>
@@ -237,12 +245,37 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                 </div>
 
                 {/* Delivery Info */}
-                {product.free_delivery && (
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-600 dark:text-green-400 pt-1">
-                        <span className="material-icons-outlined text-xs">local_shipping</span>
-                        <span>Free Shipping</span>
-                    </div>
-                )}
+                {(() => {
+                    const freeDelivery = (product as any).free_delivery ?? (product as any).freeDelivery;
+                    const deliveryEstimate = (product as any).delivery_time_estimate ?? (product as any).deliveryTimeEstimate;
+                    const deliveryDays = (product as any).delivery_time_days ?? (product as any).deliveryTimeDays;
+                    const isExpress = (product as any).is_express_delivery ?? (product as any).isExpressDelivery;
+
+                    const deliveredIn =
+                        deliveryEstimate ||
+                        (typeof deliveryDays === 'number'
+                            ? `${deliveryDays} day${deliveryDays === 1 ? '' : 's'}`
+                            : (isExpress ? '1-2 days' : undefined));
+
+                    if (!freeDelivery && !deliveredIn) return null;
+
+                    return (
+                        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 pt-1">
+                            {freeDelivery && (
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400">
+                                    <span className="material-icons-outlined text-xs">local_shipping</span>
+                                    <span>Free Shipping</span>
+                                </div>
+                            )}
+                            {deliveredIn && (
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                    <span className="material-icons-outlined text-xs">local_shipping</span>
+                                    <span>Delivered in {deliveredIn}</span>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );

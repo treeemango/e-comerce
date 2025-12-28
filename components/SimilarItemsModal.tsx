@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Product } from '@/types';
+import { Product, RelatedProduct } from '@/types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, RelatedProduct } from '../lib/api';
+import { fetchRelatedProducts } from '../lib/api';
 
 interface SimilarItemsModalProps {
   product: Product;
   onClose: () => void;
   onProductClick?: (product: Product) => void;
+  onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
 }
 
 type SortOption = 'best_match' | 'popular' | 'price_low' | 'price_high';
 
-const SimilarItemsModal: React.FC<SimilarItemsModalProps> = ({ product, onClose, onProductClick }) => {
+const SimilarItemsModal: React.FC<SimilarItemsModalProps> = ({ product, onClose, onProductClick, onAddToCart }) => {
   const [activeTab, setActiveTab] = useState<'same' | 'similar'>('same');
   const [sortBy, setSortBy] = useState<SortOption>('best_match');
   const [sameItems, setSameItems] = useState<RelatedProduct[]>([]);
@@ -166,6 +167,7 @@ const SimilarItemsModal: React.FC<SimilarItemsModalProps> = ({ product, onClose,
                       onClose();
                       onProductClick?.(p);
                     }}
+                    onAddToCart={onAddToCart}
                   />
                 );
               })}

@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { CouponApplicationResult, Product } from '../types';
 import { applyCoupon, checkout, fetchUserCoupons, fetchCartDeliveryFee, syncCart, fetchUserAddresses, UserAddress, fetchTaxBreakdown, TaxBreakdown } from '../lib/api';
-import { getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
+
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CheckoutViewProps {
@@ -225,7 +226,6 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         }
     }, [userId, items, subtotal, hasAttemptedAutoApply, appliedCoupon]);
 
-    const currencySymbol = getCurrencySymbol(items[0]?.currency || cartItems[0]?.currency || 'USD');
 
     const bulkSavings = promoResult ? promoResult.totalSavings : 0;
 
@@ -245,7 +245,53 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
     const taxAmount = taxInfo?.tax_amount ?? ((subtotal + deliveryFee - bulkSavings - discountAmount) * 0.16);
     const taxName = taxInfo?.tax_name ?? 'VAT';
     const taxPercentage = taxInfo?.tax_percentage ?? 16;
-    const finalTotal = Math.max(0, subtotal + deliveryFee - discountAmount - bulkSavings + taxAmount);
+
+    // --- CURRENCY CONVERSION ---
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        const baseCurrency = items[0]?.currency || 'USD';
+
+        // Items
+        items.forEach(item => {
+            const key = `${item.id}:${item.variant_id || 'default'}`;
+            vals.push({ id: `item-${key}`, amount: item.price, currency: item.currency || 'USD' });
+        });
+
+        // Totals
+        vals.push({ id: 'delivery-fee', amount: deliveryFee, currency: baseCurrency });
+        vals.push({ id: 'tax-amount', amount: taxAmount, currency: baseCurrency });
+        vals.push({ id: 'discount-amount', amount: discountAmount, currency: baseCurrency });
+        vals.push({ id: 'bulk-savings', amount: bulkSavings, currency: baseCurrency });
+        vals.push({ id: 'subtotal-summary', amount: subtotal, currency: baseCurrency });
+
+        return vals;
+    }, [items, deliveryFee, taxAmount, discountAmount, bulkSavings, subtotal]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedAmount = (id: string, fallback: number) => {
+        return convertedValues[id]?.convertedAmount ?? fallback;
+    };
+
+    const getConvertedPriceStr = (id: string, fallback: number, currency: string) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, currency);
+    };
+
+    const getConvertedSummaryPriceStr = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+    };
+
+    // Use converted values for the final totals to ensure accuracy
+    const convertedSubtotal = getConvertedAmount('subtotal-summary', subtotal);
+    const convertedDeliveryFee = getConvertedAmount('delivery-fee', deliveryFee);
+    const convertedTaxAmount = getConvertedAmount('tax-amount', taxAmount);
+    const convertedDiscountAmount = getConvertedAmount('discount-amount', discountAmount);
+    const convertedBulkSavings = getConvertedAmount('bulk-savings', bulkSavings);
+
+    const finalTotal = Math.max(0, convertedSubtotal + convertedDeliveryFee - convertedDiscountAmount - convertedBulkSavings + convertedTaxAmount);
+
+
+
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -624,8 +670,11 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                                     <p className="text-sm font-medium line-clamp-1">{item.title}</p>
                                                     <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
                                                 </div>
-                                                <p className="text-sm font-bold">{currencySymbol}{(item.price * item.quantity).toFixed(2)}</p>
+                                                <p className="text-sm font-bold">
+                                                    {getConvertedPriceStr(`item-${item.id}:${item.variant_id || 'default'}`, item.price * item.quantity, item.currency || 'USD')}
+                                                </p>
                                             </div>
+
                                         ))}
                                     </div>
 
@@ -688,39 +737,42 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                             <div className="space-y-4 mb-6">
                                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                     <span>Subtotal ({cartItems.length} items)</span>
-                                    <span>{currencySymbol}{subtotal.toFixed(2)}</span>
+                                    <span>{getConvertedSummaryPriceStr('subtotal-summary', subtotal)}</span>
                                 </div>
+
                                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                     <span>Shipping</span>
                                     <span className={deliveryFee === 0 ? 'text-green-600 font-bold' : 'text-gray-900 dark:text-white font-bold'}>
-                                        {deliveryFee === 0 ? 'FREE' : `${currencySymbol}${deliveryFee.toFixed(2)}`}
+                                        {deliveryFee === 0 ? 'FREE' : getConvertedSummaryPriceStr('delivery-fee', convertedDeliveryFee)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                     <span>{taxName} ({taxPercentage}%)</span>
-                                    <span>{currencySymbol}{taxAmount.toFixed(2)}</span>
+                                    <span>{getConvertedSummaryPriceStr('tax-amount', convertedTaxAmount)}</span>
                                 </div>
                                 {discountAmount > 0 && (
                                     <div className="flex justify-between text-sm text-rose-700 dark:text-rose-400 font-medium">
                                         <span>Coupon Discount</span>
-                                        <span>-{currencySymbol}{discountAmount.toFixed(2)}</span>
+                                        <span>-{getConvertedSummaryPriceStr('discount-amount', convertedDiscountAmount)}</span>
                                     </div>
                                 )}
                                 {bulkSavings > 0 && (
                                     <div className="flex justify-between text-sm text-emerald-700 dark:text-emerald-400 font-medium">
                                         <span>Bulk Savings</span>
-                                        <span>-{currencySymbol}{bulkSavings.toFixed(2)}</span>
+                                        <span>-{getConvertedSummaryPriceStr('bulk-savings', convertedBulkSavings)}</span>
                                     </div>
                                 )}
+
                             </div>
 
                             <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mb-6">
                                 <div className="flex justify-between items-center">
                                     <span className="font-bold text-lg text-gray-900 dark:text-white">Order Total</span>
-                                    <span className="font-bold text-xl text-orange-600">{currencySymbol}{finalTotal.toFixed(2)}</span>
+                                    <span className="font-bold text-xl text-orange-600">{formatPrice(finalTotal, preferredCurrency)}</span>
                                 </div>
                                 <p className="text-[10px] text-gray-400 mt-1">Total inclusive of all applicable taxes and fees.</p>
                             </div>
+
 
                             {appliedCoupon && (
                                 <div className="mb-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-3 rounded-lg flex items-center gap-2">

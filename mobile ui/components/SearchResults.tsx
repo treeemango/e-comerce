@@ -98,8 +98,8 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     <button
                         onClick={() => setIsFilterOpen(true)}
                         className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-bold transition-all ${isFilterOpen || Object.values(appliedFilters).some(v => Array.isArray(v) ? v.length > 0 : v !== null)
-                                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                                : 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
+                            ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                            : 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
                             }`}
                     >
                         <span className="material-icons-round text-sm">tune</span>
@@ -134,21 +134,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
             {/* Main Results Content */}
             {!isFilterOpen && (
                 <div className="flex-grow overflow-y-auto pb-24">
-                    {/* Value Props & Marketing */}
-                    <div className="mt-2 px-4">
-                        <div className="bg-primary/5 dark:bg-primary/10 rounded-2xl p-3 flex items-center justify-between border border-primary/10">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-                                    <span className="material-icons-round text-primary text-lg">local_shipping</span>
-                                </div>
-                                <div>
-                                    <div className="text-[11px] font-black text-primary uppercase tracking-tight">Free Shipping</div>
-                                    <div className="text-[10px] text-gray-500 font-medium">On orders over $30.00</div>
-                                </div>
-                            </div>
-                            <span className="material-icons-round text-primary/40 text-lg">chevron_right</span>
-                        </div>
-                    </div>
+
 
                     {/* Meta Info */}
                     <div className="px-5 py-4 flex items-center justify-between">

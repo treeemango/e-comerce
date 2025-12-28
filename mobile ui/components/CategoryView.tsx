@@ -1,6 +1,6 @@
 import React from 'react';
 import { Product, NavbarCategory } from '@/types';
-import { ValueProps } from './ValueProps';
+
 import { ProductCard } from './ProductCard';
 
 // Local interface matching the mock data structure in data.ts
@@ -20,8 +20,7 @@ interface CategoryViewProps {
 export const CategoryView: React.FC<CategoryViewProps> = ({ category, onProductClick, onVisualSearch }) => {
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark">
-      {/* Value Props Bar */}
-      <ValueProps />
+
 
       {/* Sub Category Circles */}
       {category.subCategories && (

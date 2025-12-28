@@ -6,9 +6,10 @@ import { fetchTopRatedProducts } from '../lib/api';
 interface TopRatedViewProps {
     onProductClick: (product: Product) => void;
     products: Product[];
+    onAddToCart: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
 }
 
-const TopRatedView: React.FC<TopRatedViewProps> = ({ onProductClick, products: initialProducts }) => {
+const TopRatedView: React.FC<TopRatedViewProps> = ({ onProductClick, products: initialProducts, onAddToCart }) => {
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -69,6 +70,7 @@ const TopRatedView: React.FC<TopRatedViewProps> = ({ onProductClick, products: i
                                     <ProductCard
                                         product={product}
                                         onProductClick={onProductClick}
+                                        onAddToCart={onAddToCart}
                                     />
                                     {/* Rating Overlay */}
                                     <div className="mt-3 flex items-center justify-between px-1">

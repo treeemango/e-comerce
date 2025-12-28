@@ -36,14 +36,20 @@ import { Product } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
 import { UserCoupon, BuyerOrder } from '@/types';
-import { formatPrice } from '@/lib/currency';
+import { formatPrice, getUserCurrency, setUserCurrency } from '@/lib/currency';
 import { useNotifications } from '@/components/NotificationContext';
 import { playCartAddSound } from '@/lib/sounds';
 import NotificationSystem from '@/components/NotificationSystem';
 import NotificationInbox from '@/components/NotificationInbox';
 import { WriteReviewModal } from '@/components/WriteReviewModal';
+import { MobileFeedbackSheet } from './components/MobileFeedbackSheet';
 import MobileWriteReviewSheet from './components/MobileWriteReviewSheet';
+
+
 import VisualSearchSheet from './components/VisualSearchSheet';
+import { OrderPrice } from '@/components/OrderPrice';
+import { detectUserCurrency } from '@/lib/currency-service';
+import { trackProductViewAuto } from '@/lib/tracking';
 
 type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications';
 
@@ -88,11 +94,12 @@ const App: React.FC = () => {
     const [disputingOrderId, setDisputingOrderId] = useState<string | null>(null);
     const [disputeReason, setDisputeReason] = useState('');
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+    const [, setPreferredCurrency] = useState(getUserCurrency());
 
     // Modern Notification & Data Sync State
     const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
     const [recentOrders, setRecentOrders] = useState<BuyerOrder[]>([]);
-    const { history } = useNotifications();
+    const [isFeedbackSheetOpen, setIsFeedbackSheetOpen] = useState(false);
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -128,6 +135,27 @@ const App: React.FC = () => {
             }
         };
         loadData();
+    }, []);
+
+    // Auto-detect and persist currency preference for mobile users
+    useEffect(() => {
+        const syncCurrencyPreference = async () => {
+            try {
+                const detected = await detectUserCurrency();
+                const current = getUserCurrency();
+
+                if (detected && detected !== current) {
+                    setUserCurrency(detected);
+                    setPreferredCurrency(detected);
+                } else {
+                    setPreferredCurrency(current);
+                }
+            } catch (error) {
+                console.error('Error auto-detecting currency for mobile:', error);
+            }
+        };
+
+        syncCurrencyPreference();
     }, []);
 
     useEffect(() => {
@@ -285,7 +313,7 @@ const App: React.FC = () => {
                                                 </div>
                                                 <div className="flex justify-between items-end mt-1">
                                                     <div className="text-sm font-bold text-price-red">
-                                                        {formatPrice(order.total_amount, order.currency || 'USD')}
+                                                        <OrderPrice amount={order.total_amount} currency={order.currency || 'USD'} />
                                                     </div>
                                                     {order.status === 'delivered' && (
                                                         <button
@@ -608,10 +636,30 @@ const App: React.FC = () => {
             case 'support': {
                 return (
                     <AccountSection title="Customer support" description="We are here to help" onBack={() => setActiveAccountSection(null)}>
-                        <div className="flex flex-col gap-3">
-                            <button className="w-full px-4 py-3 rounded-xl bg-primary text-white font-bold shadow-md">Start chat</button>
-                            <button className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 font-bold text-black dark:text-white">Call support</button>
-                            <div className="text-xs text-gray-500">Average response time: &lt; 5 minutes</div>
+                        <div className="flex flex-col gap-4 p-1">
+                            <div className="rounded-2xl p-4 bg-white dark:bg-surface-dark shadow-sm border border-gray-100 dark:border-gray-800">
+                                <div className="text-lg font-bold text-black dark:text-white">Need help?</div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">Chat with seller success or open a support ticket.</div>
+                                <div className="mt-4 flex gap-2">
+                                    <button className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-bold">Start chat</button>
+                                    <button className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-black dark:text-white">Call us</button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {[{ icon: 'school', label: 'Seller academy' }, { icon: 'live_help', label: 'FAQ' }, { icon: 'policy', label: 'Policies' }].map((item) => (
+                                    <div key={item.label} className="rounded-2xl p-3 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 flex items-start gap-2">
+                                        <span className="material-icons-outlined text-primary">{item.icon}</span>
+                                        <div className="text-sm font-semibold text-black dark:text-white leading-tight">{item.label}</div>
+                                    </div>
+                                ))}
+                                <button
+                                    onClick={() => setIsFeedbackSheetOpen(true)}
+                                    className="rounded-2xl p-3 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 flex items-start gap-2 text-left w-full hover:bg-gray-50 active:scale-95 transition"
+                                >
+                                    <span className="material-icons-outlined text-primary">bug_report</span>
+                                    <div className="text-sm font-semibold text-black dark:text-white leading-tight">Report an issue / Feedback</div>
+                                </button>
+                            </div>
                         </div>
                     </AccountSection>
                 );
@@ -743,6 +791,9 @@ const App: React.FC = () => {
     const closeCheckout = () => setIsCheckoutOpen(false);
 
     const handleProductClick = (product: Product) => {
+        if (product?.id) {
+            void trackProductViewAuto(String(product.id));
+        }
         setSelectedProduct(product);
     };
 
@@ -981,27 +1032,43 @@ const App: React.FC = () => {
                     />
                 );
             }
-            case 'support':
+
+
+
+            case 'messages': {
+                if (userProfile?.id) {
+                    return (
+                        <div className="flex flex-col h-full bg-background-light dark:bg-background-dark">
+                            <BuyerMessagesView
+                                userId={userProfile.id}
+                                onBack={() => setActiveTab('home')}
+                            />
+                        </div>
+                    );
+                }
+                // Show login prompt if not authenticated
                 return (
-                    <div className="p-4 flex flex-col gap-4 bg-background-light dark:bg-background-dark min-h-screen">
-                        <div className="rounded-2xl p-4 bg-white dark:bg-surface-dark shadow-sm border border-gray-100 dark:border-gray-800">
-                            <div className="text-lg font-bold text-black dark:text-white">Need help?</div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">Chat with seller success or open a support ticket.</div>
-                            <div className="mt-4 flex gap-2">
-                                <button className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-bold">Start chat</button>
-                                <button className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-black dark:text-white">Call us</button>
-                            </div>
+                    <div className="flex flex-col items-center justify-center h-full p-8 bg-background-light dark:bg-background-dark">
+                        <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                            <span className="material-icons-round text-5xl text-primary">chat</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            {[{ icon: 'school', label: 'Seller academy' }, { icon: 'live_help', label: 'FAQ' }, { icon: 'policy', label: 'Policies' }, { icon: 'bug_report', label: 'Report an issue' }].map((item) => (
-                                <div key={item.label} className="rounded-2xl p-3 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 flex items-start gap-2">
-                                    <span className="material-icons-outlined text-primary">{item.icon}</span>
-                                    <div className="text-sm font-semibold text-black dark:text-white leading-tight">{item.label}</div>
-                                </div>
-                            ))}
-                        </div>
+                        <h2 className="text-2xl font-black text-black dark:text-white mb-2 text-center">Messages</h2>
+                        <p className="text-center text-gray-500 mb-8 max-w-xs">
+                            Sign in to chat with sellers, ask questions about products, and track your conversations.
+                        </p>
+                        <button
+                            onClick={async () => {
+                                await signInWithGoogle({ view: 'buyer-auth' });
+                                await refreshUserProfile();
+                            }}
+                            className="w-full max-w-xs py-4 bg-primary hover:bg-orange-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest shadow-lg shadow-primary/30 active:scale-95 transition-all"
+                        >
+                            Sign In to Chat
+                        </button>
                     </div>
                 );
+            }
+
             case 'home':
             default:
                 return (
@@ -1205,7 +1272,7 @@ const App: React.FC = () => {
                         window.history.pushState({ view: tab }, '', window.location.href);
                     }}
                     cartCount={cartItems.reduce((sum, item) => sum + item.quantity, 0)}
-                    notificationCount={userCoupons.length}
+                    messageCount={buyerMessageCount}
                 />
             )}
 
@@ -1338,6 +1405,10 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+            <MobileFeedbackSheet
+                isOpen={isFeedbackSheetOpen}
+                onClose={() => setIsFeedbackSheetOpen(false)}
+            />
         </div>
     );
 };

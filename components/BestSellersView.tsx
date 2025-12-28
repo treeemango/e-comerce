@@ -6,9 +6,10 @@ import { fetchBestSellingProducts } from '../lib/api';
 interface BestSellersViewProps {
    onProductClick: (product: Product) => void;
    products: Product[];
+   onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
 }
 
-const BestSellersView: React.FC<BestSellersViewProps> = ({ onProductClick, products: initialProducts }) => {
+const BestSellersView: React.FC<BestSellersViewProps> = ({ onProductClick, products: initialProducts, onAddToCart }) => {
    const [products, setProducts] = useState<Product[]>([]);
    const [isLoading, setIsLoading] = useState(true);
    const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month'>('week');
@@ -98,6 +99,7 @@ const BestSellersView: React.FC<BestSellersViewProps> = ({ onProductClick, produ
                            <ProductCard
                               product={product}
                               onProductClick={onProductClick}
+                              onAddToCart={onAddToCart}
                            />
                         </div>
                      ))}

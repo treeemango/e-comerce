@@ -2,15 +2,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier, RelatedProduct } from '../types';
+import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier, RelatedProduct, ProductReviewSummary } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist } from '../lib/api';
+import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchProductReviewSummary } from '../lib/api';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
 import { playFollowSound, playUnfollowSound, playWishlistAddSound, playWishlistRemoveSound } from '../lib/sounds';
 import { useSEO } from '../lib/useSEO';
 import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
-import { formatPrice, getCurrencySymbol } from '../lib/currency';
+import { formatPrice, getCurrencySymbol, useCurrencyConverter } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
 import ProductQuestions from './ProductDetails/ProductQuestions';
 
@@ -67,6 +67,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    // Wishlist State
    const [isWishlisted, setIsWishlisted] = useState(false);
    const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+
+   // Review summary (backend)
+   const [reviewSummary, setReviewSummary] = useState<ProductReviewSummary | null>(null);
 
    // Message Modal State
    const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
@@ -258,14 +261,43 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
    const showPromo = Boolean(promoLine);
 
-   const ratingValue = typeof product.rating === 'number' ? product.rating : null;
-   const formattedRating = ratingValue !== null ? ratingValue.toFixed(1) : '—';
+   useEffect(() => {
+      let cancelled = false;
+      const loadReviewSummary = async () => {
+         if (!product?.id) return;
+         const summary = await fetchProductReviewSummary(String(product.id));
+         if (!cancelled) setReviewSummary(summary);
+      };
+      loadReviewSummary();
+      return () => {
+         cancelled = true;
+      };
+   }, [product.id]);
+
    const vendor = resolvedVendor ?? product.vendor;
+   const productReviewCount = typeof reviewSummary?.total_reviews === 'number'
+      ? reviewSummary.total_reviews
+      : (typeof product.reviews === 'number' ? product.reviews : 0);
+   const productRatingValue = typeof reviewSummary?.average_rating === 'number'
+      ? reviewSummary.average_rating
+      : (typeof product.rating === 'number' ? product.rating : null);
+   const vendorRatingValue = typeof vendor?.vendor_rating === 'number' ? vendor.vendor_rating : null;
+   const vendorReviewCount = typeof vendor?.review_count === 'number' ? vendor.review_count : null;
+
+   // If this product has no reviews, fall back to vendor stats (matches the seller summary shown elsewhere on the page)
+   const ratingValue = (productReviewCount && productReviewCount > 0)
+      ? productRatingValue
+      : (vendorRatingValue ?? productRatingValue);
+   const reviewCount = (productReviewCount && productReviewCount > 0)
+      ? productReviewCount
+      : (vendorReviewCount ?? productReviewCount);
+   const formattedRating = ratingValue !== null ? ratingValue.toFixed(1) : '—';
    const soldLabel = useMemo(() => {
-      if (typeof product.stock === 'number') return `${product.stock.toLocaleString()} in stock`;
+      if (typeof product.soldCount === 'number') return `${product.soldCount.toLocaleString()} orders`;
       if (resolvedVendor?.completed_orders) return `${resolvedVendor.completed_orders.toLocaleString()} orders`;
-      return 'Popular item';
-   }, [product.stock, resolvedVendor?.completed_orders]);
+      if (typeof product.stock === 'number') return `${product.stock.toLocaleString()} in stock`;
+      return '—';
+   }, [product.soldCount, product.stock, resolvedVendor?.completed_orders]);
 
    // Generate styles for known color names
    const getColorStyle = (colorName: string) => {
@@ -398,6 +430,52 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       };
       loadRelated();
    }, [product.id, product.use_case_tags]);
+
+   const priceValues = useMemo(() => {
+      const vals: { id: string; amount: number; currency: string }[] = [
+         { id: 'displayPrice', amount: displayPrice, currency: currencyCode }
+      ];
+      if (displayRRP) vals.push({ id: 'displayRRP', amount: displayRRP, currency: currencyCode });
+      if (product.delayCredit) vals.push({ id: 'delayCredit', amount: product.delayCredit, currency: currencyCode });
+      if (product.activeCoupon?.amount) vals.push({ id: 'activeCoupon', amount: product.activeCoupon.amount, currency: currencyCode });
+
+      productCoupons.forEach(coupon => {
+         if (coupon.discount_amount) {
+            vals.push({ id: `coupon-${coupon.id}`, amount: coupon.discount_amount, currency: currencyCode });
+         }
+      });
+
+      quantityDiscounts.forEach(tier => {
+         vals.push({ id: `tier-${tier.id}`, amount: tier.unit_price, currency: currencyCode });
+      });
+
+      if (product.auto_discount_type === 'fixed_amount' && product.auto_discount_value) {
+         vals.push({ id: 'autoDiscount', amount: product.auto_discount_value, currency: currencyCode });
+      }
+      if (product.auto_discount_min_requirement) {
+         vals.push({ id: 'autoDiscountMin', amount: product.auto_discount_min_requirement, currency: currencyCode });
+      }
+
+      // Add variant prices
+      productVariants.forEach(v => {
+         vals.push({ id: `variant-${v.id}`, amount: v.price, currency: currencyCode });
+      });
+
+      // Add delivery cost
+      if (product.delivery_cost) {
+         vals.push({ id: 'deliveryCost', amount: product.delivery_cost, currency: currencyCode });
+      }
+
+      return vals;
+   }, [displayPrice, displayRRP, product.delayCredit, product.activeCoupon?.amount, productCoupons, quantityDiscounts, product.auto_discount_type, product.auto_discount_value, product.auto_discount_min_requirement, productVariants, currencyCode]);
+
+   const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+   const getPrice = (id: string, fallbackAmount: number, fallbackCurrency: string) => {
+      const conv = convertedValues[id];
+      if (conv?.converted) return conv.converted;
+      return formatPrice(fallbackAmount, fallbackCurrency);
+   };
 
    useEffect(() => {
       if (product?.id) {
@@ -858,7 +936,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         <span className="font-bold text-slate-900 dark:text-white">{formattedRating}</span>
                      </div>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
-                     <a href="#reviews" className="text-slate-500 hover:underline">({product.reviews?.toLocaleString?.() ?? product.reviews})</a>
+                     <a href="#reviews" className="text-slate-500 hover:underline">({reviewCount.toLocaleString()})</a>
                      <span className="w-px h-3 bg-slate-300 mx-1"></span>
                      <span className="text-slate-500">{soldLabel}</span>
 
@@ -866,9 +944,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                   <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 mb-6">
                      <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-3xl font-bold text-orange-600 dark:text-orange-500">{formatPrice(displayPrice, currencyCode)}</span>
+                        <span className="text-3xl font-bold text-orange-600 dark:text-orange-500">{getPrice('displayPrice', displayPrice, currencyCode)}</span>
                         {displayRRP > displayPrice && (
-                           <span className="text-sm text-slate-400 line-through">RRP {formatPrice(displayRRP, currencyCode)}</span>
+                           <span className="text-sm text-slate-400 line-through">RRP {getPrice('displayRRP', displayRRP, currencyCode)}</span>
                         )}
                         {discountPercent !== null && discountPercent > 0 && (
                            <span className="text-xs font-bold text-orange-600 border border-orange-600 px-1 rounded">-{discountPercent}%</span>
@@ -894,7 +972,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               <div className="relative overflow-hidden bg-orange-50 dark:bg-orange-900/20 border-l-4 border-l-orange-500 border-y border-r border-orange-200 dark:border-orange-800 rounded-r-lg p-3 flex items-center justify-between gap-4 transition-all hover:shadow-md group">
                                  <div className="pl-2">
                                     <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
-                                       {product.activeCoupon.amount ? `$${product.activeCoupon.amount} OFF` : `${product.activeCoupon.percent}% OFF`}
+                                       {product.activeCoupon.amount ? `${getPrice('activeCoupon', product.activeCoupon.amount, currencyCode)} OFF` : `${product.activeCoupon.percent}% OFF`}
                                     </div>
                                     <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
                                        Code: {product.activeCoupon.code}
@@ -934,7 +1012,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                                        <div className="pl-2">
                                           <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
-                                             {coupon.discount_amount ? `$${coupon.discount_amount} OFF` : `${coupon.discount_percentage}% OFF`}
+                                             {coupon.discount_amount ? `${getPrice(`coupon-${coupon.id}`, coupon.discount_amount, currencyCode)} OFF` : `${coupon.discount_percentage}% OFF`}
                                           </div>
                                           <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
                                              {coupon.name}
@@ -976,11 +1054,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     ? `Buy ${product.auto_discount_buy_qty} get ${product.auto_discount_get_qty} free`
                                     : product.auto_discount_type === 'percentage'
                                        ? `${product.auto_discount_value}% discount applied automatically`
-                                       : `$${product.auto_discount_value} off applied automatically`
+                                       : `${getPrice('autoDiscount', product.auto_discount_value || 0, currencyCode)} off applied automatically`
                                  }
                                  {product.auto_discount_min_requirement && product.auto_discount_min_requirement > 0 && (
                                     <span className="text-[10px] font-normal text-slate-500 ml-2">
-                                       (Min. order: ${product.auto_discount_min_requirement})
+                                       (Min. order: {getPrice('autoDiscountMin', product.auto_discount_min_requirement, currencyCode)})
                                     </span>
                                  )}
                               </div>
@@ -1001,7 +1079,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               <div key={tier.id} className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center transition-all hover:shadow-md">
                                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Buy {tier.min_quantity}+</div>
                                  <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">
-                                    {formatPrice(tier.unit_price, currencyCode)}
+                                    {getPrice(`tier-${tier.id}`, tier.unit_price, currencyCode)}
                                  </div>
                                  <div className="text-[10px] text-slate-500 font-medium">Per item</div>
                                  {displayPrice > tier.unit_price && (
@@ -1051,6 +1129,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                        key={label}
                                        onClick={() => openVariantOverlay(previewVariant || variant, { [colorOptionName]: label }, true)}
                                        onMouseEnter={() => {
+                                          // Auto-select color when hovering
+                                          setSelectedOptions(prev => ({ ...prev, [colorOptionName]: label }));
                                           if (previewMedia) {
                                              setHoverPreviewMedia(previewMedia);
                                              setUserHasSelected(true);
@@ -1085,7 +1165,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                                 {typeof variantStock === 'number' && <p className="text-[11px] text-slate-500">{variantStock} in stock</p>}
                                              </div>
                                              <div className="text-right">
-                                                <p className="font-bold text-slate-900 dark:text-white text-sm">{formatPrice(variantPrice, currencyCode)}</p>
+                                                <p className="font-bold text-slate-900 dark:text-white text-sm">{getPrice(`variant-${previewVariant?.id || variant.id}`, variantPrice, currencyCode)}</p>
                                                 {isSelected && <span className="text-[10px] text-orange-600 font-bold flex items-center gap-0.5 justify-end"><span className="material-icons text-[10px]">check</span> Selected</span>}
                                              </div>
                                           </div>
@@ -1130,7 +1210,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     >
                                        <div className="flex flex-col leading-tight">
                                           <span>{val}</span>
-                                          <span className="text-[11px] font-medium text-slate-500">{formatPrice(variantPrice, currencyCode)}</span>
+                                          <span className="text-[11px] font-medium text-slate-500">{variantForValue ? getPrice(`variant-${variantForValue.id}`, variantPrice, currencyCode) : formatPrice(variantPrice, currencyCode)}</span>
                                           {typeof variantStock === 'number' && <span className="text-[10px] text-slate-400">{variantStock} left</span>}
                                        </div>
                                     </button>
@@ -1286,7 +1366,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   <div className="space-y-6">
                      {vendor ? (
                         <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
-                           <div className="flex items-center gap-4 mb-6">
+                           {/* Header with Logo */}
+                           <div className="flex items-center gap-4 mb-4">
                               {vendor.logo_url ? (
                                  <img src={vendor.logo_url} alt={vendor.business_name} className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-100 dark:border-slate-700" />
                               ) : (
@@ -1294,25 +1375,60 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     {vendor.business_name.charAt(0)}
                                  </div>
                               )}
-                              <div className="flex-1">
+                              <div className="flex-1 min-w-0">
                                  <div className="flex items-center gap-2">
-                                    <h3 className="font-black text-slate-900 dark:text-white">{vendor.business_name}</h3>
-                                    {vendor.is_verified && <span className="material-icons-round text-blue-500 text-sm">verified</span>}
+                                    <h3 className="font-black text-slate-900 dark:text-white truncate">{vendor.business_name}</h3>
+                                    {vendor.is_verified && <span className="material-icons-round text-blue-500 text-sm flex-shrink-0">verified</span>}
                                  </div>
-                                 <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                                    <span>{vendor.total_products} Items</span>
-                                    <span>•</span>
-                                    <span className="flex items-center">{vendor.vendor_rating} <span className="material-icons-round text-amber-500 text-xs ml-0.5">star</span></span>
-                                 </div>
+                                 {/* Country Badge */}
+                                 {vendor.business_country && vendor.business_country !== 'Independent Seller' && (
+                                    <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                       <span className="material-icons-outlined text-xs text-blue-500">public</span>
+                                       <span className="font-semibold">From {vendor.business_country}</span>
+                                    </div>
+                                 )}
                               </div>
                            </div>
+
+                           {/* Stats Grid - 4 columns */}
+                           <div className="grid grid-cols-4 gap-2 py-4 mb-4 border-y border-slate-100 dark:border-slate-700">
+                              <div className="text-center">
+                                 <div className="flex items-center justify-center gap-0.5 mb-0.5">
+                                    <span className="material-icons-round text-amber-500 text-xs">star</span>
+                                    <span className="text-sm font-black text-slate-900 dark:text-white">{vendor.vendor_rating?.toFixed(1) || '0.0'}</span>
+                                 </div>
+                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Rating</div>
+                              </div>
+                              <div className="text-center border-l border-slate-100 dark:border-slate-700">
+                                 <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
+                                    {vendor.completed_orders ?? 0}
+                                 </div>
+                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Orders</div>
+                              </div>
+                              <div className="text-center border-l border-slate-100 dark:border-slate-700">
+                                 <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
+                                    {(vendor.follower_count ?? followerCount) >= 1000 ? `${((vendor.follower_count ?? followerCount) / 1000).toFixed(1)}k` : (vendor.follower_count ?? followerCount)}
+                                 </div>
+                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Followers</div>
+                              </div>
+                              <div className="text-center border-l border-slate-100 dark:border-slate-700">
+                                 <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
+                                    {vendor.total_products ?? 0}
+                                 </div>
+                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Products</div>
+                              </div>
+                           </div>
+
+                           {/* Action Buttons */}
                            <div className="flex gap-2 mb-4">
                               <button onClick={handleMessageClick} className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2">
                                  <span className="material-icons-round text-sm">chat</span> Message
                               </button>
-                              <button onClick={() => onVisitStore && vendor?.vendor_id && onVisitStore(vendor.vendor_id)} className="px-4 py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-primary to-orange-500 text-white hover:shadow-lg hover:shadow-primary/30 transition-all">
-                                 <span className="material-icons-round text-sm">storefront</span>
+                              <button onClick={() => onVisitStore && vendor?.vendor_id && onVisitStore(vendor.vendor_id)} className="px-4 py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-primary to-orange-500 text-white hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2">
+                                 <span className="material-icons-round text-sm">storefront</span> Visit Store
                               </button>
+                           </div>
+                           <div className="flex gap-2">
                               {/* Follow Button */}
                               <button
                                  onClick={handleFollowToggle}
@@ -1326,10 +1442,23 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  {isFollowing ? 'Following' : 'Follow'}
                               </button>
                            </div>
-                           {/* Follower Count */}
-                           {followerCount > 0 && (
-                              <div className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                                 <span className="font-medium">{followerCount.toLocaleString()}</span> {followerCount === 1 ? 'follower' : 'followers'}
+
+                           {/* Business Verification Section */}
+                           {vendor.is_verified && (
+                              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/30">
+                                 <div className="flex items-center gap-3">
+                                    <span className="material-icons-round text-blue-500 text-xl">verified_user</span>
+                                    <div className="flex-1">
+                                       <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Business Legally Verified</p>
+                                       <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Licensed & Regulated Store</p>
+                                    </div>
+                                    <button
+                                       onClick={() => onVisitStore && vendor?.vendor_id && onVisitStore(vendor.vendor_id)}
+                                       className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-xl text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide shadow-sm hover:shadow transition-all"
+                                    >
+                                       View Certificates
+                                    </button>
+                                 </div>
                               </div>
                            )}
                         </div>
@@ -1413,7 +1542,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      <div className="grid grid-cols-2 text-sm">
                         <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Delivery</div>
                         <div className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                           {product.free_delivery ? 'Free Shipping' : `${formatPrice(product.delivery_cost || 0, currencyCode)}`}
+                           {product.free_delivery ? 'Free Shipping' : `${getPrice('deliveryCost', product.delivery_cost || 0, currencyCode)}`}
                            {product.deliveryTimeEstimate && ` • ${product.deliveryTimeEstimate}`}
                         </div>
                      </div>
@@ -1616,13 +1745,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               <div className="flex gap-6 overflow-x-auto pb-2 scrollbar-hide">
                                  <div className="flex-shrink-0">
                                     <div className="text-[10px] text-slate-500 mb-1">2 - 99 pieces</div>
-                                    <div className="text-lg font-bold text-slate-900 dark:text-white">{formatPrice(product.price, currencyCode)}</div>
-                                    <div className="text-[10px] text-slate-400 line-through">{formatPrice(displayRRP || product.price * 1.25, currencyCode)}</div>
+                                    <div className="text-lg font-bold text-slate-900 dark:text-white">{getPrice('displayPrice', product.price, currencyCode)}</div>
+                                    <div className="text-[10px] text-slate-400 line-through">{getPrice('displayRRP', displayRRP || product.price * 1.25, currencyCode)}</div>
                                  </div>
                                  {quantityDiscounts.map((tier, idx) => (
                                     <div key={idx} className="flex-shrink-0 opacity-80">
                                        <div className="text-[10px] text-slate-500 mb-1">{tier.min_quantity}+ pieces</div>
-                                       <div className="text-lg font-bold text-slate-900 dark:text-white">{formatPrice(tier.unit_price, currencyCode)}</div>
+                                       <div className="text-lg font-bold text-slate-900 dark:text-white">{getPrice(`tier-${tier.id}`, tier.unit_price, currencyCode)}</div>
                                        <div className="text-[10px] text-slate-400 line-through">{formatPrice(tier.unit_price * 1.3, currencyCode)}</div>
                                     </div>
                                  ))}
@@ -1687,6 +1816,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                                 }
                                                 setSelectedOptions(prev => ({ ...prev, [option.name]: val }));
                                              }}
+                                             onMouseEnter={() => {
+                                                // Auto-select variant when hovering
+                                                if (variant) {
+                                                   setOverlayVariant(variant);
+                                                }
+                                                setSelectedOptions(prev => ({ ...prev, [option.name]: val }));
+                                             }}
                                              className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'border-orange-500 bg-orange-50/50 dark:bg-orange-900/10' : 'border-slate-100 dark:border-slate-800 hover:border-orange-200'}`}
                                           >
                                              <div className="flex items-center gap-3">
@@ -1695,7 +1831,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                                 </div>
                                                 <div>
                                                    <p className="text-sm font-bold text-slate-800 dark:text-white">{val}</p>
-                                                   <p className="text-xs text-slate-500">{formatPrice(variant?.price || product.price, currencyCode)}</p>
+                                                   <p className="text-xs text-slate-500">{variant ? getPrice(`variant-${variant.id}`, variant.price, currencyCode) : getPrice('displayPrice', product.price, currencyCode)}</p>
                                                 </div>
                                              </div>
 
@@ -1734,14 +1870,24 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     {Object.values(variantQuantities).reduce((a: number, b: any) => a + Number(b), 0)} pieces
                                  </span>
                                  <span className="text-xl font-bold text-slate-900 dark:text-white">
-                                    {formatPrice(
-                                       Object.entries(variantQuantities).reduce((total: number, [val, qty]: [string, any]) => {
+                                    {(() => {
+                                       const rawSubtotal = Object.entries(variantQuantities).reduce((total: number, [val, qty]: [string, any]) => {
                                           const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
                                           const price = variant?.price || product.price || 0;
                                           return total + (Number(qty) * price);
-                                       }, 0) || (overlayQuantity * (overlayVariant?.price || displayPrice)),
-                                       currencyCode
-                                    )}
+                                       }, 0) || (overlayQuantity * (overlayVariant?.price || displayPrice));
+
+                                       // Get conversion info from displayPrice
+                                       const conversionInfo = convertedValues['displayPrice'];
+                                       if (conversionInfo?.amount && displayPrice > 0) {
+                                          // Calculate rate: converted amount / original amount
+                                          const rate = conversionInfo.amount / displayPrice;
+                                          const convertedSubtotal = rawSubtotal * rate;
+                                          return formatPrice(convertedSubtotal, preferredCurrency);
+                                       }
+                                       // Fallback to original currency
+                                       return formatPrice(rawSubtotal, currencyCode);
+                                    })()}
                                  </span>
                               </div>
                            </div>

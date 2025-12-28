@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { fetchSellerOrders } from '../../../lib/api';
 import { SellerOrder } from '../../../types';
-import { formatCurrency } from '../../../lib/utils';
+import { useCurrencyConverter, formatPrice } from '../../../lib/currency';
 import OrderDetailsModal from './OrderDetailsModal';
 import BuyerReceipt from './BuyerReceipt';
 
@@ -45,7 +45,6 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
         };
         loadData();
     }, [sellerId, activeTab]);
-
     const filteredOrders = orders.filter(order => {
         // Status mapping
         let orderStatus = order.status;
@@ -54,6 +53,32 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
 
         return orderStatus === activeTab;
     });
+
+    // Currency conversion for order item prices
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+
+        filteredOrders.forEach((order, orderIdx) => {
+            order.items?.forEach((item, itemIdx) => {
+                vals.push({
+                    id: `order-${orderIdx}-item-${itemIdx}`,
+                    amount: item.price || 0,
+                    currency: item.currency || 'USD'
+                });
+            });
+        });
+
+        return vals;
+    }, [filteredOrders]);
+
+    const { convertedValues } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (orderId: string, itemIdx: number, fallback: number, currency: string) => {
+        const orderIdx = filteredOrders.findIndex(o => o.id === orderId);
+        const id = `order-${orderIdx}-item-${itemIdx}`;
+        return convertedValues[id]?.converted ?? formatPrice(fallback, currency);
+    };
+
 
     if (!sellerId) return <div className="p-8 text-center">Please log in to view orders.</div>;
 
@@ -196,7 +221,7 @@ const ManageOrdersView: React.FC<ManageOrdersViewProps> = ({ sellerId }) => {
 
                                                     {/* Unit Price Column Part */}
                                                     <div className="w-24 text-right">
-                                                        <div className="text-xs text-gray-500">Price: <span className="text-gray-900 font-medium">{formatCurrency(item.price || 0, item.currency || 'USD')}</span></div>
+                                                        <div className="text-xs text-gray-500">Price: <span className="text-gray-900 font-medium">{getConvertedPrice(order.id, idx, item.price || 0, item.currency || 'USD')}</span></div>
                                                     </div>
 
                                                     {/* Customer Option Column Part */}

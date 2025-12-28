@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Product, User } from '../types';
 import TrendingVendorsSection from './TrendingVendorsSection';
 import ProductCard from './ProductCard';
-import { getFollowedStores, fetchRecentViews, fetchRelatedProducts, RecentViewProduct, RelatedProduct } from '../lib/api';
+import { getFollowedStores, fetchRecentViews, fetchRelatedProducts, RecentViewProduct } from '../lib/api';
+import { RelatedProduct } from '../types';
 import { getCurrencySymbol } from '@/lib/currency';
 import MessagesView from './MessagesView';
 import BuyerCouponsView from './BuyerCouponsView';
@@ -18,6 +19,7 @@ interface AccountPageViewProps {
    onNavigate?: (pageTitle: string) => void;
    onVisitStore?: (vendorId: string) => void;
    activeConversationId?: string | null;
+   onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
 }
 
 interface FollowedVendor {
@@ -32,7 +34,7 @@ interface FollowedVendor {
    followed_at: string;
 }
 
-const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductClick, user, onNavigate, onVisitStore, activeConversationId }) => {
+const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductClick, user, onNavigate, onVisitStore, activeConversationId, onAddToCart }) => {
    const [followedStores, setFollowedStores] = useState<FollowedVendor[]>([]);
    const [loading, setLoading] = useState(true);
    const [recentViews, setRecentViews] = useState<RecentViewProduct[]>([]);
@@ -234,6 +236,7 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                               key={product.id}
                               product={product}
                               onProductClick={onProductClick}
+                              onAddToCart={onAddToCart}
                            />
                         ))}
                      </div>
@@ -257,6 +260,7 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                               key={`${item.id}-${item.relation_type}`}
                               product={item as Product}
                               onProductClick={onProductClick}
+                              onAddToCart={onAddToCart}
                            />
                         ))}
                      </div>

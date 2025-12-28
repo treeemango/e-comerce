@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
-import { getCurrencySymbol } from '@/lib/currency';
+import { useCurrencyConverter } from '@/lib/currency';
 import { Product } from '@/types';
-
-const formatPrice = (value: number, currency?: string) => `${getCurrencySymbol(currency || 'USD')}${value.toFixed(2)}`;
 
 // Thematic Mapping for Categories
 const CATEGORY_THEMES: Record<string, { gradient: string; accent: string; text: string }> = {
@@ -97,6 +95,35 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Currency conversion for all deals
+  const priceValues = useMemo(() =>
+    deals.map(deal => ({
+      amount: deal.price,
+      currency: deal.currency || 'USD',
+      id: `hero-${deal.id}-price`
+    })),
+    [deals]
+  );
+
+  const originalPriceValues = useMemo(() =>
+    deals.filter(deal => deal.originalPrice && deal.originalPrice > deal.price)
+      .map(deal => ({
+        amount: deal.originalPrice!,
+        currency: deal.currency || 'USD',
+        id: `hero-${deal.id}-original`
+      })),
+    [deals]
+  );
+
+  const { convertedValues: convertedPrices } = useCurrencyConverter(priceValues);
+  const { convertedValues: convertedOriginalPrices } = useCurrencyConverter(originalPriceValues);
+
+  const getPrice = (dealId: string, isOriginal: boolean = false) => {
+    const key = isOriginal ? `hero-${dealId}-original` : `hero-${dealId}-price`;
+    const converted = isOriginal ? convertedOriginalPrices[key] : convertedPrices[key];
+    return converted?.converted || converted?.original || '';
   };
 
   useEffect(() => {
@@ -211,11 +238,11 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
 
                   <div className={`flex items-baseline gap-4 transition-all duration-700 delay-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
                     <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tighter">
-                      {formatPrice(deal.price, deal.currency)}
+                      {getPrice(deal.id, false)}
                     </span>
                     {deal.originalPrice > deal.price && (
                       <span className="text-xl md:text-2xl text-white/40 line-through font-medium">
-                        {formatPrice(deal.originalPrice, deal.currency)}
+                        {getPrice(deal.id, true)}
                       </span>
                     )}
                     {(deal.discountPercent || 0) > 0 && (

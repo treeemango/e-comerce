@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLightningDeals, type LightningDealItem } from '../lib/api';
-import { getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
 import { MediaItem, Product } from '@/types';
 
 interface LightningDeal extends LightningDealItem {
@@ -8,7 +8,7 @@ interface LightningDeal extends LightningDealItem {
   tag?: string;
 }
 
-const formatPrice = (value: number, currency?: string) => `${getCurrencySymbol(currency || 'USD')}${value.toFixed(2)}`;
+// Local formatPrice removed in favor of lib/currency formatPrice
 
 type LightningDealsRowProps = {
   userId?: string | null;
@@ -24,7 +24,7 @@ const LightningDealCard: React.FC<{
   timeRemaining?: { days: number; hours: number; minutes: number; seconds: number };
   onAddToCart?: (deal: LightningDeal) => void;
   onProductClick?: (product: Product) => void;
-}> = ({ deal, loading, cardStyles, timeRemaining, onAddToCart, onProductClick }) => {
+}> = ({ deal, loading, cardStyles, timeRemaining, onAddToCart, onProductClick, convertedValues, preferredCurrency }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
@@ -288,12 +288,12 @@ const LightningDealCard: React.FC<{
                 : deal.deal_type === 'hot_discount'
                   ? 'text-red-600 dark:text-red-300'
                   : 'text-orange-600 dark:text-orange-300'
-                }`}>{formatPrice(deal.price, deal.currency)}</span>
+                }`}>{convertedValues?.[`deal-price-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.price, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.price.toFixed(2)}`)}</span>
             )}
             {loading ? (
               <span className="inline-block h-4 w-14 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
             ) : (
-              <span className="text-xs text-gray-500 line-through dark:text-gray-400">{formatPrice(deal.originalPrice, deal.currency)}</span>
+              <span className="text-xs text-gray-500 line-through dark:text-gray-400">{convertedValues?.[`deal-orig-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.originalPrice, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.originalPrice.toFixed(2)}`)}</span>
             )}
           </div>
           {!loading && (deal.is_express_delivery || deliveryEstimate || deal.vendor_country || scopeLabel) && (
@@ -319,7 +319,7 @@ const LightningDealCard: React.FC<{
             </div>
           )}
           {(!loading && deal.rrp) && (
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">RRP {formatPrice(deal.rrp)}</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">RRP {convertedValues?.[`deal-rrp-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.rrp, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.rrp.toFixed(2)}`)}</p>
           )}
         </div>
         {(!deal.listing_type || deal.listing_type === 'direct_purchase') && (
@@ -356,6 +356,22 @@ const LightningDealsRow: React.FC<LightningDealsRowProps> = ({ userId, onViewAll
   const [deals, setDeals] = useState<LightningDeal[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [timeRemainings, setTimeRemainings] = useState<Map<string, { days: number; hours: number; minutes: number; seconds: number }>>(new Map());
+
+  const priceValues = useMemo(() => {
+    const vals: { id: string; amount: number; currency: string }[] = [];
+    deals.forEach(deal => {
+      vals.push({ id: `deal-price-${deal.id}`, amount: deal.price, currency: deal.currency || 'USD' });
+      if (deal.originalPrice) {
+        vals.push({ id: `deal-orig-${deal.id}`, amount: deal.originalPrice, currency: deal.currency || 'USD' });
+      }
+      if (deal.rrp) {
+        vals.push({ id: `deal-rrp-${deal.id}`, amount: deal.rrp, currency: deal.currency || 'USD' });
+      }
+    });
+    return vals;
+  }, [deals]);
+
+  const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
 
   const fetchDeals = useCallback(async () => {
     setLoading(true);
@@ -506,6 +522,8 @@ const LightningDealsRow: React.FC<LightningDealsRowProps> = ({ userId, onViewAll
                   timeRemaining={timeRemaining}
                   onAddToCart={onAddToCart}
                   onProductClick={onProductClick}
+                  convertedValues={convertedValues}
+                  preferredCurrency={preferredCurrency}
                 />
               );
             })}

@@ -111,7 +111,7 @@ const WishlistView: React.FC<WishlistViewProps> = ({
                             <ProductCard
                                 product={product}
                                 onProductClick={() => onProductClick(product)}
-                                onAddToCart={(p, e) => handleAddToCart(p)}
+                                showVendorMeta={false}
                             />
                             {/* Remove from wishlist button */}
                             <button

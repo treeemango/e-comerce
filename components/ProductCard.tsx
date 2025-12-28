@@ -2,21 +2,41 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Product } from '@/types';
 import PreviewModal from './PreviewModal';
 import SimilarItemsModal from './SimilarItemsModal';
-import { formatPriceParts, getCurrencySymbol } from '@/lib/currency';
+import { formatPriceParts, getCurrencySymbol, formatPriceWithConversion, formatPrice, useCurrencyConverter } from '@/lib/currency';
+import { useMemo } from 'react';
 
 interface ProductCardProps {
   product: Product;
   ranking?: number;
   onProductClick?: (product: Product) => void;
   onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
+  showVendorMeta?: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductClick, onAddToCart }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductClick, onAddToCart, showVendorMeta = true }) => {
   const [activeModal, setActiveModal] = useState<'preview' | 'similar' | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
+
+  const priceValues = useMemo(() => {
+    const vals = [
+      { id: 'price', amount: product.price, currency: product.currency || 'USD' }
+    ];
+    if (product.originalPrice) {
+      vals.push({ id: 'originalPrice', amount: product.originalPrice, currency: product.currency || 'USD' });
+    }
+    if (product.rrp) {
+      vals.push({ id: 'rrp', amount: product.rrp, currency: product.currency || 'USD' });
+    }
+    if (product.activeCoupon?.amount) {
+      vals.push({ id: 'coupon', amount: product.activeCoupon.amount, currency: product.currency || 'USD' });
+    }
+    return vals;
+  }, [product.price, product.originalPrice, product.currency, product.activeCoupon?.amount]);
+
+  const { convertedValues } = useCurrencyConverter(priceValues);
   const timeoutRef = useRef<NodeJS.Timeout>();
 
   const closeModal = () => setActiveModal(null);
@@ -70,6 +90,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
     return () => clearInterval(interval);
   }, [isHovered, isVideoPlaying, imageUrls.length]);
 
+  // Converted price results
+  const mainPrice = convertedValues['price'];
+  const originalPriceConverted = convertedValues['originalPrice'];
+  const rrpConverted = convertedValues['rrp'];
+  const couponConverted = convertedValues['coupon'];
+
   const showVideo = isHovered && hasVideo && isVideoPlaying;
   const videoMedia = validMedia.find(m => m.type === 'video' || m.type === 'youtube');
   const hasProductRating = (product.rating ?? 0) > 0 && (product.reviews ?? 0) > 0;
@@ -83,7 +109,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
 
   const couponValue = product.activeCoupon
     ? product.activeCoupon.amount
-      ? `${getCurrencySymbol(product.currency)}${product.activeCoupon.amount}`
+      ? couponConverted?.converted || couponConverted?.original || `${getCurrencySymbol(product.currency)}${product.activeCoupon.amount}`
       : product.activeCoupon.percent
         ? `${product.activeCoupon.percent}%`
         : undefined
@@ -294,10 +320,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
           )}
 
           <div className="flex items-center justify-between my-1">
-            <div className="flex items-baseline text-shop-red dark:text-red-400">
-              <span className="text-xl font-bold">{getCurrencySymbol(product.currency)}{Math.floor(product.price || 0)}</span>
-              <span className="text-sm ml-0.5">.{(product.price || 0).toFixed(2).split('.')[1]}</span>
-              {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">/{product.sale_unit}</span>}
+            <div className="flex flex-col gap-1">
+              {/* Converted Price (Primary) */}
+              {mainPrice?.converted || (typeof product.price === 'number' ? `${getCurrencySymbol(product.currency)}${product.price.toFixed(2)}` : null) ? (
+                <div className="flex items-baseline text-shop-red dark:text-red-400">
+                  <span className="text-xl font-bold">{mainPrice?.converted || `${getCurrencySymbol(product.currency)}${product.price.toFixed(2)}`}</span>
+                  {product.sale_unit && <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">/{product.sale_unit}</span>}
+                </div>
+              ) : null}
+              {/* Original Price (Secondary) */}
+              {originalPriceConverted?.converted && (
+                <div className="flex items-baseline text-gray-500 dark:text-gray-400 text-sm">
+                  <span className="line-through">{originalPriceConverted.converted}</span>
+                  <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">Original</span>
+                </div>
+              )}
             </div>
             {(!product.listing_type || product.listing_type === 'direct_purchase') && (
               <button
@@ -322,7 +359,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
               {hasStrikePrice && (
                 <div className="flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
                   <span className="line-through text-slate-400 dark:text-slate-500 text-xs">
-                    {getCurrencySymbol(product.currency)}{product.originalPrice?.toFixed(2)}
+                    {originalPriceConverted?.converted || `${getCurrencySymbol(product.currency)}${product.originalPrice?.toFixed(2)}`}
                   </span>
                   {computedDiscountPercent !== undefined && (
                     <span className="px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-[10px]">
@@ -368,7 +405,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
             </div>
           )}
 
-          {product.vendor && hasVendorRating && (
+          {showVendorMeta && product.vendor && hasVendorRating && (
             <div className="mb-2 flex items-center justify-end gap-2">
               <span className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
                 <span className="material-icons !text-[12px] text-slate-900 dark:text-slate-100">star</span>
@@ -463,7 +500,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
         </div>
 
         {activeModal === 'preview' && <PreviewModal product={product} onClose={closeModal} onProductClick={onProductClick} onAddToCart={onAddToCart} />}
-        {activeModal === 'similar' && <SimilarItemsModal product={product} onClose={closeModal} />}
+        {activeModal === 'similar' && <SimilarItemsModal product={product} onClose={closeModal} onAddToCart={onAddToCart} />}
       </div>
     </>
   );

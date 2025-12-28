@@ -179,6 +179,7 @@ const SimilarItemsView: React.FC<SimilarItemsViewProps> = ({
                                 key={p.id}
                                 product={p as any}
                                 onProductClick={onProductClick}
+                                showSellerLine={false}
                             />
                         ))}
                     </div>

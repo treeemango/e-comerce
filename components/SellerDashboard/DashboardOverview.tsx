@@ -1,15 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fetchSellerInventory, fetchSellerStats, fetchSellerAnalytics } from '../../lib/api';
 import { SellerInventoryItem, SellerStats, SellerAnalyticsSummary } from '../../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { useCurrencyConverter, formatPrice, getCurrencySymbol } from '@/lib/currency';
 
 interface DashboardOverviewProps {
     sellerId?: string;
 }
 
-const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
-};
+
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
     const [stats, setStats] = useState<SellerStats | null>(null);
@@ -35,11 +34,43 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
         loadData();
     }, [sellerId]);
 
+    // Currency conversion for all monetary values
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+
+        // Total sales from analytics
+        if (analytics?.summary.total_sales) {
+            vals.push({ id: 'total-sales', amount: analytics.summary.total_sales, currency: 'USD' });
+        }
+
+        // Daily sales trend
+        analytics?.daily_trend.forEach((day, idx) => {
+            vals.push({ id: `day-${idx}-sales`, amount: day.total_sales, currency: 'USD' });
+        });
+
+        // Inventory prices
+        recentInventory.forEach((item, idx) => {
+            vals.push({ id: `inventory-${idx}`, amount: item.current_price, currency: 'GBP' });
+        });
+
+        return vals;
+    }, [analytics, recentInventory]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (id: string, fallback: number, originalCurrency: string) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, originalCurrency);
+    };
+
+    const getConvertedAmount = (id: string, fallback: number) => {
+        return convertedValues[id]?.convertedAmount ?? fallback;
+    };
+
     const metrics = [
         {
             label: 'Total Sales',
-            value: formatCurrency(analytics?.summary.total_sales || 0),
-            data: analytics?.daily_trend.map(d => ({ value: d.total_sales })) || [],
+            value: getConvertedPrice('total-sales', analytics?.summary.total_sales || 0, 'USD'),
+            data: analytics?.daily_trend.map((d, idx) => ({ value: getConvertedAmount(`day-${idx}-sales`, d.total_sales) })) || [],
             color: '#10B981', // Emerald 500
             icon: 'payments'
         },
@@ -134,11 +165,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
                                     axisLine={false}
                                     tickLine={false}
                                     tick={{ fontSize: 12, fill: '#9CA3AF' }}
-                                    tickFormatter={(val) => `K${val / 1000}k`}
+                                    tickFormatter={(val) => `${getCurrencySymbol(preferredCurrency)}${(val / 1000).toFixed(1)}k`}
                                 />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: any) => [`KES ${Number(value).toLocaleString()}`, 'Sales']}
+                                    formatter={(value: any) => [formatPrice(Number(value), preferredCurrency), 'Sales']}
                                 />
                                 <Area
                                     type="monotone"
@@ -204,7 +235,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
                                 {recentInventory.slice(0, 5).map((item) => (
                                     <tr key={item.variant_id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-3 font-medium text-gray-900">{item.product_title}</td>
-                                        <td className="px-6 py-3">£{item.current_price}</td>
+                                        <td className="px-6 py-3">{getConvertedPrice(`inventory-${recentInventory.indexOf(item)}`, item.current_price, 'GBP')}</td>
                                         <td className="px-6 py-3">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.current_stock < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                                                 {item.current_stock}

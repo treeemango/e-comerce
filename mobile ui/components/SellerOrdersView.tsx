@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SellerOrder } from '@/types';
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { useCurrencyConverter, formatPrice } from '@/lib/currency';
 import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
 import PullToRefresh from './PullToRefresh';
 
@@ -39,6 +40,26 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
 
         return result;
     }, [orders, activeTab]);
+
+    // Currency conversion for order prices
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+
+        filteredOrders.forEach((order, orderIdx) => {
+            vals.push({ id: `order-${orderIdx}-total`, amount: order.total_amount || 0, currency: order.items?.[0]?.currency || 'USD' });
+            order.items?.forEach((item, itemIdx) => {
+                vals.push({ id: `order-${orderIdx}-item-${itemIdx}`, amount: item.price || 0, currency: item.currency || 'USD' });
+            });
+        });
+
+        return vals;
+    }, [filteredOrders]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+    };
 
     const getStatusStyles = (status?: string) => {
         const s = status?.toLowerCase();
@@ -142,7 +163,7 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="text-sm font-bold text-gray-900 line-clamp-1">{item.product_title}</div>
-                                                <div className="text-xs text-gray-500 mt-0.5">Qty: {item.quantity} • {formatCurrency(item.price || 0, item.currency || 'USD')}</div>
+                                                <div className="text-xs text-gray-500 mt-0.5">Qty: {item.quantity} • {getConvertedPrice(`order-${filteredOrders.indexOf(order)}-item-${order.items?.indexOf(item)}`, item.price || 0)}</div>
                                             </div>
                                         </div>
                                     ))}
@@ -155,7 +176,7 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
                                     </div>
                                     <div className="text-right">
                                         <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Total Amount</div>
-                                        <div className="text-sm font-black text-orange-600">{formatCurrency(order.total_amount || 0, order.items?.[0]?.currency || 'USD')}</div>
+                                        <div className="text-sm font-black text-orange-600">{getConvertedPrice(`order-${filteredOrders.indexOf(order)}-total`, order.total_amount || 0)}</div>
                                     </div>
                                 </div>
 

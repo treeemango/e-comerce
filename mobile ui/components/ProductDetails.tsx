@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore } from '@/lib/api';
-import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant, RelatedProduct } from '@/types';
+import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore, fetchVendorInfo } from '@/lib/api';
+import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant, RelatedProduct, VendorInfo } from '@/types';
 import { playWishlistAddSound, playWishlistRemoveSound, playFollowSound, playUnfollowSound, playCartAddSound } from '@/lib/sounds';
 import { ProductCard } from './ProductCard';
 import ProductQuestions from '../../components/ProductDetails/ProductQuestions';
 import { ReviewSection } from '../../components/ReviewSection';
-import { formatPrice } from '@/lib/currency';
+import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
+import { trackProductViewAuto } from '@/lib/tracking';
 
 interface ProductDetailsProps {
     product: Product;
@@ -43,6 +44,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [isFollowing, setIsFollowing] = useState(false);
     const [isFollowLoading, setIsFollowLoading] = useState(false);
     const [followerCount, setFollowerCount] = useState(0);
+    const [vendorInfo, setVendorInfo] = useState<VendorInfo | null>(null); // Live RPC vendor data
     const [useCaseItems, setUseCaseItems] = useState<Product[]>([]);
 
     // Variants State
@@ -64,6 +66,13 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [activeTab, setActiveTab] = useState<'reviews' | 'description' | 'specs'>(
         product.reviews && product.reviews > 0 ? 'reviews' : 'description'
     );
+
+    // Track product views (recent views + analytics), same as web
+    useEffect(() => {
+        if (product?.id) {
+            trackProductViewAuto(String(product.id));
+        }
+    }, [product?.id]);
 
     // Deal Timer State
     const [dealTimeLeft, setDealTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
@@ -187,7 +196,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         }
     }, [product.id, product.has_quantity_discount]);
 
-    // Check wishlist & follow status on mount
+    // Check wishlist & follow status on mount, and fetch live vendor metrics
     useEffect(() => {
         const checkStatuses = async () => {
             if (product.id && user?.id) {
@@ -205,8 +214,28 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 setIsFollowing(false);
             }
         };
+
+        // Fetch live vendor metrics from RPC (same source as VendorProfileView)
+        const fetchLiveVendorData = async () => {
+            if (product.id) {
+                try {
+                    const vendorMap = await fetchVendorInfo([product.id.toString()]);
+                    const sellerId = product.seller_id?.toString() || product.vendor?.user_id;
+                    if (sellerId && vendorMap.has(sellerId)) {
+                        setVendorInfo(vendorMap.get(sellerId) || null);
+                    } else if (vendorMap.size > 0) {
+                        // Fallback: use the first (and likely only) vendor in the map
+                        setVendorInfo(Array.from(vendorMap.values())[0]);
+                    }
+                } catch (error) {
+                    console.error('Error fetching live vendor data:', error);
+                }
+            }
+        };
+
         checkStatuses();
-    }, [product.id, user?.id, product.vendor?.vendor_id]);
+        fetchLiveVendorData();
+    }, [product.id, user?.id, product.vendor?.vendor_id, product.seller_id]);
 
     useEffect(() => {
         const loadVariants = async () => {
@@ -275,7 +304,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             category_ids: [],
                             brand_ids: [],
                             price_min: null,
-                            price_max: null
+                            price_max: null,
+                            attributes: {}
                         });
                         setUseCaseItems(results.filter(p => p.id.toString() !== product.id?.toString()).slice(0, 6));
                     } catch (e) {
@@ -376,16 +406,34 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         }
     };
 
-    const formatPrice = (price: number, currency?: string) => {
-        try {
-            return new Intl.NumberFormat('en', {
-                style: 'currency',
-                currency: currency || 'USD',
-                maximumFractionDigits: 2,
-            }).format(price);
-        } catch (e) {
-            return `${currency ? currency + ' ' : ''}${price}`;
-        }
+    // Currency conversion for prices - MUST be before any early returns
+    const currencyCode = product.currency || 'USD';
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        vals.push({ id: 'displayPrice', amount: currentVariant?.price || product.price, currency: currencyCode });
+        if (product.originalPrice) vals.push({ id: 'originalPrice', amount: product.originalPrice, currency: currencyCode });
+        if (product.delayCredit) vals.push({ id: 'delayCredit', amount: product.delayCredit, currency: currencyCode });
+        vals.push({ id: 'deliveryCost', amount: product.delivery_cost || 0, currency: currencyCode });
+        quantityDiscounts.forEach((tier, idx) => {
+            vals.push({ id: `tier-${idx}`, amount: tier.unit_price, currency: currencyCode });
+        });
+        productVariants.forEach((v, idx) => {
+            vals.push({ id: `variant-${idx}`, amount: v.price, currency: currencyCode });
+        });
+        return vals;
+    }, [currentVariant, product.price, product.originalPrice, product.delayCredit, product.delivery_cost, quantityDiscounts, productVariants, currencyCode]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
+    };
+
+    // For formatting with decimal separation
+    const getPriceFormatted = (id: string, fallback: number) => {
+        const priceStr = getPrice(id, fallback);
+        const parts = priceStr.split('.');
+        return { whole: parts[0], decimal: parts[1] || '00' };
     };
 
     const handleNextImage = (e: React.MouseEvent) => {
@@ -574,7 +622,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             <div className="bg-red-50 dark:bg-red-900/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border border-red-100 dark:border-red-800">
                                 <span className="material-icons-round text-sm text-red-600">account_balance_wallet</span>
                                 <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">
-                                    {formatPrice(product.delayCredit!, product.currency || 'USD')} Credit for delay
+                                    {getPrice('delayCredit', product.delayCredit!)} Credit for delay
                                 </span>
                             </div>
                         )}
@@ -618,13 +666,13 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Price</span>
                         <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-black text-gray-900 dark:text-white tracking-tighter">
-                                {formatPrice(currentVariant?.price || product.price, product.currency).split('.')[0]}
-                                <span className="text-lg font-black opacity-40">.{formatPrice(currentVariant?.price || product.price, product.currency).split('.')[1] || '00'}</span>
+                            <span className="text-3xl font-black text-red-600 dark:text-red-500 tracking-tighter">
+                                {getPriceFormatted('displayPrice', currentVariant?.price || product.price).whole}
+                                <span className="text-lg font-black opacity-40">.{getPriceFormatted('displayPrice', currentVariant?.price || product.price).decimal}</span>
                             </span>
                             {product.originalPrice && (
                                 <span className="text-sm text-gray-400 line-through font-medium">
-                                    {formatPrice(product.originalPrice, product.currency)}
+                                    {getPrice('originalPrice', product.originalPrice)}
                                 </span>
                             )}
                         </div>
@@ -672,7 +720,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                         <div key={idx} className="bg-white dark:bg-white/5 px-4 py-3 rounded-xl shadow-sm border border-emerald-100 dark:border-white/5 min-w-[110px] flex-shrink-0">
                                             <div className="text-[9px] font-black text-gray-400 uppercase mb-1">MOQ: {tier.min_quantity}</div>
                                             <div className="text-base font-black text-gray-900 dark:text-white">
-                                                {formatPrice(tier.unit_price, product.currency)}
+                                                {getPrice(`tier-${idx}`, tier.unit_price)}
                                             </div>
                                         </div>
                                     ))}
@@ -735,7 +783,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         <div className="space-y-1">
                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">Delivery Cost</span>
                             <span className="text-xs font-black text-gray-900 dark:text-white leading-tight block">
-                                {formatPrice(product.delivery_cost || 0, product.currency) === '$0.00' ? 'Free Shipping' : formatPrice(product.delivery_cost || 0, product.currency)}
+                                {getPrice('deliveryCost', product.delivery_cost || 0) === '$0.00' ? 'Free Shipping' : getPrice('deliveryCost', product.delivery_cost || 0)}
                             </span>
                         </div>
                         <div className="space-y-1 text-right">
@@ -891,7 +939,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
                                     <span className="font-black text-gray-500 uppercase tracking-widest">Delivery</span>
                                     <span className="font-bold text-gray-900 dark:text-white text-right">
-                                        {product.free_delivery ? 'Free' : formatPrice(product.delivery_cost || 0, product.currency)}
+                                        {product.free_delivery ? 'Free' : getPrice('deliveryCost', product.delivery_cost || 0)}
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
@@ -927,49 +975,99 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
             {/* Premium Seller Section */}
             {product.vendor?.business_name && (
                 <div className="px-4">
-                    <div className="bg-white dark:bg-surface-dark p-6 rounded-[32px] flex items-center justify-between border border-gray-100 dark:border-white/5 shadow-premium">
-                        <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-full border-4 border-gray-50 dark:border-white/5 overflow-hidden bg-gray-100 dark:bg-gray-900 flex items-center justify-center text-xs font-black shadow-inner">
-                                {product.vendor.business_name.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-base font-black text-gray-900 dark:text-white tracking-tight leading-none mb-1">{product.vendor.business_name}</span>
-                                <div className="flex items-center gap-2">
-                                    {product.vendor.vendor_rating && product.vendor.vendor_rating > 0 && (
-                                        <div className="bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-lg flex items-center gap-1 border border-amber-100 dark:border-amber-800">
-                                            <span className="material-icons-round text-[10px] text-amber-500">star</span>
-                                            <span className="text-[10px] font-black text-amber-700 dark:text-amber-400">{product.vendor.vendor_rating.toFixed(1)}</span>
-                                        </div>
-                                    )}
-                                    {product.vendor.review_count && product.vendor.review_count > 0 && (
-                                        <span className="text-[10px] font-black text-gray-400 tracking-tighter uppercase">{product.vendor.review_count} REVIEWS</span>
+                    <div className="bg-white dark:bg-surface-dark p-6 rounded-[32px] flex flex-col gap-6 border border-gray-100 dark:border-white/5 shadow-premium">
+                        {/* Header info */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-full border-4 border-gray-50 dark:border-white/5 overflow-hidden bg-gray-100 dark:bg-gray-900 flex items-center justify-center text-xs font-black shadow-inner">
+                                    {product.vendor.logo_url ? (
+                                        <img src={product.vendor.logo_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        product.vendor.business_name.slice(0, 2).toUpperCase()
                                     )}
                                 </div>
+                                <div className="flex flex-col min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <span className="text-base font-black text-gray-900 dark:text-white tracking-tight leading-none truncate">{product.vendor.business_name}</span>
+                                        {product.vendor.is_verified && (
+                                            <span className="material-icons-round text-blue-500 text-sm">verified</span>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {(product.vendor.business_country || product.vendor.business_country !== 'Independent Seller') && (
+                                            <div className="flex items-center gap-1 text-[10px] font-black text-gray-400 tracking-tighter uppercase">
+                                                <span className="material-icons-outlined text-xs text-blue-500">public</span>
+                                                <span>From {product.vendor.business_country}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={handleFollowToggle}
+                                    disabled={isFollowLoading}
+                                    className={`rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5 ${isFollowing
+                                        ? 'bg-gray-100 dark:bg-white/5 text-gray-400'
+                                        : 'bg-primary text-white shadow-lg shadow-primary/20'
+                                        }`}
+                                >
+                                    {isFollowing ? 'Joined' : 'Join'}
+                                </button>
+                                <button
+                                    onClick={() => onVisitStore?.(product.vendor?.vendor_id || product.seller_id?.toString() || '')}
+                                    className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-900 dark:text-white border-2 border-gray-100 dark:border-white/5 active:scale-95 transition-all text-center"
+                                >
+                                    Shop
+                                </button>
                             </div>
                         </div>
-                        <div className="flex flex-col gap-2">
-                            <button
-                                onClick={handleFollowToggle}
-                                disabled={isFollowLoading}
-                                className={`rounded-xl px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5 ${isFollowing
-                                    ? 'bg-gray-100 dark:bg-white/5 text-gray-400'
-                                    : 'bg-primary text-white shadow-lg shadow-primary/20'
-                                    }`}
-                            >
-                                {isFollowLoading ? (
-                                    <div className="w-3 h-3 border-2 border-current/20 border-t-current rounded-full animate-spin" />
-                                ) : (
-                                    <span className="material-icons-round text-sm">{isFollowing ? 'check' : 'add'}</span>
-                                )}
-                                {isFollowing ? 'Joined' : 'Join'}
-                            </button>
-                            <button
-                                onClick={() => onVisitStore?.(product.vendor?.vendor_id || product.seller_id?.toString() || '')}
-                                className="px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-900 dark:text-white border-2 border-gray-100 dark:border-white/5 active:scale-95 transition-all text-center"
-                            >
-                                Shop
-                            </button>
+
+                        {/* Stats Grid - Use vendorInfo (live RPC data) where available */}
+                        <div className="grid grid-cols-4 gap-1 py-4 border-y border-gray-50 dark:border-white/5">
+                            <div className="text-center">
+                                <div className="flex items-center justify-center gap-0.5 mb-0.5">
+                                    <span className="material-icons-round text-amber-500 text-xs">star</span>
+                                    <span className="text-xs font-black text-gray-900 dark:text-white">{(vendorInfo?.vendor_rating ?? product.vendor?.vendor_rating)?.toFixed(1) || '0.0'}</span>
+                                </div>
+                                <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Rating</div>
+                            </div>
+                            <div className="text-center border-l border-gray-50 dark:border-white/5">
+                                <div className="text-xs font-black text-gray-900 dark:text-white mb-0.5">
+                                    {vendorInfo?.completed_orders ?? product.vendor?.completed_orders ?? 0}
+                                </div>
+                                <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Orders</div>
+                            </div>
+                            <div className="text-center border-l border-gray-50 dark:border-white/5">
+                                <div className="text-xs font-black text-gray-900 dark:text-white mb-0.5">
+                                    {(vendorInfo?.follower_count ?? followerCount) >= 1000 ? `${((vendorInfo?.follower_count ?? followerCount) / 1000).toFixed(1)}k` : (vendorInfo?.follower_count ?? followerCount)}
+                                </div>
+                                <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Followers</div>
+                            </div>
+                            <div className="text-center border-l border-gray-50 dark:border-white/5">
+                                <div className="text-xs font-black text-gray-900 dark:text-white mb-0.5">
+                                    {vendorInfo?.total_products ?? product.vendor?.total_products ?? 0}
+                                </div>
+                                <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Products</div>
+                            </div>
                         </div>
+
+                        {/* Certificates / Documents Branding */}
+                        {product.vendor.is_verified && (
+                            <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-500/5 rounded-2xl border border-blue-100/50 dark:border-blue-500/10">
+                                <span className="material-icons-round text-blue-500">verified_user</span>
+                                <div className="flex-1">
+                                    <p className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-tight">Business Legally Verified</p>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Licensed & Regulated Store</p>
+                                </div>
+                                <button
+                                    onClick={() => onVisitStore?.(product.vendor?.vendor_id || product.seller_id?.toString() || '')}
+                                    className="px-3 py-1.5 bg-white dark:bg-surface-dark border border-blue-100 dark:border-blue-500/20 rounded-lg text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest shadow-sm"
+                                >
+                                    View
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -1002,6 +1100,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                     product={item}
                                     onProductClick={() => onProductClick(item)}
                                     onVisualSearch={onVisualSearch}
+                                    showSellerLine={false}
                                 />
                             ))}
                         </div>
@@ -1394,12 +1493,12 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 <div className="flex-1 min-w-0">
                                     <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
                                         <div className="flex-shrink-0">
-                                            <div className="text-lg font-bold text-price-red">{formatPrice(product.price, product.currency)}</div>
+                                            <div className="text-lg font-bold text-price-red">{getPrice('displayPrice', product.price)}</div>
                                             <div className="text-[10px] text-gray-500 font-medium">Min. order: 1 piece</div>
                                         </div>
                                         {quantityDiscounts.map((tier, idx) => (
                                             <div key={idx} className="flex-shrink-0 opacity-80">
-                                                <div className="text-lg font-bold text-gray-900 dark:text-white">{formatPrice(tier.unit_price, product.currency)}</div>
+                                                <div className="text-lg font-bold text-gray-900 dark:text-white">{getPrice(`tier-${idx}`, tier.unit_price)}</div>
                                                 <div className="text-[10px] text-gray-500 font-medium">{tier.min_quantity}+ pieces</div>
                                             </div>
                                         ))}
@@ -1497,9 +1596,9 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 <span className="font-bold text-gray-900 dark:text-white">Item subtotal</span>
                                 <div className="flex items-center gap-1">
                                     <span className="font-black text-gray-900 dark:text-white">
-                                        {formatPrice((Object.values(variantQuantities) as number[]).reduce((a, b) => a + b, 0) * (currentVariant?.price || product.price), product.currency)}
+                                        {currencyFormatPrice((Object.values(variantQuantities) as number[]).reduce((a, b) => a + b, 0) * (currentVariant?.price || product.price), preferredCurrency)}
                                     </span>
-                                    <span className="text-[10px] text-gray-400 font-medium">({formatPrice(currentVariant?.price || product.price, product.currency)}/piece)</span>
+                                    <span className="text-[10px] text-gray-400 font-medium">({getPrice('displayPrice', currentVariant?.price || product.price)}/piece)</span>
                                     <span className="material-icons text-gray-400 text-lg">keyboard_arrow_up</span>
                                 </div>
                             </div>
@@ -1604,9 +1703,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         </div>
                     </div>
                 </div>
-            )
-            }
-        </div >
+            )}
+        </div>
     );
 };
 

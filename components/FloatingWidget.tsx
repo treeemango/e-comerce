@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserCoupon, BuyerOrder } from '@/types';
-import { fetchUserCoupons, fetchBuyerOrders } from '../lib/api';
+import { fetchUserCoupons, fetchBuyerOrders, submitFeedback } from '../lib/api';
 import MessagesView from './MessagesView';
 import { formatPrice } from '@/lib/currency';
 import { useNotifications } from './NotificationContext';
@@ -14,6 +14,7 @@ interface FloatingWidgetProps {
   recentOrders: BuyerOrder[];
   isOpen?: boolean;
   onClose?: () => void;
+  onOpen?: () => void;
   activePane?: 'list' | 'promotions' | 'shipping' | 'notifications';
   onPaneChange?: (pane: 'list' | 'promotions' | 'shipping' | 'notifications') => void;
 }
@@ -26,12 +27,18 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
   recentOrders,
   isOpen: propsIsOpen,
   onClose: propsOnClose,
+  onOpen: propsOnOpen,
   activePane: propsActivePane,
   onPaneChange: propsOnPaneChange
 }) => {
   const { history } = useNotifications();
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [internalActivePane, setInternalActivePane] = useState<'list' | 'promotions' | 'shipping' | 'notifications'>('list');
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackCategory, setFeedbackCategory] = useState('general');
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
 
   const totalAlerts = history.length + userCoupons.length;
 
@@ -39,7 +46,11 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
   const activePane = propsActivePane !== undefined ? propsActivePane : internalActivePane;
 
   const setIsMessagesOpen = (open: boolean) => {
-    if (propsOnClose && !open) propsOnClose();
+    if (open) {
+      if (propsOnOpen) propsOnOpen();
+    } else {
+      if (propsOnClose) propsOnClose();
+    }
     setInternalIsOpen(open);
   };
 
@@ -67,8 +78,26 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
   };
 
   const handleFeedback = () => {
-    console.log('Open feedback form');
+    setIsFeedbackOpen(true);
   };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackMessage.trim()) return;
+
+    setIsSubmittingFeedback(true);
+    const { success } = await submitFeedback(feedbackMessage, feedbackCategory, 'web', window.location.pathname);
+    setIsSubmittingFeedback(false);
+
+    if (success) {
+      setFeedbackSuccess(true);
+      setFeedbackMessage('');
+      setTimeout(() => {
+        setFeedbackSuccess(false);
+        setIsFeedbackOpen(false);
+      }, 2000);
+    }
+  };
+
 
   const renderPromotionsPanel = () => (
     <div className="h-full overflow-y-auto bg-gray-50 dark:bg-gray-900">
@@ -405,6 +434,88 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
             {activePane === 'promotions' && renderPromotionsPanel()}
             {activePane === 'shipping' && renderShippingPanel()}
             {activePane === 'notifications' && renderNotificationsPanel()}
+          </div>
+        </div>
+      )}
+      {isFeedbackOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800 animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="material-icons-round text-emerald-500">rate_review</span>
+                Send Feedback
+              </h3>
+              <button
+                onClick={() => setIsFeedbackOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+
+            <div className="p-6">
+              {feedbackSuccess ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in zoom-in">
+                  <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-4">
+                    <span className="material-icons-round text-3xl text-emerald-600 dark:text-emerald-400">check_circle</span>
+                  </div>
+                  <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Thank You!</h4>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">Your feedback has been sent to the team.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">
+                      Topic
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {['general', 'bug', 'feature request', 'other'].map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setFeedbackCategory(cat)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${feedbackCategory === cat
+                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-emerald-300 dark:hover:border-emerald-700'
+                            }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">
+                      Message
+                    </label>
+                    <textarea
+                      value={feedbackMessage}
+                      onChange={(e) => setFeedbackMessage(e.target.value)}
+                      placeholder="Tell us what you think..."
+                      className="w-full h-32 px-4 py-3 rounded-xl bg-gray-50 dark:bg-black border border-gray-200 dark:border-gray-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all resize-none text-sm"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSubmitFeedback}
+                    disabled={isSubmittingFeedback || !feedbackMessage.trim()}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingFeedback ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-icons-round text-sm">send</span>
+                        Submit Feedback
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

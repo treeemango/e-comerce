@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Product } from '../types';
-import { getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
+import { useMemo } from 'react';
 
 interface CartSidebarProps {
     isOpen: boolean;
@@ -38,11 +39,33 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
         };
     }, [isOpen, onClose]);
 
-    const subtotal = cartItems.reduce((sum, item) => sum + item.price, 0);
-    const freeShippingThreshold = 50;
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        cartItems.forEach(item => {
+            vals.push({ id: `item-${item.id}`, amount: item.price, currency: item.currency || 'USD' });
+            if (item.originalPrice) {
+                vals.push({ id: `item-orig-${item.id}`, amount: item.originalPrice, currency: item.currency || 'USD' });
+            }
+        });
+        // Convert shipping threshold too
+        vals.push({ id: 'free-shipping-threshold', amount: 50, currency: 'USD' });
+        return vals;
+    }, [cartItems]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedAmount = (id: string, fallback: number) => {
+        return convertedValues[id]?.convertedAmount ?? fallback;
+    };
+
+    const subtotal = cartItems.reduce((sum, item) => {
+        const price = getConvertedAmount(`item-${item.id}`, item.price);
+        return sum + (price * (item.quantity || 1));
+    }, 0);
+
+    const freeShippingThreshold = getConvertedAmount('free-shipping-threshold', 50);
     const shippingProgress = Math.min(100, (subtotal / freeShippingThreshold) * 100);
-    const currency = cartItems[0]?.currency || 'GBP';
-    const symbol = getCurrencySymbol(currency);
+    const symbol = getCurrencySymbol(preferredCurrency);
 
     return (
         <>
@@ -76,7 +99,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
 
                     <div className="text-center mb-8 relative z-10">
                         <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {symbol}{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatPrice(subtotal, preferredCurrency)}
                         </span>
                     </div>
 
@@ -87,7 +110,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                                 <span className="material-icons-round text-sm">local_shipping</span>
                                 Free shipping
                             </div>
-                            <span className="text-[10px] font-bold text-slate-400">Goal: {symbol}50</span>
+                            <span className="text-[10px] font-bold text-slate-400">Goal: {formatPrice(freeShippingThreshold, preferredCurrency)}</span>
                         </div>
                         <div className="h-2.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                             <div
@@ -136,9 +159,9 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
                                 <div className="flex-1 min-w-0">
                                     <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate mb-1">{item.title}</h4>
                                     <div className="flex items-baseline gap-2 mb-2">
-                                        <span className="text-lg font-black text-rose-500">{symbol}{item.price}</span>
+                                        <span className="text-lg font-black text-rose-500">{convertedValues[`item-${item.id}`]?.converted || formatPrice(item.price, item.currency || 'USD')}</span>
                                         {item.originalPrice && (
-                                            <span className="text-xs text-slate-400 line-through">{symbol}{item.originalPrice}</span>
+                                            <span className="text-xs text-slate-400 line-through">{convertedValues[`item-orig-${item.id}`]?.converted || formatPrice(item.originalPrice, item.currency || 'USD')}</span>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-between">

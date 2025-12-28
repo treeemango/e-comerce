@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fetchSellerBalance, fetchSellerPayouts, requestPayout } from '../../lib/api';
 import { SellerBalanceSummary, SellerPayout } from '../../types';
-import { formatCurrency, cn } from '../../lib/utils';
+import { cn } from '../../lib/utils';
+import { useCurrencyConverter, formatPrice } from '../../lib/currency';
 import { supabase } from '../../lib/supabase';
 
 interface SellerWalletViewProps {
@@ -63,6 +64,27 @@ export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId }) 
         setRequesting(false);
     };
 
+    // Currency conversion for wallet amounts - MUST be before any early returns
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+
+        vals.push({ id: 'total-available', amount: balance?.total_available ?? 0, currency: 'USD' });
+        vals.push({ id: 'total-escrow', amount: balance?.total_escrow ?? 0, currency: 'USD' });
+        vals.push({ id: 'pending-clearance', amount: balance?.pending_clearance ?? 0, currency: 'USD' });
+
+        payouts.forEach((payout, idx) => {
+            vals.push({ id: `payout-${idx}`, amount: payout.amount, currency: 'USD' });
+        });
+
+        return vals;
+    }, [balance, payouts]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+    };
+
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center h-64">
@@ -82,17 +104,17 @@ export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId }) 
                 <div className="relative z-10 text-center">
                     <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">Total Available</p>
                     <h1 className="text-5xl font-black text-slate-800 tracking-tight mb-6">
-                        {formatCurrency(balance?.total_available ?? 0)}
+                        {getConvertedPrice('total-available', balance?.total_available ?? 0)}
                     </h1>
 
                     <div className="grid grid-cols-2 gap-4 mb-8">
                         <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
                             <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-1">In Escrow</p>
-                            <p className="text-lg font-black text-orange-600">{formatCurrency(balance?.total_escrow ?? 0)}</p>
+                            <p className="text-lg font-black text-orange-600">{getConvertedPrice('total-escrow', balance?.total_escrow ?? 0)}</p>
                         </div>
                         <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                             <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Pending Clearance</p>
-                            <p className="text-lg font-black text-blue-600">{formatCurrency(balance?.pending_clearance ?? 0)}</p>
+                            <p className="text-lg font-black text-blue-600">{getConvertedPrice('pending-clearance', balance?.pending_clearance ?? 0)}</p>
                         </div>
                     </div>
 
@@ -140,7 +162,7 @@ export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId }) 
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
                                         <p className="text-xs font-bold text-gray-400">Order #{payout.order_number || payout.order_id.substring(0, 8)}</p>
-                                        <p className="text-lg font-black text-slate-800">{formatCurrency(payout.amount)}</p>
+                                        <p className="text-lg font-black text-slate-800">{getConvertedPrice(`payout-${payouts.indexOf(payout)}`, payout.amount)}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Available on</p>
@@ -179,7 +201,7 @@ export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId }) 
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-sm font-black text-slate-800">+{formatCurrency(payout.amount)}</p>
+                                <p className="text-sm font-black text-slate-800">+{getConvertedPrice(`payout-${payouts.indexOf(payout)}`, payout.amount)}</p>
                             </div>
                         </div>
                     ))}

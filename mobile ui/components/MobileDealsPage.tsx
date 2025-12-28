@@ -90,6 +90,7 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
                                     product={mapDealToProduct(deal)}
                                     onProductClick={onProductClick}
                                     onVisualSearch={onVisualSearch}
+                                    showSellerLine={false}
                                 />
                             </div>
                         ))}

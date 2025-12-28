@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SellerOrder } from '../../types';
-import { formatCurrency, cn } from '../../lib/utils';
+import { cn } from '../../lib/utils';
+import { useCurrencyConverter, formatPrice } from '../../lib/currency';
 import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady, submitShipmentProof } from '../../lib/api';
 import { MediaService } from '../../lib/media';
 import BuyerReceipt from '../../components/SellerDashboard/OrderManager/BuyerReceipt';
@@ -192,6 +193,25 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
         order.carrier?.toLowerCase().includes('parcel') ||
         !!order.parcel_details;
 
+    // Currency conversion for order prices
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        vals.push({ id: 'subtotal', amount: (order.total_amount || 0) - (order.tax_amount || 0) - (order.delivery_fee || 0), currency: currency });
+        if (order.tax_amount) vals.push({ id: 'tax', amount: order.tax_amount, currency: currency });
+        if (order.delivery_fee) vals.push({ id: 'delivery', amount: order.delivery_fee, currency: currency });
+        vals.push({ id: 'total', amount: order.total_amount || 0, currency: currency });
+        order.items?.forEach((item, idx) => {
+            vals.push({ id: `item-${idx}`, amount: item.price || 0, currency: item.currency || 'USD' });
+        });
+        return vals;
+    }, [order, currency]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+    };
+
     return (
         <div className="fixed inset-0 z-[100] flex flex-col">
             {/* Backdrop */}
@@ -285,7 +305,7 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                         <div className="flex items-center justify-between mt-2">
                                             <span className="text-xs text-gray-500">Qty: {item.quantity}</span>
                                             <span className="text-sm font-black text-gray-900">
-                                                {formatCurrency(item.price || 0, item.currency || 'USD')}
+                                                {getConvertedPrice(`item-${idx}`, item.price || 0)}
                                             </span>
                                         </div>
                                     </div>
@@ -299,25 +319,25 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                         <div className="space-y-2 mb-4 border-b border-slate-700/50 pb-4">
                             <div className="flex justify-between text-xs text-slate-400">
                                 <span>Subtotal</span>
-                                <span>{formatCurrency((order.total_amount || 0) - (order.tax_amount || 0) - (order.delivery_fee || 0), currency)}</span>
+                                <span>{getConvertedPrice('subtotal', (order.total_amount || 0) - (order.tax_amount || 0) - (order.delivery_fee || 0))}</span>
                             </div>
                             {order.tax_amount ? (
                                 <div className="flex justify-between text-xs text-slate-400">
                                     <span>Tax ({((order.tax_rate || 0) * 100).toFixed(0)}%)</span>
-                                    <span>{formatCurrency(order.tax_amount, currency)}</span>
+                                    <span>{getConvertedPrice('tax', order.tax_amount)}</span>
                                 </div>
                             ) : null}
                             {order.delivery_fee ? (
                                 <div className="flex justify-between text-xs text-slate-400">
                                     <span>Delivery Fee</span>
-                                    <span>{formatCurrency(order.delivery_fee, currency)}</span>
+                                    <span>{getConvertedPrice('delivery', order.delivery_fee)}</span>
                                 </div>
                             ) : null}
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="text-sm font-bold text-slate-300">Total Amount</span>
                             <span className="text-2xl font-black">
-                                {formatCurrency(order.total_amount || 0, currency)}
+                                {getConvertedPrice('total', order.total_amount || 0)}
                             </span>
                         </div>
                     </div>

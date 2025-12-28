@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Product, UserCoupon, AppliedCoupon } from '@/types';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 import { fetchUserCoupons, applyCoupon, checkout, fetchCartDeliveryFee, syncCart, fetchUserAddresses, UserAddress, fetchTaxBreakdown, TaxBreakdown } from '@/lib/api';
+import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 
 interface CartItem {
   product: Product;
@@ -16,17 +17,7 @@ interface CheckoutSheetProps {
   onPlaceOrder: (options?: { couponCode?: string | null }) => void;
 }
 
-const formatPrice = (value: number, currency?: string) => {
-  try {
-    return new Intl.NumberFormat('en', {
-      style: 'currency',
-      currency: currency || 'USD',
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch (e) {
-    return `${currency ? currency + ' ' : ''}${value.toFixed(2)}`;
-  }
-};
+
 
 const getEstimatedDelivery = (isExpress: boolean) => {
   const date = new Date();
@@ -291,6 +282,27 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
   const taxPercentage = taxInfo?.tax_percentage ?? 16;
   const total = Math.max(0, (promoResult?.finalTotal || subtotal) - discountAmount) + deliveryFee + taxes;
 
+  // Currency conversion for all monetary values
+  const priceValues = useMemo(() => {
+    const vals: { id: string; amount: number; currency: string }[] = [];
+    const baseCurrency = items[0]?.product.currency || 'USD';
+
+    vals.push({ id: 'subtotal', amount: subtotal, currency: baseCurrency });
+    vals.push({ id: 'discount', amount: discountAmount, currency: baseCurrency });
+    vals.push({ id: 'taxes', amount: taxes, currency: baseCurrency });
+    vals.push({ id: 'deliveryFee', amount: deliveryFee, currency: baseCurrency });
+    vals.push({ id: 'total', amount: total, currency: baseCurrency });
+    vals.push({ id: 'expressDelivery', amount: 6.99, currency: baseCurrency });
+
+    return vals;
+  }, [subtotal, discountAmount, taxes, deliveryFee, total, items]);
+
+  const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+  const getConvertedPrice = (id: string, fallback: number) => {
+    return convertedValues[id]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
+  };
+
   const handlePlaceOrder = async () => {
     if (payment === 'mpesa' && !mpesaPhone) {
       alert('Please enter M-Pesa phone number');
@@ -540,7 +552,7 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
                       <p className="text-sm font-bold">Express Delivery</p>
                       <p className="text-[10px] text-gray-500">Est. {getEstimatedDelivery(true)}</p>
                     </div>
-                    <p className="text-sm font-black text-primary">{formatPrice(6.99, currency)}</p>
+                    <p className="text-sm font-black text-primary">{getConvertedPrice('expressDelivery', 6.99)}</p>
                   </div>
                 </div>
               </section>
@@ -627,7 +639,7 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
           <div className="space-y-2.5 mb-5">
             <div className="flex justify-between text-[12px] text-gray-500">
               <span className="font-medium">Subtotal</span>
-              <span className="font-bold text-gray-700 dark:text-gray-300">{formatPrice(subtotal, currency)}</span>
+              <span className="font-bold text-gray-700 dark:text-gray-300">{getConvertedPrice('subtotal', subtotal)}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-[12px] text-emerald-600">
@@ -635,18 +647,18 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
                   <span className="material-icons-round text-xs">discount</span>
                   <span className="font-bold">Coupon Discount</span>
                 </div>
-                <span className="font-black">-{formatPrice(discountAmount, currency)}</span>
+                <span className="font-black">-{getConvertedPrice('discount', discountAmount)}</span>
               </div>
             )}
             <div className="flex justify-between text-[12px] text-gray-500">
               <span className="font-medium">{taxName} ({taxPercentage}%)</span>
-              <span className="font-bold text-gray-700 dark:text-gray-300">{formatPrice(taxes, currency)}</span>
+              <span className="font-bold text-gray-700 dark:text-gray-300">{getConvertedPrice('taxes', taxes)}</span>
             </div>
             <div className="flex justify-between items-end pt-3 border-t border-gray-100 dark:border-gray-800">
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grand Total</span>
               </div>
-              <span className="text-2xl font-black text-primary tracking-tight">{formatPrice(total, currency)}</span>
+              <span className="text-2xl font-black text-primary tracking-tight">{getConvertedPrice('total', total)}</span>
             </div>
           </div>
 

@@ -4,6 +4,9 @@
 -- Used for displaying vendor badges and info on product cards
 -- =====================================================
 
+-- Drop existing function first (required when changing return type)
+DROP FUNCTION IF EXISTS get_vendor_card_info(TEXT[]);
+
 CREATE OR REPLACE FUNCTION get_vendor_card_info(product_ids TEXT[])
 RETURNS TABLE (
     vendor_id UUID,
@@ -23,7 +26,8 @@ RETURNS TABLE (
     business_country TEXT,
     cancellation_rate NUMERIC,
     response_time TEXT,
-    seller_since TIMESTAMPTZ
+    seller_since TIMESTAMPTZ,
+    follower_count INTEGER
 )
 LANGUAGE SQL
 AS $$
@@ -58,7 +62,8 @@ AS $$
             WHEN AVG(EXTRACT(EPOCH FROM (o.updated_at - o.created_at)) / 3600) < 48 THEN '< 48 hours'
             ELSE '> 48 hours'
         END as response_time,
-        v.created_at as seller_since
+        v.created_at as seller_since,
+        COALESCE(v.follower_count, 0) as follower_count
     FROM products p
     INNER JOIN vendors v ON v.user_id = p.seller_id
     LEFT JOIN products p2 ON p2.seller_id = v.user_id AND p2.status = 'approved'
@@ -69,7 +74,7 @@ AS $$
         AND COALESCE(v.is_active, true) = true
     GROUP BY v.id, v.user_id, p.seller_id, v.business_name, v.business_description, 
              v.created_at, v.rating, v.review_count, v.verification_status, 
-             v.address_country, sb.badges
+             v.address_country, sb.badges, v.follower_count
     ORDER BY v.id;
 $$;
 

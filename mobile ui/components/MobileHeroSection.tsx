@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
-import { formatPrice } from '@/lib/currency';
+import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 import { Product } from '@/types';
 
 // Thematic Mapping for Categories (Shared logic but mobile-tuned colors)
@@ -82,6 +82,21 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
         return () => clearInterval(interval);
     }, [deals.length]);
 
+    // Currency conversion for deal prices - MUST be before any early returns
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        deals.forEach((deal, idx) => {
+            vals.push({ id: `deal-${idx}-price`, amount: deal.price, currency: deal.currency || 'USD' });
+        });
+        return vals;
+    }, [deals]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (idx: number, fallback: number) => {
+        return convertedValues[`deal-${idx}-price`]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
+    };
+
     if (loading) {
         return (
             <div className="w-full h-48 bg-gray-900 animate-pulse flex items-center justify-center">
@@ -123,7 +138,7 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                                 </h2>
 
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-black text-white">{formatPrice(deal.price, deal.currency)}</span>
+                                    <span className="text-2xl font-black text-white">{getConvertedPrice(idx, deal.price)}</span>
                                     {deal.discountPercent > 0 && (
                                         <span className="text-[10px] font-bold text-red-100 px-1.5 py-0.5 bg-red-600 rounded-lg">-{deal.discountPercent}%</span>
                                     )}

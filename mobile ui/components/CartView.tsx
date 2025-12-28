@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Product } from '../../types';
 import { ProductCard } from './ProductCard';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
+import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 
 interface CartItem {
     product: Product;
@@ -37,16 +38,35 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
         applyPromos();
     }, [cartItems]);
 
-    const formatPrice = (price: number, currency?: string) => {
-        try {
-            return new Intl.NumberFormat('en', {
-                style: 'currency',
-                currency: currency || 'USD',
-                maximumFractionDigits: 2,
-            }).format(price);
-        } catch (e) {
-            return `${currency ? currency + ' ' : ''}${price}`;
-        }
+    const subtotal = promoResult?.subtotal || cartItems.reduce((sum, item) => sum + (item.product.price || 0) * item.quantity, 0);
+    const totalSavings = promoResult?.totalSavings || 0;
+    const finalTotal = promoResult?.finalTotal || subtotal;
+    const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Currency conversion for all price values
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        cartItems.forEach((item, idx) => {
+            const currency = item.product.currency || 'USD';
+            vals.push({ id: `item-${idx}`, amount: item.product.price || 0, currency });
+            if (item.product.originalPrice) {
+                vals.push({ id: `item-${idx}-original`, amount: item.product.originalPrice, currency });
+            }
+            const resultInfo = promoResult?.items.find(pi => pi.product.id === item.product.id);
+            if (resultInfo) {
+                vals.push({ id: `item-${idx}-discounted`, amount: resultInfo.discountedPrice, currency });
+                vals.push({ id: `item-${idx}-savings`, amount: resultInfo.originalPrice - resultInfo.discountedPrice, currency });
+            }
+        });
+        vals.push({ id: 'finalTotal', amount: finalTotal, currency: cartItems[0]?.product.currency || 'USD' });
+        vals.push({ id: 'totalSavings', amount: totalSavings, currency: cartItems[0]?.product.currency || 'USD' });
+        return vals;
+    }, [cartItems, promoResult, finalTotal, totalSavings]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getPrice = (id: string, fallback: number) => {
+        return convertedValues[id]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
     };
 
     const toggleItemSelection = (productId: string | number | undefined) => {
@@ -86,11 +106,6 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
         if (activeRecTab === 'Recommended') return recommendations;
         return recommendations.filter(p => p.category === activeRecTab);
     }, [recommendations, activeRecTab]);
-
-    const subtotal = promoResult?.subtotal || cartItems.reduce((sum, item) => sum + (item.product.price || 0) * item.quantity, 0);
-    const totalSavings = promoResult?.totalSavings || 0;
-    const finalTotal = promoResult?.finalTotal || subtotal;
-    const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-black pb-48">
@@ -228,17 +243,17 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                         <div className="flex flex-col">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-[17px] font-black text-gray-900 dark:text-white">
-                                                    {formatPrice(resultInfo ? resultInfo.discountedPrice : item.product.price, item.product.currency)}
+                                                    {resultInfo ? getPrice(`item-${idx}-discounted`, resultInfo.discountedPrice) : getPrice(`item-${idx}`, item.product.price || 0)}
                                                 </span>
                                                 {item.product.originalPrice && (
                                                     <span className="text-[11px] text-gray-400 line-through font-medium">
-                                                        {formatPrice(item.product.originalPrice, item.product.currency)}
+                                                        {getPrice(`item-${idx}-original`, item.product.originalPrice)}
                                                     </span>
                                                 )}
                                             </div>
                                             {resultInfo && resultInfo.originalPrice > resultInfo.discountedPrice && (
                                                 <span className="text-[10px] text-emerald-500 font-black uppercase tracking-tight">
-                                                    Saving {formatPrice(resultInfo.originalPrice - resultInfo.discountedPrice, item.product.currency)}
+                                                    Saving {getPrice(`item-${idx}-savings`, resultInfo.originalPrice - resultInfo.discountedPrice)}
                                                 </span>
                                             )}
                                         </div>
@@ -316,14 +331,14 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Value</span>
                                 <div className="flex items-baseline gap-1.5">
                                     <span className="text-[24px] font-black text-black dark:text-white tracking-tight">
-                                        {formatPrice(finalTotal, cartItems[0]?.product.currency)}
+                                        {getPrice('finalTotal', finalTotal)}
                                     </span>
                                 </div>
                                 {totalSavings > 0 && (
                                     <div className="flex items-center gap-1 mt-0.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
                                         <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
-                                            Saved {formatPrice(totalSavings, cartItems[0]?.product.currency)}
+                                            Saved {getPrice('totalSavings', totalSavings)}
                                         </span>
                                     </div>
                                 )}

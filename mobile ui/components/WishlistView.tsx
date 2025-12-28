@@ -79,7 +79,7 @@ export const WishlistView: React.FC<WishlistViewProps> = ({
             </div>
 
             {/* Content */}
-            <div className="flex-grow overflow-y-auto px-1 py-1">
+            <div className="flex-1 overflow-y-auto pt-2 px-4 pb-24">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-64">
                         <div className="animate-spin w-8 h-8 border-3 border-primary border-t-transparent rounded-full mb-3"></div>
@@ -102,14 +102,14 @@ export const WishlistView: React.FC<WishlistViewProps> = ({
                         </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-1 pb-20 w-full">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-6 w-full">
                         {wishlistItems.map((product) => (
                             <div key={product.id} className="relative group w-full min-w-0">
                                 <ProductCard
                                     product={product}
                                     onProductClick={() => onProductClick(product)}
-                                    onAddToCart={(p) => onAddToCart(p)}
                                     onVisualSearch={onVisualSearch}
+                                    showSellerLine={false}
                                 />
                                 {/* Remove from wishlist button */}
                                 <button

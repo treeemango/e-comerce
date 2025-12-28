@@ -1,18 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { Product } from '@/types';
-import { formatCurrency, cn } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { useCurrencyConverter, formatPrice } from '@/lib/currency';
 
 interface SellerProductsViewProps {
     products: Product[];
     onCreateProduct?: () => void;
-    onEditProduct?: (product: Product) => void;
+    onDiscountProduct?: (product: Product) => void;
+    onBulkPricing?: (product: Product) => void;
     loading?: boolean;
 }
 
 export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
     products,
     onCreateProduct,
-    onEditProduct,
+    onDiscountProduct,
+    onBulkPricing,
     loading
 }) => {
     const [activeTab, setActiveTab] = useState<'all' | 'active' | 'out_of_stock'>('all');
@@ -50,6 +53,21 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
         if ((product.stock || 0) <= 0) return 'Out of Stock';
         if (product.stock && product.stock < 5) return 'Low Stock';
         return 'Active';
+    };
+
+    // Currency conversion for product prices
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        filteredProducts.forEach((item, idx) => {
+            vals.push({ id: `product-${idx}`, amount: item.price || 0, currency: item.currency || 'USD' });
+        });
+        return vals;
+    }, [filteredProducts]);
+
+    const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+    const getConvertedPrice = (idx: number, fallback: number) => {
+        return convertedValues[`product-${idx}`]?.converted ?? formatPrice(fallback, preferredCurrency);
     };
 
     return (
@@ -123,7 +141,7 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
                     </div>
                 ) : (
                     filteredProducts.map((item, idx) => (
-                        <div key={`${item.id}-${idx}`} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4 active:scale-[0.98] transition-all" onClick={() => onEditProduct?.(item)}>
+                        <div key={`${item.id}-${idx}`} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4 active:scale-[0.98] transition-all" onClick={() => onDiscountProduct?.(item)}>
                             {/* Product Image */}
                             <div className="w-20 h-20 bg-gray-100 rounded-xl flex-shrink-0 overflow-hidden relative">
                                 {item.image ? (
@@ -147,7 +165,13 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
                                                 <span className="text-[10px] text-gray-400 font-medium">SKU: {item.sku || '—'}</span>
                                             </div>
                                         </div>
-                                        <button className="text-gray-400 hover:text-black p-1 -mr-1">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDiscountProduct?.(item);
+                                            }}
+                                            className="text-gray-400 hover:text-black p-1 -mr-1"
+                                        >
                                             <span className="material-icons-outlined text-lg">edit</span>
                                         </button>
                                     </div>
@@ -160,13 +184,13 @@ export const SellerProductsView: React.FC<SellerProductsViewProps> = ({
                                 <div className="flex items-end justify-between mt-2">
                                     <div>
                                         <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Price</div>
-                                        <div className="font-black text-gray-900">{formatCurrency(item.price || 0, item.currency)}</div>
+                                        <div className="font-black text-gray-900">{getConvertedPrice(filteredProducts.indexOf(item), item.price || 0)}</div>
                                     </div>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                onEditProduct?.(item);
+                                                onBulkPricing?.(item);
                                             }}
                                             className="px-3 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-[10px] font-black uppercase tracking-tight flex items-center gap-1"
                                         >

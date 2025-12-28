@@ -1,17 +1,19 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Product, ProductOption, ProductVariant, ProductReviewSummary } from '../types';
-import { getCurrencySymbol } from '@/lib/currency';
-import { fetchProductVariants, fetchProductReviewSummary } from '@/lib/api';
+import { Product, ProductOption, ProductVariant, ProductReviewSummary, User } from '../types';
+import { useCurrencyConverter, formatPrice } from '@/lib/currency';
+import { fetchProductVariants, fetchProductReviewSummary, isInWishlist, toggleWishlist } from '@/lib/api';
+import { playWishlistAddSound, playWishlistRemoveSound } from '@/lib/sounds';
 
 interface PreviewModalProps {
   product: Product;
   onClose: () => void;
   onProductClick?: (product: Product) => void;
   onAddToCart?: (product: Product, event?: React.MouseEvent | React.TouchEvent) => void;
+  user?: User | null;
 }
 
-const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProductClick, onAddToCart }) => {
+const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProductClick, onAddToCart, user }) => {
   // Prevent scrolling on body when modal is open
   React.useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -26,6 +28,44 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
   const [selectedOptions, setSelectedOptions] = React.useState<Record<string, string>>({});
   const [currentVariant, setCurrentVariant] = React.useState<ProductVariant | null>(null);
   const [reviewSummary, setReviewSummary] = React.useState<ProductReviewSummary | null>(null);
+  const [isWishlisted, setIsWishlisted] = React.useState(false);
+  const [isWishlistLoading, setIsWishlistLoading] = React.useState(false);
+
+  // Check wishlist status on mount
+  React.useEffect(() => {
+    const checkWishlist = async () => {
+      if (product.id && user?.id) {
+        const inWishlist = await isInWishlist(user.id, product.id.toString());
+        setIsWishlisted(inWishlist);
+      }
+    };
+    checkWishlist();
+  }, [product.id, user?.id]);
+
+  const handleWishlistToggle = async () => {
+    if (!user) {
+      alert('Please sign in to save items');
+      return;
+    }
+    if (!product.id) return;
+
+    setIsWishlistLoading(true);
+    try {
+      const result = await toggleWishlist(user.id, product.id.toString());
+      if (result.success) {
+        setIsWishlisted(result.inWishlist);
+        if (result.inWishlist) {
+          playWishlistAddSound();
+        } else {
+          playWishlistRemoveSound();
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling wishlist:', error);
+    } finally {
+      setIsWishlistLoading(false);
+    }
+  };
 
   // Fetch options/variants if the card payload did not include them
   React.useEffect(() => {
@@ -99,7 +139,6 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
   }, [product.id]);
 
   const currencyCode = product.currency || 'USD';
-  const currencySymbol = getCurrencySymbol(currencyCode);
   const displayPrice = currentVariant?.price ?? product.price;
   const backendRrp = product.originalPrice ?? product.rrp;
   const derivedRrp = !backendRrp && typeof product.discountPercent === 'number'
@@ -119,6 +158,20 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
     : product.stock
       ? `${product.stock.toLocaleString()} in stock`
       : 'Popular item';
+
+  // Currency conversion setup
+  const priceValues = React.useMemo(() => {
+    const vals: { id: string; amount: number; currency: string }[] = [];
+    vals.push({ id: 'displayPrice', amount: displayPrice, currency: currencyCode });
+    if (displayRRP) vals.push({ id: 'displayRRP', amount: displayRRP, currency: currencyCode });
+    return vals;
+  }, [displayPrice, displayRRP, currencyCode]);
+
+  const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
+
+  const getConvertedPrice = (id: string, fallback: number) => {
+    return convertedValues[id]?.converted ?? formatPrice(fallback, preferredCurrency);
+  };
 
   const colorOption = React.useMemo(() => (productOptions || []).find(opt => opt.name.toLowerCase().includes('color')), [productOptions]);
   const nonColorOptions = React.useMemo(
@@ -190,6 +243,21 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
     );
   };
 
+  // Find and select color variant when hovering a thumbnail image
+  const handleThumbnailHover = (mediaUrl: string, index: number) => {
+    setActiveMediaIndex(index);
+    // Try to find a variant with this image and auto-select its color
+    if (colorOption) {
+      const matchingVariant = productVariants.find(v => v.image === mediaUrl);
+      if (matchingVariant?.options?.[colorOption.name]) {
+        setSelectedOptions(prev => ({
+          ...prev,
+          [colorOption.name]: matchingVariant.options![colorOption.name]
+        }));
+      }
+    }
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
@@ -239,7 +307,8 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
                   {mediaList.map((media: any, i: number) => (
                     <div
                       key={media.id || i}
-                      onClick={() => setActiveMediaIndex(i)}
+                      onClick={() => handleThumbnailHover(media.url, i)}
+                      onMouseEnter={() => handleThumbnailHover(media.url, i)}
                       className={`relative aspect-square rounded-md overflow-hidden cursor-pointer border-2 transition-all ${i === activeMediaIndex
                         ? 'border-primary ring-2 ring-primary/30'
                         : 'border-transparent hover:border-gray-300 dark:hover:border-gray-500'
@@ -290,9 +359,9 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
               </div>
 
               <div className="mt-4 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-primary">{currencySymbol}{displayPrice.toFixed(2)}</span>
+                <span className="text-3xl font-bold text-primary">{getConvertedPrice('displayPrice', displayPrice)}</span>
                 {hasDiscount && (
-                  <span className="text-lg text-gray-400 line-through">{currencySymbol}{displayRRP?.toFixed(2)}</span>
+                  <span className="text-lg text-gray-400 line-through">{getConvertedPrice('displayRRP', displayRRP!)}</span>
                 )}
                 {discountPercent !== null && (
                   <span className="bg-primary/10 text-primary text-sm font-semibold px-2 py-1 rounded">{discountPercent}% off</span>
@@ -305,7 +374,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
                   <div className="flex items-center gap-2">
                     <span className="text-primary font-bold">%</span>
                     <span className="text-red-700 dark:text-red-300">
-                      {product.activeCoupon.amount ? `Save ${currencySymbol}${product.activeCoupon.amount} today` : product.activeCoupon.percent ? `${product.activeCoupon.percent}% off with code ${product.activeCoupon.code}` : product.activeCoupon.label}
+                      {product.activeCoupon.amount ? `Save ${formatPrice(product.activeCoupon.amount, preferredCurrency)} today` : product.activeCoupon.percent ? `${product.activeCoupon.percent}% off with code ${product.activeCoupon.code}` : product.activeCoupon.label}
                     </span>
                   </div>
                   <span className="material-icons text-gray-400 text-lg">chevron_right</span>
@@ -402,12 +471,27 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ product, onClose, onProduct
                   {product.listing_type === 'inquiry' ? 'Send Inquiry' : product.listing_type === 'reservation' ? 'Reserve Now' : 'Add to cart'}
                 </button>
                 <div className="flex items-center gap-3">
-                  <button className="flex-1 text-center py-3 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      if (onProductClick) onProductClick(product);
+                    }}
+                    className="flex-1 text-center py-3 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors"
+                  >
                     View details
                   </button>
-                  <button className="flex items-center justify-center gap-2 flex-1 text-center py-3 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors">
-                    <span className="material-icons text-lg text-gray-400">favorite_border</span>
-                    <span>Save</span>
+                  <button
+                    onClick={handleWishlistToggle}
+                    disabled={isWishlistLoading}
+                    className={`flex items-center justify-center gap-2 flex-1 text-center py-3 border rounded-lg font-medium transition-colors ${isWishlisted
+                        ? 'border-red-300 bg-red-50 text-red-600 dark:bg-red-900/20 dark:border-red-700'
+                        : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                  >
+                    <span className={`material-icons text-lg transition-all ${isWishlistLoading ? 'animate-pulse' : ''} ${isWishlisted ? 'text-red-500' : 'text-gray-400'}`}>
+                      {isWishlisted ? 'favorite' : 'favorite_border'}
+                    </span>
+                    <span>{isWishlisted ? 'Saved' : 'Save'}</span>
                   </button>
                 </div>
               </div>

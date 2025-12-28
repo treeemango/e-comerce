@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { fetchSearchFilters } from '@/lib/api';
 import { SearchFilters, AppliedFilters } from '@/types';
+import { getCurrencySymbol, useCurrencyConverter, convertAmount, getUserCurrency } from '@/lib/currency';
 
 interface FilterPanelProps {
     onClose: () => void;
@@ -14,6 +15,41 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
     const [localFilters, setLocalFilters] = useState<AppliedFilters>(appliedFilters);
     const [selectedSection, setSelectedSection] = useState('categories');
     const [loading, setLoading] = useState(false);
+
+    // Currency Conversion
+    const userCurrency = getUserCurrency();
+    const [localMin, setLocalMin] = useState<string>('');
+    const [localMax, setLocalMax] = useState<string>('');
+
+    const { convertedValues: priceRangeConverted } = useCurrencyConverter(
+        filters?.price_range ? [
+            { amount: filters.price_range.min, currency: filters.price_range.currency || 'USD', id: 'min' },
+            { amount: filters.price_range.max, currency: filters.price_range.currency || 'USD', id: 'max' }
+        ] : []
+    );
+
+    // Sync input fields with applied filters (converted)
+    React.useEffect(() => {
+        const syncPrices = async () => {
+            const baseCurrency = filters?.price_range?.currency || 'USD';
+            if (localFilters.price_min) {
+                const val = await convertAmount(localFilters.price_min, baseCurrency, userCurrency);
+                setLocalMin(val !== null ? val.toFixed(0) : '');
+            } else {
+                setLocalMin('');
+            }
+            if (localFilters.price_max) {
+                const val = await convertAmount(localFilters.price_max, baseCurrency, userCurrency);
+                setLocalMax(val !== null ? val.toFixed(0) : '');
+            } else {
+                setLocalMax('');
+            }
+        };
+        // Only sync if applied filters change externally or on load
+        if (selectedSection === 'price') {
+            syncPrices();
+        }
+    }, [localFilters.price_min, localFilters.price_max, selectedSection, userCurrency, filters?.price_range?.currency]);
 
     React.useEffect(() => {
         const loadFilters = async () => {
@@ -66,8 +102,26 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
         }));
     };
 
-    const handleApply = () => {
-        onApplyFilters(localFilters);
+    const handleApply = async () => {
+        // Convert prices back to base currency before applying
+        const baseCurrency = filters?.price_range?.currency || 'USD';
+        let min = null;
+        let max = null;
+
+        if (localMin) {
+            min = await convertAmount(parseFloat(localMin), userCurrency, baseCurrency);
+        }
+        if (localMax) {
+            max = await convertAmount(parseFloat(localMax), userCurrency, baseCurrency);
+        }
+
+        const finalFilters = {
+            ...localFilters,
+            price_min: min,
+            price_max: max
+        };
+
+        onApplyFilters(finalFilters);
         onClose();
     };
 
@@ -222,36 +276,36 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                     {filters?.price_range && (
                                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
                                             <div className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wide">Market Range</div>
-                                            <div className="text-[15px] font-bold text-gray-800 dark:text-white">
-                                                ${filters.price_range.min.toFixed(0)} — ${filters.price_range.max.toFixed(0)}
+                                            <div className="text-[15px] font-bold text-black dark:text-white">
+                                                {priceRangeConverted?.min?.converted || `${getCurrencySymbol(filters.price_range.currency)}${filters.price_range.min.toFixed(0)}`} — {priceRangeConverted?.max?.converted || `${getCurrencySymbol(filters.price_range.currency)}${filters.price_range.max.toFixed(0)}`}
                                             </div>
                                             <div className="text-[10px] text-gray-400 font-medium mt-1">Based on {filters.price_range.product_count} matches</div>
                                         </div>
                                     )}
                                     <div className="space-y-4">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase px-1">Minimum Price</label>
+                                            <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase px-1">Minimum Price ({getCurrencySymbol(userCurrency)})</label>
                                             <div className="relative">
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(userCurrency)}</span>
                                                 <input
                                                     type="number"
-                                                    placeholder="0"
-                                                    value={localFilters.price_min || ''}
-                                                    onChange={(e) => setLocalFilters({ ...localFilters, price_min: e.target.value ? Number(e.target.value) : null })}
-                                                    className="w-full pl-8 pr-4 py-3.5 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-900 rounded-2xl text-[15px] font-bold focus:ring-2 focus:ring-primary/20 transition-all"
+                                                    placeholder={priceRangeConverted?.min?.amount?.toFixed(0) || "0"}
+                                                    value={localMin}
+                                                    onChange={(e) => setLocalMin(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-3.5 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-900 rounded-2xl text-[15px] font-bold focus:ring-2 focus:ring-primary/20 transition-all text-black dark:text-white"
                                                 />
                                             </div>
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase px-1">Maximum Price</label>
+                                            <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase px-1">Maximum Price ({getCurrencySymbol(userCurrency)})</label>
                                             <div className="relative">
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(userCurrency)}</span>
                                                 <input
                                                     type="number"
-                                                    placeholder="Max"
-                                                    value={localFilters.price_max || ''}
-                                                    onChange={(e) => setLocalFilters({ ...localFilters, price_max: e.target.value ? Number(e.target.value) : null })}
-                                                    className="w-full pl-8 pr-4 py-3.5 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-900 rounded-2xl text-[15px] font-bold focus:ring-2 focus:ring-primary/20 transition-all"
+                                                    placeholder={priceRangeConverted?.max?.amount?.toFixed(0) || "Max"}
+                                                    value={localMax}
+                                                    onChange={(e) => setLocalMax(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-3.5 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-900 rounded-2xl text-[15px] font-bold focus:ring-2 focus:ring-primary/20 transition-all text-black dark:text-white"
                                                 />
                                             </div>
                                         </div>

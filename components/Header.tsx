@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import LoyaltyTierBadge from './LoyaltyTierBadge';
 import { CATEGORIES, FEATURED_CATEGORIES, PRODUCTS } from '../constants';
 import { fetchSuggestions, trackSearch, SearchSuggestion, fetchTrendingCategoriesOverlay, TrendingCategoryOverlay, fetchRecentViews, RecentViewProduct, fetchPopularSearches, fetchRecentSearches, SearchKeywordEntry } from '../lib/api';
 import { Product, User, LoyaltyProfile, VisualCategory } from '../types';
-import { getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol, SUPPORTED_CURRENCIES, getUserCurrency, setUserCurrency, useCurrencyConverter, formatPrice } from '@/lib/currency';
+import { detectUserCurrency } from '@/lib/currency-service';
 import { useNotifications } from './NotificationContext';
 import NotificationInbox from './NotificationInbox';
+import CountrySelector from './CountrySelector';
 
 interface HeaderProps {
   onHomeClick?: () => void;
@@ -51,7 +53,21 @@ const Header: React.FC<HeaderProps> = ({
   const [recentViews, setRecentViews] = useState<RecentViewProduct[]>([]);
   const [recentSearches, setRecentSearches] = useState<SearchKeywordEntry[]>([]);
   const [popularSearches, setPopularSearches] = useState<SearchKeywordEntry[]>([]);
+  const [currentCurrency, setCurrentCurrency] = useState<string>(getUserCurrency());
+  const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
   const { history } = useNotifications();
+
+  // Prepare currency conversion for recent views
+  const recentViewPriceValues = useMemo(() =>
+    recentViews.map((item) => ({
+      id: item.id,
+      amount: item.price ?? 0,
+      currency: item.currency || 'USD'
+    })),
+    [recentViews]
+  );
+
+  const { convertedValues: recentViewConverted } = useCurrencyConverter(recentViewPriceValues, currentCurrency);
 
   useEffect(() => {
     const loadRecentViews = async () => {
@@ -91,6 +107,28 @@ const Header: React.FC<HeaderProps> = ({
 
     loadSearchMeta();
   }, [isSearchFocused]);
+
+  // Auto-detect user currency on component mount
+  useEffect(() => {
+    const loadUserCurrency = async () => {
+      try {
+        const detectedCurrency = await detectUserCurrency();
+        if (detectedCurrency && detectedCurrency !== currentCurrency) {
+          setCurrentCurrency(detectedCurrency);
+          setUserCurrency(detectedCurrency);
+          console.log(`Auto-detected user currency: ${detectedCurrency}`);
+        }
+      } catch (error) {
+        console.error('Error auto-detecting currency:', error);
+        // Fallback to existing currency
+      }
+    };
+
+    // Only run if no saved preference exists
+    if (!localStorage.getItem('preferred_currency')) {
+      loadUserCurrency();
+    }
+  }, []);
 
   // Group data by parent category
   const parentCategories = Array.from(new Set(overlayData.map(d => d.parent_category_id)))
@@ -533,7 +571,9 @@ const Header: React.FC<HeaderProps> = ({
                           <img src={product.image_url} alt={product.name} className="w-10 h-10 object-contain bg-white rounded p-0.5 border border-gray-200 dark:border-gray-700" />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-600 dark:text-gray-400 truncate group-hover/prod:text-primary transition-colors">{product.name}</p>
-                            <p className="text-xs font-bold text-gray-900 dark:text-white">{getCurrencySymbol(product.currency || 'USD')}{product.price.toFixed(2)}</p>
+                            <div className="text-xs font-bold text-gray-900 dark:text-white">
+                              {recentViewConverted[product.id]?.converted ?? formatPrice(product.price, product.currency || currentCurrency)}
+                            </div>
                           </div>
                           <button
                             className="text-gray-400 hover:text-primary"
@@ -635,6 +675,59 @@ const Header: React.FC<HeaderProps> = ({
             <span className="text-sm font-bold text-white">Sign In / Register</span>
           </button>
         )}
+        {/* Currency Selector */}
+        <div className="relative">
+          <button
+            className="flex items-center gap-1 px-2 py-1 bg-black bg-opacity-80 hover:bg-opacity-100 rounded-full text-white text-sm font-medium transition-all"
+            onClick={() => setIsCurrencyOpen(!isCurrencyOpen)}
+          >
+            <span className="material-icons text-sm">currency_exchange</span>
+            <span>{currentCurrency}</span>
+            <span className={`material-icons text-xs transition-transform ${isCurrencyOpen ? 'rotate-180' : ''}`}>expand_more</span>
+          </button>
+
+          {/* Currency Dropdown */}
+          {isCurrencyOpen && (
+            <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-gray-800 shadow-xl rounded-lg border border-gray-200 dark:border-gray-700 z-50 max-h-60 overflow-y-auto">
+              <div className="p-2">
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 px-2">Select Currency</h4>
+                <div className="space-y-1">
+                  {SUPPORTED_CURRENCIES.map((currency) => (
+                    <button
+                      key={currency.code}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors ${currentCurrency === currency.code
+                        ? 'bg-primary text-white'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      onClick={() => {
+                        setCurrentCurrency(currency.code);
+                        setUserCurrency(currency.code);
+                        setIsCurrencyOpen(false);
+                        // Force page refresh to update all prices
+                        window.location.reload();
+                      }}
+                    >
+                      <span className="text-base">{currency.flag}</span>
+                      <div className="flex-1 text-left">
+                        <span className="font-medium">{currency.code}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">{currency.name}</span>
+                      </div>
+                      {currentCurrency === currency.code && (
+                        <span className="material-icons text-sm">check</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 px-2">
+                    Prices will update automatically
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <a
           href="#"
           id="cart-icon-container"

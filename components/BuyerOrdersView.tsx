@@ -3,6 +3,7 @@ import { fetchBuyerOrders, fetchOrderTrackingEvents, confirmOrderReceiptBuyer, g
 import { getCurrencySymbol } from '@/lib/currency';
 import { OrderTrackingEvent, BuyerOrder, User } from '../types';
 import { WriteReviewModal } from './WriteReviewModal';
+import { OrderPrice } from './OrderPrice';
 
 interface BuyerOrdersViewProps {
     user?: User | null;
@@ -309,8 +310,7 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                                     <div className="text-right">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Order Total</p>
                                         <div className="text-3xl font-black text-slate-900 tracking-tighter">
-                                            {getCurrencySymbol(order.currency || 'USD')}
-                                            <span className="ml-1">{order.total_amount.toLocaleString()}</span>
+                                            <OrderPrice amount={order.total_amount} currency={order.currency || 'USD'} />
                                         </div>
                                     </div>
                                 </div>
@@ -334,7 +334,9 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                                                 </p>
                                             </div>
                                             <div className="text-right flex flex-col items-end gap-2">
-                                                <p className="text-sm font-black text-slate-900">{formatPrice(item.unit_price * item.quantity, order.currency)}</p>
+                                                <p className="text-sm font-black text-slate-900">
+                                                    <OrderPrice amount={item.unit_price * item.quantity} currency={order.currency || 'USD'} />
+                                                </p>
                                                 {order.status?.toLowerCase() === 'delivered' && (
                                                     <button
                                                         onClick={(e) => {
@@ -593,7 +595,7 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                     />
                 )}
             </div>
-        </div>
+        </div >
     );
 };
 
