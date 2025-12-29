@@ -122,12 +122,14 @@ const FollowedStoresView: React.FC<FollowedStoresViewProps> = ({ userId, onProdu
                             </div>
 
                             <div className="flex flex-col gap-2 items-end ml-4">
-                                <button
-                                    onClick={() => onProductClick?.(store.vendor_id)}
-                                    className="px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200 transition-colors"
+                                <a
+                                    href={`/?view=vendor-store&vendorId=${store.vendor_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200 transition-colors block text-center"
                                 >
                                     Visit Store
-                                </button>
+                                </a>
                                 <button
                                     onClick={() => handleUnfollow(store.vendor_id)}
                                     className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"

@@ -12,9 +12,10 @@ interface HomeViewProps {
   onVisualSearch?: (p: Product) => void;
   onFilterClick?: (filter: string) => void;
   onPlatformReviewsClick?: () => void;
+  hasPlatformReviews?: boolean;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick, hasPlatformReviews = true }) => {
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -41,8 +42,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
           {/* Swaggy Premium Trust Bar */}
           <div className="px-4">
             <button
-              onClick={onPlatformReviewsClick}
-              className="w-full max-w-5xl mx-auto bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-black rounded-[2rem] p-4 md:p-6 lg:p-8 flex flex-col gap-3 md:gap-6 shadow-xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 active:scale-[0.98] transition-all group overflow-hidden relative"
+              onClick={hasPlatformReviews ? onPlatformReviewsClick : undefined}
+              disabled={!hasPlatformReviews}
+              className={`w-full max-w-5xl mx-auto bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-black rounded-[2rem] p-4 md:p-6 lg:p-8 flex flex-col gap-3 md:gap-6 shadow-xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 transition-all group overflow-hidden relative ${hasPlatformReviews ? 'active:scale-[0.98]' : 'opacity-80 cursor-default'
+                }`}
             >
               {/* Decorative background glow */}
               <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-primary/10 transition-colors" />
@@ -90,9 +93,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
                     <span className="text-[9px] md:text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Escrow Secure</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-primary animate-pulse">
+                <div className={`flex items-center gap-1 text-primary ${hasPlatformReviews ? 'animate-pulse' : 'opacity-40 grayscale'}`}>
                   <span className="text-[9px] md:text-xs font-black uppercase tracking-widest">Read Reviews</span>
-                  <span className="material-icons text-[14px] md:text-lg">chevron_right</span>
+                  {hasPlatformReviews && <span className="material-icons text-[14px] md:text-lg">chevron_right</span>}
                 </div>
               </div>
             </button>

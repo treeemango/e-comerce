@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
+import { useA2HS } from '../hooks/useA2HS';
+import { useNotifications } from './NotificationContext';
 
 interface FooterProps {
     onAdminClick?: () => void;
@@ -8,6 +10,29 @@ interface FooterProps {
 }
 
 const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerClick, onInfoPageClick }) => {
+    const a2hs = useA2HS();
+    const { showNotification } = useNotifications();
+
+    const handleInstallClick = useCallback(async () => {
+        try {
+            const outcome = await a2hs.promptInstall();
+            if (outcome === 'accepted') {
+                showNotification('App installed. You can now open it from your home screen.', 'success');
+            } else if (outcome === 'dismissed') {
+                showNotification('Install dismissed.', 'info');
+            } else if (outcome === 'already-installed') {
+                showNotification('App is already installed on this device.', 'info');
+            } else if (outcome === 'ios-instructions') {
+                showNotification('On iPhone/iPad: tap Share, then “Add to Home Screen”.', 'info', 8000);
+            } else {
+                showNotification('Install is not available yet. Try again after the page finishes loading.', 'info', 8000);
+            }
+        } catch (e) {
+            console.error('Install prompt failed:', e);
+            showNotification('Unable to open install prompt.', 'error');
+        }
+    }, [a2hs, showNotification]);
+
     return (
         <footer className="bg-gradient-to-b from-gray-900 via-gray-950 to-black text-white pt-16 pb-12 mt-12 font-display relative overflow-hidden">
             {/* Gradient orbs */}
@@ -32,7 +57,7 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                                 <li><button onClick={() => onInfoPageClick?.('press')} className="hover:text-white transition-colors text-left hover:translate-x-1 transform duration-200">Press</button></li>
                                 <li><button onClick={() => onInfoPageClick?.('sustainability')} className="hover:text-white transition-colors text-left hover:translate-x-1 transform duration-200">Sustainability at JuaExpress</button></li>
                                 <li><button onClick={() => onInfoPageClick?.('corporate-responsibility')} className="hover:text-white transition-colors text-left hover:translate-x-1 transform duration-200">Corporate Responsibility</button></li>
-                                <li className="pt-3">
+                                {/* <li className="pt-3">
                                     <button
                                         onClick={onDriverClick}
                                         className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 transition-all font-black text-[10px] uppercase tracking-widest border border-emerald-500/30 w-fit shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20"
@@ -40,7 +65,7 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                                         <span className="material-icons-round text-sm">local_shipping</span>
                                         Become a Driver
                                     </button>
-                                </li>
+                                </li> */}
                             </ul>
                         </div>
 
@@ -80,9 +105,14 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                             />
                             <div className="absolute inset-0 p-6 flex flex-col justify-center bg-gradient-to-r from-black/90 via-black/70 to-transparent">
                                 <h3 className="font-black text-base mb-4 leading-tight text-white">Start Selling to Millions of Buyers on JuaExpress</h3>
-                                <button className="bg-gradient-to-r from-primary to-orange-500 hover:from-orange-500 hover:to-primary text-white text-xs font-black py-3 px-6 rounded-xl w-fit transition-all duration-300 shadow-xl shadow-primary/30 uppercase tracking-wider active:scale-95">
+                                <a
+                                    href="/?view=seller-login"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-gradient-to-r from-primary to-orange-500 hover:from-orange-500 hover:to-primary text-white text-xs font-black py-3 px-6 rounded-xl w-fit transition-all duration-300 shadow-xl shadow-primary/30 uppercase tracking-wider active:scale-95 inline-block text-center"
+                                >
                                     Start a Selling Account
-                                </button>
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -107,14 +137,20 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         </div>
                         <div className="flex gap-4">
                             {/* App Store Buttons - Premium */}
-                            <button className="bg-white/5 backdrop-blur-md border border-gray-700/50 rounded-2xl px-4 py-3 flex items-center gap-3 hover:bg-white/10 hover:border-gray-600 transition-all group">
+                            <button
+                                onClick={handleInstallClick}
+                                className="bg-white/5 backdrop-blur-md border border-gray-700/50 rounded-2xl px-4 py-3 flex items-center gap-3 hover:bg-white/10 hover:border-gray-600 transition-all group"
+                            >
                                 <span className="material-icons text-3xl group-hover:scale-110 transition-transform">apple</span>
                                 <div className="text-left">
                                     <div className="text-[10px] leading-none text-gray-500 font-medium">Download on the</div>
                                     <div className="text-sm font-black leading-none mt-1">App Store</div>
                                 </div>
                             </button>
-                            <button className="bg-white/5 backdrop-blur-md border border-gray-700/50 rounded-2xl px-4 py-3 flex items-center gap-3 hover:bg-white/10 hover:border-gray-600 transition-all group">
+                            <button
+                                onClick={handleInstallClick}
+                                className="bg-white/5 backdrop-blur-md border border-gray-700/50 rounded-2xl px-4 py-3 flex items-center gap-3 hover:bg-white/10 hover:border-gray-600 transition-all group"
+                            >
                                 <span className="material-icons text-3xl text-emerald-500 group-hover:scale-110 transition-transform">android</span>
                                 <div className="text-left">
                                     <div className="text-[10px] leading-none text-gray-500 font-medium">Get it on</div>

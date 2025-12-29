@@ -641,6 +641,7 @@ const Header: React.FC<HeaderProps> = ({
                       { icon: 'receipt_long', label: 'Your orders' },
                       { icon: 'favorite', label: 'Saved items' },
                       { icon: 'rate_review', label: 'Your reviews' },
+                      { icon: 'mail', label: 'Messages' },
                       { icon: 'person_outline', label: 'Your profile' },
                       { icon: 'confirmation_number', label: 'Coupon codes' },
                       { icon: 'account_balance_wallet', label: 'Credit balance' },

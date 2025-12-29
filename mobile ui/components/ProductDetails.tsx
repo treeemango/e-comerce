@@ -382,7 +382,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     };
 
     const handleFollowToggle = async () => {
-        const vendorId = product.vendor?.vendor_id || product.seller_id?.toString();
+        const vendorId = vendorInfo?.vendor_id || product.vendor?.vendor_id || product.seller_id?.toString();
         if (!vendorId) return;
 
         if (!user) {

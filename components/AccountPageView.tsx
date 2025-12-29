@@ -184,12 +184,14 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
                                     {store.rating?.toFixed(1) || '0.0'}
                                  </span>
                               </div>
-                              <button
-                                 onClick={() => onVisitStore?.(store.vendor_id)}
-                                 className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                              <a
+                                 href={`/?view=vendor-store&vendorId=${store.vendor_id}`}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors block text-center"
                               >
                                  Visit Store
-                              </button>
+                              </a>
                            </div>
                         ))}
                      </div>

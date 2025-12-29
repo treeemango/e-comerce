@@ -401,18 +401,52 @@ const StoreMediaManager: React.FC<StoreMediaManagerProps> = ({
                     <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Store Identity</h2>
                     <p className="text-sm text-gray-500 mt-1 font-medium">Manage your brand assets and business credentials in one place</p>
                 </div>
-                <button
-                    onClick={handleSaveProfile}
-                    disabled={isSaving}
-                    className="bg-primary text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-600 transition-all shadow-lg shadow-primary/20 active:scale-95 disabled:opacity-50 flex items-center gap-2"
-                >
-                    {isSaving ? (
-                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <span className="material-icons text-sm">save</span>
-                    )}
-                    {isSaving ? 'Synchronizing...' : 'Save Changes'}
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={async () => {
+                            if (!resolvedVendorId) return;
+                            const shareUrl = `${window.location.origin}/?view=vendor-store&vendorId=${resolvedVendorId}`;
+
+                            const shareData = {
+                                title: (profile as SellerProfile)?.business_name || 'My Store',
+                                text: `Check out my store ${(profile as SellerProfile)?.business_name} on JuaExpress!`,
+                                url: shareUrl,
+                            };
+
+                            if (navigator.share) {
+                                try {
+                                    await navigator.share(shareData);
+                                } catch (err) {
+                                    console.error('Error sharing:', err);
+                                }
+                            } else {
+                                try {
+                                    await navigator.clipboard.writeText(shareUrl);
+                                    alert('Store link copied to clipboard!');
+                                } catch (err) {
+                                    console.error('Error copying:', err);
+                                }
+                            }
+                        }}
+                        className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm active:scale-95"
+                        title="Share Store Link"
+                    >
+                        <span className="material-icons text-gray-600 dark:text-gray-400">share</span>
+                    </button>
+
+                    <button
+                        onClick={handleSaveProfile}
+                        disabled={isSaving}
+                        className="bg-primary text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-600 transition-all shadow-lg shadow-primary/20 active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {isSaving ? (
+                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <span className="material-icons text-sm">save</span>
+                        )}
+                        {isSaving ? 'Synchronizing...' : 'Save Changes'}
+                    </button>
+                </div>
             </div>
 
             {/* Error Alert */}

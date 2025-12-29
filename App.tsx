@@ -9,10 +9,11 @@ import ProductSection from './components/ProductSection';
 import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
-import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory } from '@/lib/api';
+import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById } from '@/lib/api';
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
+import { useCountrySEO } from './hooks/useCountrySEO';
 import CartSidebar from './components/CartSidebar';
 import PlatformReviewsModal from './components/PlatformReviewsModal';
 import PlatformReviewsPage from './components/PlatformReviewsPage';
@@ -92,6 +93,8 @@ const AdminLoginView = lazy(() => import('./components/AdminDashboard/AdminLogin
 import NotificationSystem from './components/NotificationSystem';
 import { WebNotificationWrapper } from './components/WebNotificationWrapper';
 import { WriteReviewModal } from './components/WriteReviewModal';
+import { useA2HS } from './hooks/useA2HS';
+import { useNotifications } from './components/NotificationContext';
 
 // Loading fallback for Suspense
 const LoadingFallback = () => (
@@ -101,6 +104,13 @@ const LoadingFallback = () => (
 );
 
 const App: React.FC = () => {
+  const a2hs = useA2HS();
+  const { showNotification } = useNotifications();
+
+  // Initialize country-aware SEO
+  const { countryConfig, isLoading: seoLoading } = useCountrySEO({
+    pageType: 'home'
+  });
   const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'vendor-store' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page' | 'platform-reviews'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
   const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity' | 'feedback'>('overview');
@@ -136,6 +146,27 @@ const App: React.FC = () => {
   const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
   const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
   const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
+  const [hasPlatformReviews, setHasPlatformReviews] = useState(true); // Default to true until checked
+
+  const handleInstallAppClick = useCallback(async () => {
+    try {
+      const outcome = await a2hs.promptInstall();
+      if (outcome === 'accepted') {
+        showNotification('App installed. You can now open it from your home screen.', 'success');
+      } else if (outcome === 'dismissed') {
+        showNotification('Install dismissed.', 'info');
+      } else if (outcome === 'already-installed') {
+        showNotification('App is already installed on this device.', 'info');
+      } else if (outcome === 'ios-instructions') {
+        showNotification('On iPhone/iPad: tap Share, then “Add to Home Screen”.', 'info', 8000);
+      } else {
+        showNotification('Install is not available yet. Try again after the page finishes loading.', 'info', 8000);
+      }
+    } catch (e) {
+      console.error('Install prompt failed:', e);
+      showNotification('Unable to open install prompt.', 'error');
+    }
+  }, [a2hs, showNotification]);
 
   // Background Sync'd State
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
@@ -255,6 +286,9 @@ const App: React.FC = () => {
     const loadProducts = async () => {
       const data = await fetchProductsWithVendors();
       setProducts(dedupeProducts(data));
+
+      // Check if platform reviews exist (simplified for now)
+      setHasPlatformReviews(true); // Default to true, can be updated later
     };
     loadProducts();
     // Auth context will be handled by the auth state listener
@@ -270,6 +304,9 @@ const App: React.FC = () => {
     // Check for query parameters on mount to set initial view
     const params = new URLSearchParams(window.location.search);
     const viewParam = params.get('view');
+    const productId = params.get('product_id');
+    const orderId = params.get('order_id');
+
     if (viewParam === 'platform-reviews') {
       setCurrentView('platform-reviews');
       // Fetch reviews immediately if they are for this page
@@ -278,12 +315,32 @@ const App: React.FC = () => {
         setPlatformReviews(reviews);
       };
       loadPlatformReviews();
+    } else if (viewParam === 'seller-login') {
+      setCurrentView('seller-login');
+    } else if (viewParam === 'seller-onboarding') {
+      setCurrentView('seller-onboarding');
     } else if (viewParam === 'vendor-store') {
       const vendorId = params.get('vendorId');
       if (vendorId) {
         setActiveVendorStoreId(vendorId);
         setCurrentView('vendor-store');
       }
+    } else if (productId) {
+      const loadDeepLinkProduct = async () => {
+        try {
+          const product = await fetchProductById(productId);
+          if (product) {
+            setSelectedProduct(product);
+            setCurrentView('product-detail');
+          }
+        } catch (err) {
+          console.error('Error loading deep link product:', err);
+        }
+      };
+      loadDeepLinkProduct();
+    } else if (orderId) {
+      setAccountPageTitle('Orders');
+      setCurrentView('account-page');
     }
   }, []);
 
@@ -313,6 +370,26 @@ const App: React.FC = () => {
 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const handleInAppDeepLink = useCallback(async (type: 'product' | 'order' | 'chat', id: string) => {
+    console.log(`Handling in-app deep link: ${type} ${id}`);
+    if (type === 'product') {
+      try {
+        const product = await fetchProductById(id);
+        if (product) {
+          setSelectedProduct(product);
+          setCurrentView('product-detail');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } catch (err) {
+        console.error('Error handling in-app deep link (product):', err);
+      }
+    } else if (type === 'order') {
+      setAccountPageTitle('Orders');
+      setCurrentView('account-page');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   useEffect(() => {
@@ -861,6 +938,7 @@ const App: React.FC = () => {
             setReviewingProductId(order.items[0].product_id);
           }
         }}
+        onDeepLink={handleInAppDeepLink}
       />
       {reviewingProductId && (
         <WriteReviewModal
@@ -895,16 +973,31 @@ const App: React.FC = () => {
               </div>
 
               {/* Get App */}
-              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity border-l border-gray-800 pl-8 h-8">
-                <span className="material-icons text-white text-lg">phone_iphone</span>
-                <span className="font-bold text-[11px]">Get the JuaExpress App</span>
-              </div>
+              {a2hs.canShowInstallEntry && (
+                <div
+                  className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity border-l border-gray-800 pl-8 h-8"
+                  onClick={handleInstallAppClick}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleInstallAppClick();
+                    }
+                  }}
+                >
+                  <span className="material-icons text-white text-lg">phone_iphone</span>
+                  <span className="font-bold text-[11px]">Get the JuaExpress App</span>
+                </div>
+              )}
             </div>
 
             {/* Seller Link */}
-            <div
+            <a
+              href="/?view=seller-login"
+              target="_blank"
+              rel="noopener noreferrer"
               className="hidden md:flex items-center bg-gray-900 rounded-full px-1 py-1 pr-4 border border-gray-700 hover:border-gray-500 transition-colors cursor-pointer group"
-              onClick={handleSellerLoginClick}
             >
               <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full mr-2">
                 Join Now <span className="material-icons text-[10px] align-middle">chevron_right</span>
@@ -913,7 +1006,7 @@ const App: React.FC = () => {
                 <span className="text-[10px] text-gray-400">Start Selling to Millions of</span>
                 <span className="text-[10px] font-bold text-white group-hover:text-primary transition-colors">Buyers on JuaExpress</span>
               </div>
-            </div>
+            </a>
 
           </div>
         </div>
@@ -988,6 +1081,7 @@ const App: React.FC = () => {
               onClick={() => {
                 window.open('/?view=platform-reviews', '_blank');
               }}
+              hasReviews={hasPlatformReviews}
             />
             <LightningDealsRow
               userId={user?.id}
@@ -1236,7 +1330,7 @@ const App: React.FC = () => {
             {dashboardTab === 'account-notifications' && <SellerProfileView sellerId={user?.id || ''} />} {/* Notifications in profile */}
             {dashboardTab === 'account-permissions' && <div className="p-8 text-gray-500">User permissions feature coming soon</div>}
             {dashboardTab === 'store-branding' && <StoreMediaManager sellerId={user?.id} userId={user?.id} />}
-            {dashboardTab === 'messages' && <SellerMessagesView sellerId={user?.id || ''} />}
+            {dashboardTab === 'messages' && <SellerMessagesView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} />}
           </SellerDashboardLayout>
         )}
         {currentView === 'admin-login' && (

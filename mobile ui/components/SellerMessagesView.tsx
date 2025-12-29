@@ -343,7 +343,7 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
                     </div>
                     {selectedConversation.product_price && (
                         <div className="text-xs font-black text-gray-900 whitespace-nowrap">
-                            £{selectedConversation.product_price}
+                            KES {Number(selectedConversation.product_price).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                         </div>
                     )}
                 </div>
@@ -392,7 +392,7 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
                                                 </span>
                                                 {isMe && (
                                                     <span className={cn("material-icons text-[14px]", msg.is_read ? 'text-[#34B7F1]' : 'text-gray-300')}>
-                                                        {msg.is_read ? 'done_all' : 'check'}
+                                                        {msg.is_read ? 'done_all' : 'done'}
                                                     </span>
                                                 )}
                                             </div>

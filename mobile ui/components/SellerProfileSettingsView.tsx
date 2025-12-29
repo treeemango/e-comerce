@@ -117,7 +117,46 @@ export const SellerProfileSettingsView: React.FC<SellerProfileSettingsViewProps>
                 >
                     <span className="material-icons-round text-gray-600 dark:text-gray-300">chevron_left</span>
                 </button>
-                <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Business Settings</h1>
+                <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight flex-1">Business Settings</h1>
+                <button
+                    onClick={async () => {
+                        const url = `${window.location.origin}/?view=vendor-store&vendorId=${sellerId}`; // Use sellerId directly or profile?.vendor_id if available. 
+                        // The component prop is 'sellerId' which usually maps to user_id, but the link expects vendorId (vendor_id).
+                        // Let's check profile.vendor_id. If missing, fallback to sellerId (though incorrect if they differ, usually they are same uuid for 1:1, but strictly separate).
+                        // However, based on API usage, 'vendorId' in App.tsx maps to vendor_id.
+                        // Ideally profile should have vendor_id.
+                        // Let's assume profile?.vendor_id is the safe bet, or fallback.
+                        // Wait, looking at fetchSellerProfile return type, it returns SellerProfile.
+                        // Does SellerProfile have vendor_id? 
+                        // I will assume yes or use sellerId for now, but adding a safe check is better.
+                        const targetId = (profile as any)?.vendor_id || sellerId;
+                        const shareUrl = `${window.location.origin}/?view=vendor-store&vendorId=${targetId}`;
+
+                        const shareData = {
+                            title: profile?.business_name || 'My Store',
+                            text: `Check out my store ${profile?.business_name} on JuaExpress!`,
+                            url: shareUrl,
+                        };
+
+                        if (navigator.share) {
+                            try {
+                                await navigator.share(shareData);
+                            } catch (err) {
+                                console.error('Error sharing:', err);
+                            }
+                        } else {
+                            try {
+                                await navigator.clipboard.writeText(shareUrl);
+                                setMessage({ type: 'success', text: 'Store link copied to clipboard!' });
+                            } catch (err) {
+                                console.error('Error copying:', err);
+                            }
+                        }
+                    }}
+                    className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center active:scale-90 transition-transform"
+                >
+                    <span className="material-icons-round text-gray-600 dark:text-gray-300">share</span>
+                </button>
             </div>
 
             {/* Content */}

@@ -33,7 +33,7 @@ import { SellerOnboardingView } from './components/SellerOnboardingView';
 import { ProductCard } from './components/ProductCard';
 import { VendorProfileView } from './components/VendorProfileView';
 import { BuyerProfileView } from './components/BuyerProfileView';
-import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute } from '@/lib/api';
+import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute, fetchProductById, fetchPlatformReviewCount } from '@/lib/api';
 import { Product, Review, UserCoupon, BuyerOrder } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
@@ -47,6 +47,14 @@ import { MobileFeedbackSheet } from './components/MobileFeedbackSheet';
 import MobileWriteReviewSheet from './components/MobileWriteReviewSheet';
 import { PlatformReviewsView } from './components/PlatformReviewsView';
 import { fetchTopPlatformReviews } from '@/lib/api';
+import {
+    getExistingPushSubscription,
+    removePushSubscriptionFromBackend,
+    savePushSubscriptionToBackend,
+    sendTestPushToMe,
+    subscribeToPush,
+    unsubscribeFromPush,
+} from '@/lib/push';
 
 
 import VisualSearchSheet from './components/VisualSearchSheet';
@@ -106,6 +114,7 @@ const App: React.FC = () => {
     const [isFeedbackSheetOpen, setIsFeedbackSheetOpen] = useState(false);
     const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
     const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
+    const [hasPlatformReviews, setHasPlatformReviews] = useState(true);
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -134,6 +143,9 @@ const App: React.FC = () => {
                 setProducts(fetchedProducts);
                 setCartItems([]);
                 setCategories(fetchedCategories);
+
+                // Check review availability
+                fetchPlatformReviewCount().then(count => setHasPlatformReviews(count > 0));
             } catch (error) {
                 console.error("Failed to load data", error);
             } finally {
@@ -200,6 +212,10 @@ const App: React.FC = () => {
         // Handle initial URL state for deep linking
         const params = new URLSearchParams(window.location.search);
         const view = params.get('view');
+        const productId = params.get('product_id');
+        const orderId = params.get('order_id');
+        const vendorId = params.get('vendorId');
+
         if (view === 'platform-reviews') {
             const loadReviews = async () => {
                 const reviews = await fetchTopPlatformReviews(20);
@@ -207,6 +223,27 @@ const App: React.FC = () => {
                 setIsPlatformReviewsOpen(true);
             };
             loadReviews();
+        } else if (view === 'vendor-store' && vendorId) {
+            setSelectedVendorId(vendorId);
+        } else if (productId) {
+            // Deep link to product
+            const loadDeepLinkProduct = async () => {
+                try {
+                    const product = await fetchProductById(productId);
+                    if (product) {
+                        setSelectedProduct(product);
+                    }
+                } catch (err) {
+                    console.error('Error loading deep link product:', err);
+                }
+            };
+            loadDeepLinkProduct();
+        } else if (orderId) {
+            // Deep link to order details (via Account > Orders)
+            // We set the active account section to orders.
+            // Ideally we would also scroll to the order or open it, but switching view is a good start.
+            setIsAccountOpen(true);
+            setActiveAccountSection('orders');
         }
     }, []);
 
@@ -271,6 +308,27 @@ const App: React.FC = () => {
         window.history.replaceState({ view: activeTab }, '', window.location.href);
         return () => window.removeEventListener('popstate', onPopState);
     }, [activeTab, isAccountOpen, isSearchOpen, onboardingType, selectedProduct]);
+
+    const handleInAppDeepLink = useCallback(async (type: 'product' | 'order' | 'chat', id: string) => {
+        console.log(`Handling in-app deep link: ${type} ${id}`);
+        if (type === 'product') {
+            try {
+                const product = await fetchProductById(id);
+                if (product) {
+                    setSelectedProduct(product);
+                    // Also close any overlays that might block view
+                    setIsAccountOpen(false);
+                    setIsSearchOpen(false);
+                }
+            } catch (err) {
+                console.error('Error handling in-app deep link (product):', err);
+            }
+        } else if (type === 'order') {
+            setIsAccountOpen(true);
+            setActiveAccountSection('orders');
+            // If we supported expanding order details directly, we would do it here.
+        }
+    }, []);
 
     const handleConfirmReceipt = async (orderId: string) => {
         if (!window.confirm('Are you sure you have received your parcel? This will release funds to the seller.')) return;
@@ -814,6 +872,60 @@ const App: React.FC = () => {
                         onBack={() => setActiveAccountSection(null)}
                         accent="bg-blue-500/10 text-blue-500"
                     >
+                        <div className="bg-white dark:bg-surface-dark rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="text-sm font-black text-black dark:text-white">Web push notifications</div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Enable Android push alerts (requires permission).
+                                    </div>
+                                </div>
+                                <div className="shrink-0 flex items-center gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const existing = await getExistingPushSubscription();
+                                                if (existing) {
+                                                    const endpoint = existing.endpoint;
+                                                    await unsubscribeFromPush();
+                                                    await removePushSubscriptionFromBackend(endpoint);
+                                                    alert('Push notifications disabled on this device.');
+                                                    return;
+                                                }
+
+                                                const vapid = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
+                                                const sub = await subscribeToPush(vapid || '');
+                                                await savePushSubscriptionToBackend(sub);
+                                                alert('Push notifications enabled on this device.');
+                                            } catch (e: any) {
+                                                alert(e?.message || 'Unable to update push notifications.');
+                                            }
+                                        }}
+                                        className="px-4 py-2 rounded-full bg-blue-500 text-white text-[11px] font-black uppercase tracking-widest active:scale-95 transition"
+                                    >
+                                        Toggle
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                await sendTestPushToMe({
+                                                    title: 'JuaExpress',
+                                                    body: 'Push notifications are working on this device.',
+                                                    url: '/',
+                                                });
+                                                alert('Test push sent (if enabled).');
+                                            } catch (e: any) {
+                                                alert(e?.message || 'Unable to send test push.');
+                                            }
+                                        }}
+                                        className="px-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 text-black dark:text-white text-[11px] font-black uppercase tracking-widest active:scale-95 transition"
+                                    >
+                                        Test
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="bg-white dark:bg-surface-dark rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 h-[60vh]">
                             <NotificationInbox compact />
                         </div>
@@ -1012,6 +1124,7 @@ const App: React.FC = () => {
                         // Optional: trigger refresh or something if needed
                     }}
                     onProductClick={handleProductClick}
+                    onVisualSearch={setVisualSearchProduct}
                 />
             );
         }
@@ -1205,6 +1318,7 @@ const App: React.FC = () => {
                                         setPlatformReviews(reviews);
                                         setIsPlatformReviewsOpen(true);
                                     }}
+                                    hasPlatformReviews={hasPlatformReviews}
                                 />
                             )}
                         </main>
@@ -1228,6 +1342,7 @@ const App: React.FC = () => {
                         setReviewingProductId(order.items[0].product_id);
                     }
                 }}
+                onDeepLink={handleInAppDeepLink}
             />
             {/* Category View Overlay - Full Screen */}
             {categoryViewOpen && (
@@ -1282,6 +1397,7 @@ const App: React.FC = () => {
                                 setIsPlatformReviewsOpen(true);
                                 window.history.pushState({ view: 'platform-reviews' }, '', '?view=platform-reviews');
                             }}
+                            hasPlatformReviews={hasPlatformReviews}
                         />
                     </div>
                 </div>
@@ -1446,7 +1562,7 @@ const App: React.FC = () => {
                     onCancel={() => setOnboardingType(null)}
                 />
             )}
-            {onboardingType === 'driver' && (
+            {/* {onboardingType === 'driver' && (
                 <DriverOnboardingView
                     onComplete={async () => {
                         setOnboardingType(null);

@@ -2,14 +2,17 @@ import React from 'react';
 
 interface FeaturesBarProps {
   onClick?: () => void;
+  hasReviews?: boolean;
 }
 
-const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick }) => {
+const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick, hasReviews = true }) => {
   return (
     <section className="mb-10 group">
       <button
-        onClick={onClick}
-        className="w-full bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-zinc-950 rounded-[2.5rem] p-6 lg:p-10 shadow-2xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 hover:border-primary/30 transition-all duration-500 overflow-hidden relative text-left"
+        onClick={hasReviews ? onClick : undefined}
+        disabled={!hasReviews}
+        className={`w-full bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-zinc-950 rounded-[2.5rem] p-6 lg:p-10 shadow-2xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 transition-all duration-500 overflow-hidden relative text-left ${hasReviews ? 'hover:border-primary/30 cursor-pointer active:scale-[0.99]' : 'cursor-default opacity-80'
+          }`}
       >
         {/* Decorative background glow */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -mr-20 -mt-20 group-hover:bg-primary/10 transition-all duration-700" />
@@ -61,7 +64,7 @@ const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick }) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 group/cta">
+            <div className={`flex items-center gap-4 group/cta ${hasReviews ? 'opacity-100' : 'opacity-40 grayscale'}`}>
               <div className="flex -space-x-3">
                 {[12, 23, 34, 45].map((i) => (
                   <div key={i} className="w-10 h-10 rounded-full border-4 border-white dark:border-zinc-900 bg-gray-200 overflow-hidden shadow-premium transition-transform hover:-translate-y-1">
@@ -69,9 +72,9 @@ const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick }) => {
                   </div>
                 ))}
               </div>
-              <div className="flex items-center gap-2 text-primary font-black text-xs uppercase tracking-[0.2em] group-hover/cta:translate-x-1 transition-transform">
+              <div className={`flex items-center gap-2 text-primary font-black text-xs uppercase tracking-[0.2em] transition-transform ${hasReviews ? 'group-hover/cta:translate-x-1' : ''}`}>
                 Read Community Voices
-                <span className="material-icons">arrow_forward</span>
+                {hasReviews && <span className="material-icons">arrow_forward</span>}
               </div>
             </div>
           </div>

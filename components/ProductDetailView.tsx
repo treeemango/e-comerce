@@ -1431,9 +1431,14 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               <button onClick={handleMessageClick} className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2">
                                  <span className="material-icons-round text-sm">chat</span> Message
                               </button>
-                              <button onClick={() => onVisitStore && vendor?.vendor_id && onVisitStore(vendor.vendor_id)} className="px-4 py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-primary to-orange-500 text-white hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2">
+                              <a
+                                 href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 className="px-4 py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-primary to-orange-500 text-white hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
+                              >
                                  <span className="material-icons-round text-sm">storefront</span> Visit Store
-                              </button>
+                              </a>
                            </div>
                            <div className="flex gap-2">
                               {/* Follow Button */}
@@ -1459,12 +1464,14 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                        <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Business Legally Verified</p>
                                        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Licensed & Regulated Store</p>
                                     </div>
-                                    <button
-                                       onClick={() => onVisitStore && vendor?.vendor_id && onVisitStore(vendor.vendor_id)}
-                                       className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-xl text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide shadow-sm hover:shadow transition-all"
+                                    <a
+                                       href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-xl text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide shadow-sm hover:shadow transition-all text-center"
                                     >
                                        View Certificates
-                                    </button>
+                                    </a>
                                  </div>
                               </div>
                            )}

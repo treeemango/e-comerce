@@ -440,7 +440,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg text-slate-900 dark:text-white leading-tight">
-                                            {selectedConversation.other_user_name}
+                                            {selectedConversation.other_user_name || 'Unknown User'}
                                         </h3>
                                         {selectedConversation.product_title && (
                                             <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">

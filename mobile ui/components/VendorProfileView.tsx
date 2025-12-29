@@ -10,9 +10,10 @@ interface VendorProfileViewProps {
     vendorId: string;
     onBack: () => void;
     onProductClick: (p: Product) => void;
+    onVisualSearch?: (p: Product) => void;
 }
 
-export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, onBack, onProductClick }) => {
+export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, onBack, onProductClick, onVisualSearch }) => {
     const [vendor, setVendor] = useState<VendorFullProfile | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
@@ -44,7 +45,7 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                 setProducts(productsData);
 
                 if (currentUser && profileData) {
-                    const followStatus = await getFollowStatus(currentUser.id, vendorId);
+                    const followStatus = await getFollowStatus(currentUser.id, profileData.vendor_id);
                     if (followStatus) {
                         setIsFollowing(followStatus.is_following);
                         setFollowerCount(followStatus.follower_count);
@@ -76,9 +77,11 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
             return;
         }
 
+        if (!vendor) return;
+
         setIsFollowLoading(true);
         try {
-            const result = await toggleFollowStore(user.id, vendorId);
+            const result = await toggleFollowStore(user.id, vendor.vendor_id);
             if (result?.success) {
                 setIsFollowing(result.is_following);
                 setFollowerCount(result.follower_count);
@@ -94,6 +97,33 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
             console.error('Error toggling follow:', error);
         } finally {
             setIsFollowLoading(false);
+        }
+    };
+
+    const handleShare = async () => {
+        if (!vendor) return;
+
+        const url = `${window.location.origin}/?view=vendor-store&vendorId=${vendorId}`;
+        const shareData = {
+            title: vendor.business_name,
+            text: `Check out ${vendor.business_name} on JuaExpress!`,
+            url: url,
+        };
+
+        if (navigator.share) {
+            try {
+                await navigator.share(shareData);
+            } catch (err) {
+                console.error('Error sharing:', err);
+            }
+        } else {
+            try {
+                await navigator.clipboard.writeText(url);
+                // Simple alert for fallback, ideally utilize a toast system if available in this component context
+                alert('Store link copied to clipboard!');
+            } catch (err) {
+                console.error('Error copying to clipboard:', err);
+            }
         }
     };
 
@@ -132,9 +162,17 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                     "flex-1 px-4 transition-all duration-300",
                     scrolled ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
                 )}>
-                    <h1 className="font-black text-gray-900 dark:text-white text-sm truncate">{vendor.business_name}</h1>
+                    <h1 className="font-black text-gray-900 dark:text-white text-sm truncate flex items-center gap-1">
+                        {vendor.business_name}
+                        {vendor.is_verified && (
+                            <span className="material-icons text-sm text-blue-500" style={{ fontSize: '16px' }}>verified</span>
+                        )}
+                    </h1>
                 </div>
-                <button className="w-10 h-10 flex items-center justify-center bg-white/20 dark:bg-black/20 rounded-full backdrop-blur-md transition-all active:scale-90">
+                <button
+                    onClick={handleShare}
+                    className="w-10 h-10 flex items-center justify-center bg-white/20 dark:bg-black/20 rounded-full backdrop-blur-md transition-all active:scale-90"
+                >
                     <span className={cn("material-icons", scrolled ? "text-gray-900 dark:text-white" : "text-white")}>share</span>
                 </button>
             </div>
@@ -186,8 +224,11 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                     </div>
 
                     <div className="mb-6 text-left">
-                        <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight mb-1">
+                        <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight mb-1 flex items-center gap-1.5">
                             {vendor.business_name}
+                            {vendor.is_verified && (
+                                <span className="material-icons text-blue-500" style={{ fontSize: '24px' }}>verified</span>
+                            )}
                         </h2>
                         <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest">
                             <span className="flex items-center gap-1">
@@ -197,6 +238,13 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                             <span className="w-1 h-1 bg-gray-300 rounded-full" />
                             <span>Since {new Date(vendor.seller_since || Date.now()).getFullYear()}</span>
                         </div>
+
+                        {vendor.is_verified && (
+                            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30">
+                                <span className="material-icons text-sm text-blue-600 dark:text-blue-400">verified_user</span>
+                                <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Verified Seller</span>
+                            </div>
+                        )}
 
                         {/* Vendor Badges Section */}
                         {vendor.badges && vendor.badges.length > 0 && (
@@ -216,7 +264,7 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                                     const config = badgeConfig[badgeKey] || {
                                         icon: badge.badge_icon || 'military_tech',
                                         label: badge.badge_name || badge.badge_label || (badgeKey ? badgeKey.replace(/_/g, ' ') : 'Badge'),
-                                        bg: 'bg-gray-50 dark:bg-white/5',
+                                        bg: 'bg-gray-5 dark:bg-white/5',
                                         text: 'text-gray-600 dark:text-gray-400',
                                         border: 'border-gray-200 dark:border-white/10'
                                     };
@@ -292,7 +340,6 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                         <div className="mt-6 space-y-3">
                             <div className="flex items-center justify-between">
                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Business Authentication</h4>
-                                <span className="text-[9px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded-full uppercase tracking-widest border border-blue-100 dark:border-blue-500/20">Verified</span>
                             </div>
                             <div className="flex flex-col gap-2 text-left">
                                 {vendor.certificates.map((cert) => (
@@ -343,6 +390,7 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                                 key={p.id || idx}
                                 product={p}
                                 onProductClick={onProductClick}
+                                onVisualSearch={onVisualSearch}
                                 showSellerLine={false}
                             />
                         ))}

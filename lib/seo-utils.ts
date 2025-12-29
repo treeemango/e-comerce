@@ -1,4 +1,6 @@
 import { Product, VendorInfo } from '../types';
+import { generateCountryMetaTags, generateCountryBusinessSchema } from './country-seo';
+import { generateCategoryMetaTags, generateCategoryStructuredData, generateCategoryFAQData } from './category-seo';
 
 // Base configuration for your e-commerce site
 export const SITE_CONFIG = {
@@ -537,4 +539,146 @@ export function getSearchPageSEO(query: string, resultCount: number) {
         type: 'website',
         noindex: true, // Don't index search result pages
     };
+}
+
+/**
+ * Generate comprehensive hreflang tags for all supported countries
+ * This should be called dynamically based on the current page and available countries
+ */
+export function generateHreflangTags(currentUrl: string, pageType: 'home' | 'category' | 'product' = 'home') {
+    // Import country configs dynamically to avoid circular dependencies
+    const getCountryConfigs = async () => {
+        const { getSupportedCountryCodes, getCountrySEOConfig } = await import('./country-seo');
+        const countryCodes = getSupportedCountryCodes();
+        return countryCodes.map(code => getCountrySEOConfig(code)).filter(Boolean);
+    };
+
+    return getCountryConfigs().then(countryConfigs => {
+        const hreflangTags: string[] = [];
+
+        // Add x-default (default/fallback)
+        hreflangTags.push(`<link rel="alternate" hreflang="x-default" href="${SITE_CONFIG.url}" />`);
+
+        // Add country-specific alternates
+        countryConfigs.forEach(config => {
+            if (config) {
+                let countryUrl = SITE_CONFIG.url;
+
+                // Customize URL based on page type and country
+                switch (pageType) {
+                    case 'category':
+                        // For category pages, keep the same structure but add country param
+                        countryUrl = `${SITE_CONFIG.url}${currentUrl.replace(SITE_CONFIG.url, '')}?country=${config.countryCode.toLowerCase()}`;
+                        break;
+                    case 'product':
+                        // For product pages, keep the same structure but add country param
+                        countryUrl = `${SITE_CONFIG.url}${currentUrl.replace(SITE_CONFIG.url, '')}?country=${config.countryCode.toLowerCase()}`;
+                        break;
+                    default:
+                        // For home page, add country parameter
+                        countryUrl = `${SITE_CONFIG.url}?country=${config.countryCode.toLowerCase()}`;
+                }
+
+                hreflangTags.push(`<link rel="alternate" hreflang="${config.locale}" href="${countryUrl}" />`);
+            }
+        });
+
+        return hreflangTags.join('\n  ');
+    });
+}
+
+/**
+ * Inject hreflang tags into the document head
+ */
+export async function injectHreflangTags(currentUrl: string, pageType: 'home' | 'category' | 'product' = 'home') {
+    try {
+        const hreflangHtml = await generateHreflangTags(currentUrl, pageType);
+
+        // Remove existing hreflang tags
+        const existingHreflangs = document.querySelectorAll('link[rel="alternate"][hreflang]');
+        existingHreflangs.forEach(tag => tag.remove());
+
+        // Create a temporary container to parse HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = hreflangHtml;
+
+        // Append each link tag to head
+        const linkTags = tempDiv.querySelectorAll('link');
+        linkTags.forEach(tag => {
+            document.head.appendChild(tag);
+        });
+    } catch (error) {
+        console.error('Failed to inject hreflang tags:', error);
+    }
+}
+
+/**
+ * Generate country-specific canonical URL
+ */
+export function generateCanonicalUrl(baseUrl: string, countryCode?: string): string {
+    if (!countryCode || countryCode.toUpperCase() === 'KE') {
+        return baseUrl; // Default to Kenya
+    }
+    return `${baseUrl}?country=${countryCode.toLowerCase()}`;
+}
+
+/**
+ * Update page with country-specific SEO (meta tags, structured data, hreflang)
+ */
+export async function updateCountrySEO(countryConfig: any, pageType: 'home' | 'category' | 'product' = 'home', categoryConfig?: any) {
+    // Update meta tags
+    const metaTags = pageType === 'category' && categoryConfig
+        ? generateCategoryMetaTags(categoryConfig, countryConfig)
+        : generateCountryMetaTags(countryConfig, pageType);
+
+    updatePageMeta({
+        title: metaTags.title,
+        description: metaTags.description,
+        keywords: metaTags.keywords,
+        url: generateCanonicalUrl(window.location.href, countryConfig.countryCode),
+    });
+
+    // Inject country-specific structured data
+    const businessSchema = generateCountryBusinessSchema(countryConfig);
+    injectStructuredData(businessSchema, 'country-business-schema');
+
+    // Inject category-specific schema if applicable
+    if (pageType === 'category' && categoryConfig) {
+        const categorySchema = generateCategoryStructuredData(categoryConfig, countryConfig);
+        injectStructuredData(categorySchema, 'category-schema');
+
+        const faqSchema = generateCategoryFAQData(categoryConfig, countryConfig);
+        injectStructuredData(faqSchema, 'category-faq-schema');
+    }
+
+    // Update hreflang tags
+    await injectHreflangTags(window.location.href, pageType);
+}
+
+/**
+ * Initialize country-aware SEO for the current page
+ */
+export async function initializeCountrySEO(pageType: 'home' | 'category' | 'product' = 'home', categoryId?: string) {
+    try {
+        // Detect user's country
+        const { detectUserCountrySEO, getCountrySEOConfig } = await import('./country-seo');
+        const countryConfig = await detectUserCountrySEO();
+
+        // Get category config if applicable
+        let categoryConfig = null;
+        if (pageType === 'category' && categoryId) {
+            const { getCategorySEOConfig } = await import('./category-seo');
+            categoryConfig = getCategorySEOConfig(categoryId);
+        }
+
+        // Apply country-specific SEO
+        await updateCountrySEO(countryConfig, pageType, categoryConfig);
+
+        return { countryConfig, categoryConfig };
+    } catch (error) {
+        console.error('Failed to initialize country SEO:', error);
+        // Fallback to default Kenya config
+        const { COUNTRY_SEO_CONFIGS } = await import('./country-seo');
+        return { countryConfig: COUNTRY_SEO_CONFIGS['KE'], categoryConfig: null };
+    }
 }

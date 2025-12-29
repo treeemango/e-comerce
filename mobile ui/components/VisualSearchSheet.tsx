@@ -22,7 +22,11 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
     const [isCropping, setIsCropping] = useState(false);
     const [cropArea, setCropArea] = useState<CropArea | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [dragMode, setDragMode] = useState<'move' | 'resize' | null>(null);
     const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+    const [dragOrigin, setDragOrigin] = useState<{ x: number; y: number } | null>(null);
+    const [resizeCenter, setResizeCenter] = useState<{ x: number; y: number } | null>(null);
+    const [cropCursor, setCropCursor] = useState<React.CSSProperties['cursor']>('default');
     const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number; offsetX: number; offsetY: number } | null>(null);
 
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -114,57 +118,223 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
         }
     }, [capturedImage, isCropping, updateImageDimensions]);
 
-    // Handle crop area drawing
+    const clampCropToImage = useCallback((area: CropArea): CropArea => {
+        if (!imageDimensions) return area;
+
+        const minX = imageDimensions.offsetX;
+        const minY = imageDimensions.offsetY;
+        const maxX = imageDimensions.offsetX + imageDimensions.width;
+        const maxY = imageDimensions.offsetY + imageDimensions.height;
+
+        const width = Math.min(area.width, imageDimensions.width);
+        const height = Math.min(area.height, imageDimensions.height);
+
+        const x = Math.max(minX, Math.min(area.x, maxX - width));
+        const y = Math.max(minY, Math.min(area.y, maxY - height));
+
+        return { x, y, width, height };
+    }, [imageDimensions]);
+
+    const createDefaultCrop = useCallback((): CropArea | null => {
+        if (!imageDimensions) return null;
+        const size = Math.max(80, Math.floor(Math.min(imageDimensions.width, imageDimensions.height) * 0.7));
+        const x = imageDimensions.offsetX + (imageDimensions.width - size) / 2;
+        const y = imageDimensions.offsetY + (imageDimensions.height - size) / 2;
+        return clampCropToImage({ x, y, width: size, height: size });
+    }, [clampCropToImage, imageDimensions]);
+
+    const resizeCrop = useCallback((direction: 'smaller' | 'larger') => {
+        if (!cropArea || !imageDimensions) return;
+
+        const step = Math.floor(Math.min(imageDimensions.width, imageDimensions.height) * 0.12);
+        const delta = direction === 'larger' ? step : -step;
+
+        const centerX = cropArea.x + cropArea.width / 2;
+        const centerY = cropArea.y + cropArea.height / 2;
+
+        const newSize = Math.max(80, cropArea.width + delta);
+        const next = clampCropToImage({
+            x: centerX - newSize / 2,
+            y: centerY - newSize / 2,
+            width: newSize,
+            height: newSize
+        });
+
+        setCropArea(next);
+    }, [clampCropToImage, cropArea, imageDimensions]);
+
+    const getPointerClientXY = (e: React.MouseEvent | React.TouchEvent) => {
+        if ('touches' in e) {
+            const touch = e.touches[0] || e.changedTouches[0];
+            return { clientX: touch?.clientX ?? 0, clientY: touch?.clientY ?? 0 };
+        }
+        return { clientX: e.clientX, clientY: e.clientY };
+    };
+
+    const getCropHover = useCallback((x: number, y: number) => {
+        if (!cropArea) return { cursor: 'crosshair' as const, mode: null as null | 'move' | 'resize' };
+
+        const withinCrop = (
+            x >= cropArea.x &&
+            x <= cropArea.x + cropArea.width &&
+            y >= cropArea.y &&
+            y <= cropArea.y + cropArea.height
+        );
+
+        if (!withinCrop) return { cursor: 'crosshair' as const, mode: null as null | 'move' | 'resize' };
+
+        const border = 12;
+        const distLeft = Math.abs(x - cropArea.x);
+        const distRight = Math.abs((cropArea.x + cropArea.width) - x);
+        const distTop = Math.abs(y - cropArea.y);
+        const distBottom = Math.abs((cropArea.y + cropArea.height) - y);
+
+        const nearLeft = distLeft <= border;
+        const nearRight = distRight <= border;
+        const nearTop = distTop <= border;
+        const nearBottom = distBottom <= border;
+
+        const onBorder = nearLeft || nearRight || nearTop || nearBottom;
+        if (!onBorder) return { cursor: 'move' as const, mode: 'move' as const };
+
+        // Corner/edge resize cursors are the common "double arrow" affordance.
+        if ((nearLeft && nearTop) || (nearRight && nearBottom)) return { cursor: 'nwse-resize' as const, mode: 'resize' as const };
+        if ((nearRight && nearTop) || (nearLeft && nearBottom)) return { cursor: 'nesw-resize' as const, mode: 'resize' as const };
+        if (nearLeft || nearRight) return { cursor: 'ew-resize' as const, mode: 'resize' as const };
+        return { cursor: 'ns-resize' as const, mode: 'resize' as const };
+    }, [cropArea]);
+
+    // When entering crop mode, auto-create a centered crop box (touch friendly)
+    useEffect(() => {
+        if (!isCropping) return;
+        if (!capturedImage) return;
+        if (cropArea) return;
+
+        const defaultCrop = createDefaultCrop();
+        if (defaultCrop) setCropArea(defaultCrop);
+    }, [capturedImage, createDefaultCrop, cropArea, isCropping]);
+
+    // Handle crop box interaction (drag to move; tap to recenter)
     const handleMouseDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
         if (!isCropping || !imageContainerRef.current || !imageDimensions) return;
 
         const container = imageContainerRef.current;
         const rect = container.getBoundingClientRect();
 
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        const { clientX, clientY } = getPointerClientXY(e);
 
         const x = clientX - rect.left;
         const y = clientY - rect.top;
 
-        // Only start if within image bounds
-        if (x >= imageDimensions.offsetX &&
+        // Only operate within image bounds
+        const withinImage = (
+            x >= imageDimensions.offsetX &&
             x <= imageDimensions.offsetX + imageDimensions.width &&
             y >= imageDimensions.offsetY &&
-            y <= imageDimensions.offsetY + imageDimensions.height) {
-            setIsDragging(true);
-            setDragStart({ x, y });
-            setCropArea({ x, y, width: 0, height: 0 });
+            y <= imageDimensions.offsetY + imageDimensions.height
+        );
+        if (!withinImage) return;
+
+        // Ensure we have a crop box
+        if (!cropArea) {
+            const defaultCrop = createDefaultCrop();
+            if (defaultCrop) setCropArea(defaultCrop);
+            return;
         }
-    }, [isCropping, imageDimensions]);
+
+        const hover = getCropHover(x, y);
+        setCropCursor(hover.cursor);
+
+        if (hover.mode === 'resize') {
+            setIsDragging(true);
+            setDragMode('resize');
+            setDragStart({ x, y });
+            setResizeCenter({
+                x: cropArea.x + cropArea.width / 2,
+                y: cropArea.y + cropArea.height / 2
+            });
+            return;
+        }
+
+        if (hover.mode === 'move') {
+            setIsDragging(true);
+            setDragMode('move');
+            setDragStart({ x, y });
+            setDragOrigin({ x: cropArea.x, y: cropArea.y });
+            return;
+        }
+
+        // Tap outside the crop box (but inside image): recenter crop around tap
+        const half = cropArea.width / 2;
+        const next = clampCropToImage({
+            x: x - half,
+            y: y - half,
+            width: cropArea.width,
+            height: cropArea.height
+        });
+        setCropArea(next);
+    }, [clampCropToImage, createDefaultCrop, cropArea, getCropHover, imageDimensions, isCropping]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDragging || !dragStart || !imageContainerRef.current || !imageDimensions) return;
+        if (!isCropping || !imageContainerRef.current) return;
 
-        e.preventDefault();
         const container = imageContainerRef.current;
         const rect = container.getBoundingClientRect();
+        const { clientX, clientY } = getPointerClientXY(e);
+        const currentX = clientX - rect.left;
+        const currentY = clientY - rect.top;
 
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        if (cropArea) {
+            const hover = getCropHover(currentX, currentY);
+            setCropCursor(hover.cursor);
+        }
 
-        let currentX = clientX - rect.left;
-        let currentY = clientY - rect.top;
+        if (!isDragging || !dragStart || !cropArea || !dragMode) return;
+        // React may attach touchmove listeners as passive in some environments.
+        // Only call preventDefault when the event is cancelable.
+        if ('cancelable' in e && e.cancelable) {
+            e.preventDefault();
+        }
 
-        // Clamp to image bounds
-        currentX = Math.max(imageDimensions.offsetX, Math.min(currentX, imageDimensions.offsetX + imageDimensions.width));
-        currentY = Math.max(imageDimensions.offsetY, Math.min(currentY, imageDimensions.offsetY + imageDimensions.height));
+        if (dragMode === 'move') {
+            if (!dragOrigin || !imageDimensions) return;
+            const dx = currentX - dragStart.x;
+            const dy = currentY - dragStart.y;
 
-        const x = Math.min(dragStart.x, currentX);
-        const y = Math.min(dragStart.y, currentY);
-        const width = Math.abs(currentX - dragStart.x);
-        const height = Math.abs(currentY - dragStart.y);
+            const next = clampCropToImage({
+                x: dragOrigin.x + dx,
+                y: dragOrigin.y + dy,
+                width: cropArea.width,
+                height: cropArea.height
+            });
+            setCropArea(next);
+            return;
+        }
 
-        setCropArea({ x, y, width, height });
-    }, [isDragging, dragStart, imageDimensions]);
+        if (dragMode === 'resize') {
+            if (!resizeCenter) return;
+            // Keep crop square; resize based on distance from center.
+            const dx = Math.abs(currentX - resizeCenter.x);
+            const dy = Math.abs(currentY - resizeCenter.y);
+            const halfSize = Math.max(40, Math.max(dx, dy));
+            const size = halfSize * 2;
+
+            const next = clampCropToImage({
+                x: resizeCenter.x - size / 2,
+                y: resizeCenter.y - size / 2,
+                width: size,
+                height: size
+            });
+            setCropArea(next);
+        }
+    }, [clampCropToImage, cropArea, dragMode, dragOrigin, dragStart, getCropHover, imageDimensions, isCropping, isDragging, resizeCenter]);
 
     const handleMouseUp = useCallback(() => {
         setIsDragging(false);
+        setDragMode(null);
+        setDragStart(null);
+        setDragOrigin(null);
+        setResizeCenter(null);
     }, []);
 
     // Apply crop and get cropped image
@@ -207,11 +377,21 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
 
         setCropArea(null);
         setIsCropping(false);
+        setCropCursor('default');
+        setDragMode(null);
+        setResizeCenter(null);
     }, [capturedImage, cropArea, imageDimensions]);
 
     const cancelCrop = () => {
         setCropArea(null);
         setIsCropping(false);
+        setCropCursor('default');
+    };
+
+    const beginCropping = () => {
+        setCropArea(null);
+        setIsCropping(true);
+        setCropCursor('crosshair');
     };
 
     const handleSearch = async () => {
@@ -253,7 +433,7 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black">
             {/* Header */}
             <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/70 to-transparent p-4 flex items-center justify-between">
                 <button onClick={handleClose} className="p-2 text-white">
@@ -269,6 +449,7 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
             <div
                 ref={imageContainerRef}
                 className="flex-1 flex items-center justify-center relative overflow-hidden"
+                style={isCropping ? { cursor: cropCursor, touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
@@ -351,13 +532,29 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
                                     </div>
                                 )}
 
-                                {/* Instructions */}
+                                {/* Instructions (shown if crop box not ready yet) */}
                                 {!cropArea && (
                                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                         <div className="bg-black/70 px-6 py-4 rounded-2xl text-center">
                                             <span className="material-icons text-orange-500 text-3xl mb-2 block">crop</span>
-                                            <p className="text-white font-medium">Drag to select area</p>
-                                            <p className="text-white/60 text-sm mt-1">Focus on the product you want to find</p>
+                                            <p className="text-white font-medium">Preparing crop…</p>
+                                            <p className="text-white/60 text-sm mt-1">One moment</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Simple hint */}
+                                {cropArea && (
+                                    <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center pointer-events-none">
+                                        <div className="bg-black/70 px-4 py-2 rounded-full text-white/80 text-xs">
+                                            {dragMode === 'resize' ? (
+                                                <span className="inline-flex items-center gap-2">
+                                                    <span className="material-icons" style={{ fontSize: 16 }}>unfold_more</span>
+                                                    Resizing… drag border to adjust
+                                                </span>
+                                            ) : (
+                                                'Drag box to move • Drag border to resize'
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -460,7 +657,7 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
                                 Retake
                             </button>
                             <button
-                                onClick={() => setIsCropping(true)}
+                                onClick={beginCropping}
                                 className="flex-1 py-4 bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 border border-white/20"
                             >
                                 <span className="material-icons">crop</span>
@@ -478,7 +675,25 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
                 )}
 
                 {capturedImage && isCropping && (
-                    <div className="flex gap-3">
+                    <div className="flex flex-col gap-3">
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => resizeCrop('smaller')}
+                                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 border border-white/20"
+                            >
+                                <span className="material-icons">close_fullscreen</span>
+                                Smaller
+                            </button>
+                            <button
+                                onClick={() => resizeCrop('larger')}
+                                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 border border-white/20"
+                            >
+                                <span className="material-icons">open_in_full</span>
+                                Larger
+                            </button>
+                        </div>
+
+                        <div className="flex gap-3">
                         <button
                             onClick={cancelCrop}
                             className="flex-1 py-4 bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 border border-white/20"
@@ -494,6 +709,7 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
                             <span className="material-icons">check</span>
                             Apply Crop
                         </button>
+                        </div>
                     </div>
                 )}
             </div>

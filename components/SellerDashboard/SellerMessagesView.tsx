@@ -10,9 +10,10 @@ import { SellerConversation, SellerMessage } from '@/types';
 
 interface SellerMessagesViewProps {
     sellerId: string;
+    onNavigate?: (tab: string) => void;
 }
 
-const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId }) => {
+const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNavigate }) => {
     const [conversations, setConversations] = useState<SellerConversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<SellerConversation | null>(null);
     const [messages, setMessages] = useState<SellerMessage[]>([]);
@@ -129,10 +130,32 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId }) => 
 
     const filteredConversations = conversations.filter(conv =>
         searchQuery === '' ||
-        conv.buyer_display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (String(
+            (conv as any).buyer_display_name ||
+            (conv as any).buyer_full_name ||
+            (conv as any).buyer_name ||
+            (conv as any).other_party_name ||
+            (conv as any).other_user_name ||
+            ''
+        ).toLowerCase().includes(searchQuery.toLowerCase())) ||
         conv.product_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         conv.order_number?.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const getBuyerDisplayName = (conv: any) => {
+        return (
+            conv?.buyer_display_name ||
+            conv?.buyer_full_name ||
+            conv?.buyer_name ||
+            conv?.other_party_name ||
+            conv?.other_user_name ||
+            'Unknown Buyer'
+        );
+    };
+
+    const getBuyerAvatarUrl = (conv: any) => {
+        return conv?.buyer_avatar_url || conv?.buyer_avatar || conv?.other_user_avatar || null;
+    };
 
     return (
         <div className="flex h-[calc(100vh-120px)] bg-white rounded-lg shadow-sm overflow-hidden">
@@ -166,55 +189,60 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId }) => 
                             <p className="text-center">No conversations found</p>
                         </div>
                     ) : (
-                        filteredConversations.map((conv) => (
-                            <button
-                                key={conv.id}
-                                onClick={() => setSelectedConversation(conv)}
-                                className={`w-full text-left p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''
-                                    }`}
-                            >
-                                {/* Buyer Info */}
-                                <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                        {conv.buyer_avatar_url ? (
-                                            <img src={conv.buyer_avatar_url} alt={conv.buyer_display_name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="material-icons text-gray-400">person</span>
-                                        )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="font-medium text-gray-900 truncate">
-                                                {conv.buyer_display_name}
-                                            </span>
-                                            {conv.unread_count > 0 && (
-                                                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs font-medium rounded-full">
-                                                    {conv.unread_count}
-                                                </span>
-                                            )}
+                        <div className="p-2 space-y-2">
+                            {filteredConversations.map((conv) => {
+                                const unread = (conv.unread_count || 0) > 0;
+                                const selected = selectedConversation?.id === conv.id;
+                                return (
+                                    <button
+                                        key={conv.id}
+                                        onClick={() => setSelectedConversation(conv)}
+                                        className={`w-full text-left p-4 rounded-2xl border transition-all ${selected ? 'border-orange-200 bg-orange-50/40' : (unread ? 'border-orange-100 bg-orange-50/30' : 'border-gray-100 bg-white')}`}
+                                    >
+                                        <div className="flex items-start gap-4">
+                                            <div className="relative flex-shrink-0">
+                                                <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-100">
+                                                    {getBuyerAvatarUrl(conv) ? (
+                                                        <img src={getBuyerAvatarUrl(conv)} alt={getBuyerDisplayName(conv)} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 font-black text-xl bg-slate-50">
+                                                            {String(getBuyerDisplayName(conv) || 'B').slice(0, 1).toUpperCase()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {unread && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full border-2 border-white ring-2 ring-orange-500/20" />
+                                                )}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-start justify-between gap-3 mb-1">
+                                                    <h3 className={`text-sm font-black truncate ${unread ? 'text-orange-600' : 'text-gray-900'}`}>
+                                                        {getBuyerDisplayName(conv)}
+                                                    </h3>
+                                                    <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap uppercase tracking-tighter">
+                                                        {formatTimestamp(conv.last_message_at || conv.updated_at)}
+                                                    </span>
+                                                </div>
+
+                                                {conv.product_title && (
+                                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                                        <span className="material-icons text-[10px] text-gray-400">shopping_bag</span>
+                                                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[220px]">
+                                                            {conv.product_title}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                <p className={`text-xs truncate leading-snug ${unread ? 'font-bold text-gray-800' : 'text-gray-500 font-medium'}`}>
+                                                    {conv.last_message || 'Start chatting...'}
+                                                </p>
+                                            </div>
                                         </div>
-
-                                        {/* Product/Order Context */}
-                                        {conv.product_title && (
-                                            <div className="text-xs text-gray-600 mb-1 truncate">
-                                                <span className="material-icons text-xs align-middle mr-1">shopping_bag</span>
-                                                {conv.product_title}
-                                            </div>
-                                        )}
-                                        {conv.order_number && (
-                                            <div className="text-xs text-gray-600 mb-1">
-                                                <span className="material-icons text-xs align-middle mr-1">receipt</span>
-                                                Order #{conv.order_number}
-                                            </div>
-                                        )}
-
-                                        {/* Last Message */}
-                                        <p className="text-sm text-gray-600 truncate">{conv.last_message}</p>
-                                        <span className="text-xs text-gray-400 mt-1">{formatTimestamp(conv.last_message_at || conv.updated_at)}</span>
-                                    </div>
-                                </div>
-                            </button>
-                        ))
+                                    </button>
+                                );
+                            })}
+                        </div>
                     )}
                 </div>
             </div>
@@ -227,15 +255,15 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId }) => 
                         <div className="p-4 border-b border-gray-200 bg-gray-50">
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                                    {selectedConversation.buyer_avatar_url ? (
-                                        <img src={selectedConversation.buyer_avatar_url} alt={selectedConversation.buyer_display_name} className="w-full h-full object-cover" />
+                                    {getBuyerAvatarUrl(selectedConversation) ? (
+                                        <img src={getBuyerAvatarUrl(selectedConversation)} alt={getBuyerDisplayName(selectedConversation)} className="w-full h-full object-cover" />
                                     ) : (
                                         <span className="material-icons text-gray-400">person</span>
                                     )}
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className="font-semibold text-gray-900">{selectedConversation.buyer_display_name}</h3>
-                                    <p className="text-sm text-gray-600">{selectedConversation.buyer_email}</p>
+                                    <h3 className="font-semibold text-gray-900">{getBuyerDisplayName(selectedConversation)}</h3>
+                                    <p className="text-sm text-gray-600">{(selectedConversation as any).buyer_email || ''}</p>
                                 </div>
                             </div>
 
@@ -259,9 +287,21 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId }) => 
                                             <p className="text-xs text-gray-600">Order #{selectedConversation.order_number}</p>
                                         )}
                                         {selectedConversation.product_price && (
-                                            <p className="text-sm font-semibold text-orange-600">${selectedConversation.product_price.toFixed(2)}</p>
+                                            <p className="text-sm font-semibold text-orange-600">
+                                                KES {selectedConversation.product_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                            </p>
                                         )}
                                     </div>
+
+                                    {selectedConversation.order_id && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onNavigate?.('orders')}
+                                            className="ml-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50"
+                                        >
+                                            View Order
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -305,8 +345,10 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId }) => 
                                                 </div>
                                                 <div className={`flex items-center gap-1 mt-1 text-xs text-gray-500 ${isSeller ? 'justify-end' : 'justify-start'}`}>
                                                     <span>{formatMessageTime(message.created_at)}</span>
-                                                    {isSeller && message.is_read && (
-                                                        <span className="material-icons text-xs text-blue-500">done_all</span>
+                                                    {isSeller && (
+                                                        <span className={`material-icons text-xs ${message.is_read ? 'text-blue-500' : 'text-gray-400'}`}>
+                                                            {message.is_read ? 'done_all' : 'done'}
+                                                        </span>
                                                     )}
                                                 </div>
                                             </div>

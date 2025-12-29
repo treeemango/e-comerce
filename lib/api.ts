@@ -624,6 +624,90 @@ export const fetchProducts = async (): Promise<Product[]> => {
     });
 };
 
+export const fetchProductById = async (productId: string): Promise<Product | null> => {
+    console.log(`Fetching product by ID: ${productId}`);
+    const { data: item, error } = await supabase
+        .from('products_with_media')
+        .select('*')
+        .eq('id', productId)
+        .single();
+
+    if (error || !item) {
+        console.warn('Product not found in view, checking raw table:', error);
+        const { data: rawItem, error: rawError } = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', productId)
+            .single();
+
+        if (rawError || !rawItem) {
+            console.error('Error fetching product by ID:', rawError);
+            return null;
+        }
+        return rawItem as unknown as Product;
+    }
+
+    const summary = Array.isArray((item as any).product_review_summary)
+        ? (item as any).product_review_summary[0]
+        : (item as any).product_review_summary;
+    const ratingFromSummary = (item as any).average_rating ?? summary?.average_rating;
+    const reviewsFromSummary = (item as any).total_reviews ?? summary?.total_reviews;
+
+    return {
+        id: item.id,
+        title: item.title,
+        price: item.price,
+        originalPrice: item.originalPrice || item.original_price,
+        promoText: item.promoText || item.promo_text,
+        promoCode: item.promoCode || item.promo_code,
+        discountPercent: item.discountPercent || item.discount_percent,
+        currency: item.currency || 'USD',
+        seller_id: item.seller_id || item.vendor_id || undefined,
+        rating: (typeof ratingFromSummary === 'number' ? ratingFromSummary : (typeof item.rating === 'number' ? item.rating : 0)) || 0,
+        reviews: (typeof reviewsFromSummary === 'number' ? reviewsFromSummary : (typeof item.review_count === 'number' ? item.review_count : (typeof item.reviews === 'number' ? item.reviews : 0))) || 0,
+        image: item.featured_image_url || '',
+        media: item.gallery_media ? item.gallery_media.map((m: any) => ({
+            id: m.id,
+            type: m.type,
+            url: m.type === 'image' ? m.image_url : m.video_url,
+            thumbnail: m.thumbnail_url || m.image_url,
+            isMain: m.is_main
+        })) : [],
+        gallery_media: item.gallery_media,
+        badge: item.is_flash_sale ? 'FLASH SALE' : item.is_new ? 'NEW' : undefined,
+        deliveryDate: item.delivery_time_estimate || '3-5 days',
+        deliveryTimeEstimate: item.delivery_time_estimate || undefined,
+        deliveryTimeDays: item.delivery_time_days || undefined,
+        isExpressDelivery: item.is_express_delivery ?? false,
+        deliveryScope: item.delivery_scope || undefined,
+        delayCredit: item.delay_credit ?? 0,
+        delivery_locations: item.delivery_locations || [],
+        sale_unit: item.sale_unit || undefined,
+        description: item.description,
+        categoryId: item.category_id,
+        categoryName: item.category_name,
+        category: item.category,
+        stock: item.stock ?? item.stock_quantity ?? item.inventory ?? item.quantity ?? null,
+        status: item.status || 'approved',
+        lower_than_similar: item.lower_than_similar,
+        price_gap: item.price_gap,
+        deal_type: item.deal_type,
+        activeCoupon: item.activeCoupon,
+        deal_ends_at: item.deal_ends_at,
+        sold_count: item.sold_count,
+        has_quantity_discount: item.has_quantity_discount ?? false,
+        auto_discount_type: item.auto_discount_type,
+        auto_discount_buy_qty: item.auto_discount_buy_qty,
+        auto_discount_get_qty: item.auto_discount_get_qty,
+        auto_discount_name: item.auto_discount_name,
+        use_case_tags: item.use_case_tags,
+        free_delivery: item.free_delivery,
+        delivery_cost: item.delivery_cost,
+        listing_type: item.listing_type || 'direct_purchase',
+        condition: item.condition || 'new'
+    } as Product;
+};
+
 export const submitFeedback = async (
     message: string,
     category: string = 'general',
@@ -2760,6 +2844,21 @@ export const fetchTopPlatformReviews = async (limit: number = 20): Promise<Revie
             responses: []
         };
     });
+};
+
+export const fetchPlatformReviewCount = async (): Promise<number> => {
+    const { count, error } = await supabase
+        .from('enhanced_reviews')
+        .select('id', { count: 'exact', head: true }) // optimized: select only id with head:true
+        .eq('status', 'approved')
+        .not('platform_rating', 'is', null);
+
+    if (error) {
+        console.error('Error fetching platform review count:', error);
+        return 0;
+    }
+
+    return count || 0;
 };
 
 

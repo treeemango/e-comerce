@@ -20,7 +20,7 @@
       "description": "Browse our latest products",
       "url": "/?shortcut=shop",
       "icons": [
-        { "src": "/images/icon-96.png", "sizes": "96x96", "type": "image/png" }
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
       ]
     },
     {
@@ -29,7 +29,7 @@
       "description": "View your saved items",
       "url": "/wishlist?shortcut=wishlist",
       "icons": [
-        { "src": "/images/icon-96.png", "sizes": "96x96", "type": "image/png" }
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
       ]
     },
     {
@@ -38,7 +38,7 @@
       "description": "Review your cart and checkout",
       "url": "/cart?shortcut=cart",
       "icons": [
-        { "src": "/images/icon-96.png", "sizes": "96x96", "type": "image/png" }
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
       ]
     },
     {
@@ -47,78 +47,25 @@
       "description": "Manage your account and orders",
       "url": "/account?shortcut=account",
       "icons": [
-        { "src": "/images/icon-96.png", "sizes": "96x96", "type": "image/png" }
+        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
       ]
     }
   ],
   "icons": [
     {
-      "src": "/images/icon-72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/images/icon-384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/images/screenshot-mobile.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Mobile shopping experience"
-    },
-    {
-      "src": "/images/screenshot-desktop.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Desktop shopping experience"
-    }
-  ],
   "related_applications": [],
   "iarc_rating_id": "",
-  "gcm_sender_id": "482941778795",
-  "gcm_user_visible_only": true
+  "gcm_sender_id": ""
 }

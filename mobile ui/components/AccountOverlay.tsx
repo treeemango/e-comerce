@@ -172,7 +172,7 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
                         { icon: 'history', label: 'Browsing History', key: 'history' as const },
                         { icon: 'map', label: 'Delivery Addresses', key: 'addresses' as const },
                         { icon: 'headset_mic', label: 'Direct Support', key: 'support' as const },
-                        { icon: 'local_shipping', label: 'Partner Program', key: 'driver_access' as const, highlight: true },
+                        // { icon: 'local_shipping', label: 'Partner Program', key: 'driver_access' as const, highlight: true },
                         {
                             icon: 'notifications_none',
                             label: 'Notices',

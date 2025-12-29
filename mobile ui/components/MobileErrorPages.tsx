@@ -1,9 +1,13 @@
 import React from 'react';
 
+const IS_DEV = import.meta.env.DEV;
+
 interface MobileErrorPageProps {
     type: 'offline' | 'not-found' | 'server-error' | 'forbidden' | 'timeout' | 'generic';
     title?: string;
     message?: string;
+    referenceId?: string;
+    debugDetails?: string;
     onRetry?: () => void;
     onGoHome?: () => void;
     onGoBack?: () => void;
@@ -64,6 +68,8 @@ export const MobileErrorPage: React.FC<MobileErrorPageProps> = ({
     type,
     title,
     message,
+    referenceId,
+    debugDetails,
     onRetry,
     onGoHome,
     onGoBack
@@ -121,6 +127,12 @@ export const MobileErrorPage: React.FC<MobileErrorPageProps> = ({
                     {message || config.message}
                 </p>
 
+                {referenceId && (
+                    <p className="-mt-5 mb-8 text-[10px] text-gray-400 dark:text-gray-500 text-center">
+                        Reference: <span className="font-mono">{referenceId}</span>
+                    </p>
+                )}
+
                 {/* Action Buttons */}
                 <div className="w-full max-w-xs space-y-3">
                     {onRetry && (
@@ -149,6 +161,15 @@ export const MobileErrorPage: React.FC<MobileErrorPageProps> = ({
                     <span className="material-icons-round text-sm">help_outline</span>
                     <span className="text-[10px] font-bold uppercase tracking-widest">Need help? Contact support</span>
                 </div>
+
+                {IS_DEV && debugDetails && (
+                    <div className="mt-6 w-full max-w-xs bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800 rounded-2xl p-3 text-left">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">Developer details</p>
+                        <div className="mt-2 text-[11px] font-mono text-gray-700 dark:text-gray-200 overflow-auto max-h-40">
+                            {debugDetails}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Custom animations */}

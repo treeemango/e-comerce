@@ -9,9 +9,10 @@ interface MobileNotificationWrapperProps {
     user: User | null;
     onDataUpdate: (coupons: UserCoupon[], orders: BuyerOrder[]) => void;
     onReviewPrompt?: (orderId: string) => void;
+    onDeepLink?: (type: 'product' | 'order' | 'chat', id: string) => void;
 }
 
-export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps> = ({ user, onDataUpdate, onReviewPrompt }) => {
+export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps> = ({ user, onDataUpdate, onReviewPrompt, onDeepLink }) => {
     const { showNotification } = useNotifications();
     const hasInitialLoaded = useRef(false);
     const prevCouponsCount = useRef(0);
@@ -89,12 +90,16 @@ export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps>
                             if (isParcel && justShipped && order.delivery_otp) {
                                 showNotificationRef.current(
                                     `📦 Parcel Ready! Order #${order.id.slice(0, 8)} - Collection Code: ${order.delivery_otp}`,
-                                    'success'
+                                    'success',
+                                    8000,
+                                    () => onDeepLink?.('order', order.id)
                                 );
                             } else if (prevStatus && order.status && prevStatus !== order.status) {
                                 showNotificationRef.current(
                                     `Order #${order.id.slice(0, 8)} status updated to ${order.status}!`,
-                                    'info'
+                                    'info',
+                                    5000,
+                                    () => onDeepLink?.('order', order.id)
                                 );
                             }
                         });
@@ -118,12 +123,16 @@ export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps>
                                 if (order.order_status === 'paid') {
                                     showNotificationRef.current(
                                         `💰 Order #${order.order_id.slice(0, 8)} has been paid! Time to pack.`,
-                                        'success'
+                                        'success',
+                                        5000,
+                                        () => onDeepLink?.('order', order.order_id)
                                     );
                                 } else {
                                     showNotificationRef.current(
                                         `Order #${order.order_id.slice(0, 8)} status updated to ${order.order_status}.`,
-                                        'info'
+                                        'info',
+                                        5000,
+                                        () => onDeepLink?.('order', order.order_id)
                                     );
                                 }
                             }
@@ -131,7 +140,9 @@ export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps>
                             if (prevReturnStatus !== undefined && order.return_status && prevReturnStatus !== order.return_status) {
                                 showNotificationRef.current(
                                     `🔄 Return request for Order #${order.order_id.slice(0, 8)} is now ${order.return_status}.`,
-                                    'warning'
+                                    'warning',
+                                    5000,
+                                    () => onDeepLink?.('order', order.order_id)
                                 );
                             }
                         });
@@ -267,7 +278,9 @@ export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps>
                         payload.new.message_body || payload.new.message,
                         isReviewPrompt ? 'success' : ((payload.new.type || 'info') as any),
                         isReviewPrompt ? 15000 : 5000,
-                        isReviewPrompt && orderId ? () => onReviewPrompt?.(orderId) : undefined
+                        isReviewPrompt && orderId
+                            ? () => onReviewPrompt?.(orderId)
+                            : (orderId ? () => onDeepLink?.('order', orderId) : undefined)
                     );
 
                     // Mark as sent in the queue (optional, but good for tracking)
