@@ -551,7 +551,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
             <>
               <span className="material-icons text-shop-red text-3xl animate-pulse">local_fire_department</span>
               <h2 className="text-2xl font-bold ml-2 text-slate-900 dark:text-white uppercase">
-                Black Friday Deals
+                TRENDING DEALS
               </h2>
             </>
           )}

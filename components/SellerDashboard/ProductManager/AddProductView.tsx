@@ -199,6 +199,230 @@ const DELIVERY_SCOPE_OPTIONS = [
     { value: 'local', label: 'City / Local', detail: 'Deliver within one city or pickup radius.' }
 ];
 
+// Predefined regions for the regional delivery option
+const PREDEFINED_REGIONS = [
+    // Global Continents
+    { id: 'africa', name: 'Africa', icon: '🌍', group: 'Continents' },
+    { id: 'europe', name: 'Europe', icon: '🇪🇺', group: 'Continents' },
+    { id: 'asia', name: 'Asia', icon: '🌏', group: 'Continents' },
+    { id: 'north_america', name: 'North America', icon: '🌎', group: 'Continents' },
+    { id: 'south_america', name: 'South America', icon: '🌎', group: 'Continents' },
+    { id: 'oceania', name: 'Oceania', icon: '🌏', group: 'Continents' },
+    // African Sub-regions
+    { id: 'east_africa', name: 'East Africa', icon: '🌍', group: 'Africa' },
+    { id: 'west_africa', name: 'West Africa', icon: '🌍', group: 'Africa' },
+    { id: 'north_africa', name: 'North Africa', icon: '🌍', group: 'Africa' },
+    { id: 'southern_africa', name: 'Southern Africa', icon: '🌍', group: 'Africa' },
+    { id: 'central_africa', name: 'Central Africa', icon: '🌍', group: 'Africa' },
+    // European Sub-regions
+    { id: 'western_europe', name: 'Western Europe', icon: '🇪🇺', group: 'Europe' },
+    { id: 'eastern_europe', name: 'Eastern Europe', icon: '🇪🇺', group: 'Europe' },
+    { id: 'northern_europe', name: 'Northern Europe', icon: '🇪🇺', group: 'Europe' },
+    { id: 'southern_europe', name: 'Southern Europe', icon: '🇪🇺', group: 'Europe' },
+    // Asian Sub-regions
+    { id: 'middle_east', name: 'Middle East', icon: '🌏', group: 'Asia' },
+    { id: 'southeast_asia', name: 'Southeast Asia', icon: '🌏', group: 'Asia' },
+    { id: 'south_asia', name: 'South Asia', icon: '🌏', group: 'Asia' },
+    { id: 'east_asia', name: 'East Asia', icon: '🌏', group: 'Asia' },
+    { id: 'central_asia', name: 'Central Asia', icon: '🌏', group: 'Asia' },
+    // Economic Zones & Trade Blocs
+    { id: 'eac', name: 'East African Community (EAC)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'sadc', name: 'SADC (Southern Africa)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'ecowas', name: 'ECOWAS (West Africa)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'comesa', name: 'COMESA', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'eu', name: 'European Union (EU)', icon: '🇪🇺', group: 'Trade Blocs' },
+    { id: 'gcc', name: 'Gulf Cooperation Council (GCC)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'asean', name: 'ASEAN', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'nafta', name: 'NAFTA / USMCA', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'mercosur', name: 'Mercosur', icon: '🤝', group: 'Trade Blocs' },
+    // Worldwide
+    { id: 'worldwide', name: 'Worldwide / Global', icon: '🌐', group: 'Global' },
+];
+
+// Searchable Multi-Select for Regions
+interface RegionMultiSelectProps {
+    selectedRegions: string[];
+    onChange: (regions: string[]) => void;
+    placeholder?: string;
+}
+
+const RegionMultiSelect: React.FC<RegionMultiSelectProps> = ({
+    selectedRegions,
+    onChange,
+    placeholder = 'Search and select regions...'
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const containerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const filteredRegions = PREDEFINED_REGIONS.filter(region =>
+        region.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        region.group.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Group filtered regions
+    const groupedRegions = filteredRegions.reduce((acc, region) => {
+        if (!acc[region.group]) acc[region.group] = [];
+        acc[region.group].push(region);
+        return acc;
+    }, {} as Record<string, typeof PREDEFINED_REGIONS>);
+
+    const handleToggleRegion = (regionId: string) => {
+        if (selectedRegions.includes(regionId)) {
+            onChange(selectedRegions.filter(r => r !== regionId));
+        } else {
+            onChange([...selectedRegions, regionId]);
+        }
+    };
+
+    const getRegionName = (id: string) => {
+        const region = PREDEFINED_REGIONS.find(r => r.id === id);
+        return region ? region.name : id;
+    };
+
+    const getRegionIcon = (id: string) => {
+        const region = PREDEFINED_REGIONS.find(r => r.id === id);
+        return region?.icon || '📍';
+    };
+
+    return (
+        <div ref={containerRef} className="relative">
+            {/* Selected regions chips */}
+            {selectedRegions.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                    {selectedRegions.map(regionId => (
+                        <div
+                            key={regionId}
+                            className="bg-gradient-to-r from-orange-50 to-orange-100 text-orange-800 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm border border-orange-200 group hover:shadow-md transition-all"
+                        >
+                            <span>{getRegionIcon(regionId)}</span>
+                            <span>{getRegionName(regionId)}</span>
+                            <button
+                                type="button"
+                                onClick={() => handleToggleRegion(regionId)}
+                                className="text-orange-400 hover:text-red-500 transition-colors"
+                            >
+                                <span className="material-icons text-[14px]">close</span>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Search input trigger */}
+            <div
+                onClick={() => { setIsOpen(true); setTimeout(() => inputRef.current?.focus(), 100); }}
+                className={cn(
+                    "flex items-center gap-2 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all",
+                    isOpen
+                        ? "border-orange-500 bg-white shadow-lg shadow-orange-100/50"
+                        : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white"
+                )}
+            >
+                <span className="material-icons text-orange-500 text-lg">travel_explore</span>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onFocus={() => setIsOpen(true)}
+                    placeholder={placeholder}
+                    className="flex-1 bg-transparent outline-none text-sm font-medium text-gray-700 placeholder-gray-400"
+                />
+                <span className={cn(
+                    "material-icons text-gray-400 transition-transform",
+                    isOpen && "rotate-180"
+                )}>expand_more</span>
+            </div>
+
+            {/* Dropdown */}
+            {isOpen && (
+                <div className="absolute z-[70] w-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-80 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white sticky top-0 z-10">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Select Regions</span>
+                            {selectedRegions.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => onChange([])}
+                                    className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-wider"
+                                >
+                                    Clear All
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="overflow-y-auto flex-1 p-2">
+                        {Object.keys(groupedRegions).length === 0 ? (
+                            <div className="text-center py-8 text-gray-400">
+                                <span className="material-icons text-3xl mb-2">search_off</span>
+                                <p className="text-sm">No regions found</p>
+                            </div>
+                        ) : (
+                            Object.entries(groupedRegions).map(([group, regions]) => (
+                                <div key={group} className="mb-3">
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 py-1 sticky top-0 bg-white/90 backdrop-blur-sm">
+                                        {group}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1">
+                                        {regions.map(region => {
+                                            const isSelected = selectedRegions.includes(region.id);
+                                            return (
+                                                <button
+                                                    key={region.id}
+                                                    type="button"
+                                                    onClick={() => handleToggleRegion(region.id)}
+                                                    className={cn(
+                                                        "flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all text-sm",
+                                                        isSelected
+                                                            ? "bg-orange-100 text-orange-800 font-bold ring-1 ring-orange-200"
+                                                            : "hover:bg-gray-50 text-gray-700"
+                                                    )}
+                                                >
+                                                    <span className="text-base">{region.icon}</span>
+                                                    <span className="flex-1 truncate">{region.name}</span>
+                                                    {isSelected && (
+                                                        <span className="material-icons text-orange-600 text-sm">check_circle</span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                        <span className="text-xs text-gray-500">
+                            <strong className="text-orange-600">{selectedRegions.length}</strong> region(s) selected
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setIsOpen(false)}
+                            className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-700 transition-colors"
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onSuccess }) => {
     const [currentStep, setCurrentStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1348,51 +1572,51 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     </div>
                                 </div>
 
-                            {/* Product Type Selection - Moved from Step 3 */}
-                            <div className="pt-6 border-t border-gray-100 animate-fade-in">
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                                    <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-                                        <span className="material-icons text-lg">inventory_2</span>
-                                        Product Type
-                                    </h4>
-                                    <p className="text-sm text-blue-700 mb-4">Choose how you'll sell this product. You can change this later if needed.</p>
+                                {/* Product Type Selection - Moved from Step 3 */}
+                                <div className="pt-6 border-t border-gray-100 animate-fade-in">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                                        <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                            <span className="material-icons text-lg">inventory_2</span>
+                                            Product Type
+                                        </h4>
+                                        <p className="text-sm text-blue-700 mb-4">Choose how you'll sell this product. You can change this later if needed.</p>
 
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex items-center gap-3">
-                                            <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setHasVariants(!hasVariants)}
-                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${hasVariants ? 'bg-orange-600' : 'bg-gray-200'}`}
-                                            >
-                                                <span
-                                                    className={`${hasVariants ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
-                                                />
-                                            </button>
-                                            <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-3">
+                                                <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setHasVariants(!hasVariants)}
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${hasVariants ? 'bg-orange-600' : 'bg-gray-200'}`}
+                                                >
+                                                    <span
+                                                        className={`${hasVariants ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                                                    />
+                                                </button>
+                                                <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-3 p-3 bg-white rounded border">
+                                            {!hasVariants ? (
+                                                <div className="text-sm text-gray-600">
+                                                    <strong>Simple Product:</strong> Single price and stock level. Best for products without variations (e.g., a single book, toy, or accessory).
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm text-gray-600">
+                                                    <strong>Multiple Variants:</strong> Different prices and stock for variations (e.g., different sizes, colors). Each combination becomes a separate purchasable item.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div className="mt-3 p-3 bg-white rounded border">
-                                        {!hasVariants ? (
-                                            <div className="text-sm text-gray-600">
-                                                <strong>Simple Product:</strong> Single price and stock level. Best for products without variations (e.g., a single book, toy, or accessory).
-                                            </div>
-                                        ) : (
-                                            <div className="text-sm text-gray-600">
-                                                <strong>Multiple Variants:</strong> Different prices and stock for variations (e.g., different sizes, colors). Each combination becomes a separate purchasable item.
-                                            </div>
-                                        )}
+                                {/* Purchase Mode / Listing Type */}
+                                <div className="pt-8 border-t border-gray-100">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
+                                        <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
                                     </div>
-                                </div>
-                            </div>
-
-                            {/* Purchase Mode / Listing Type */}
-                            <div className="pt-8 border-t border-gray-100">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
-                                    <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
-                                </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {[
                                             { id: 'direct_purchase', icon: 'shopping_cart', title: 'Add to Cart', desc: 'Standard checkout', color: 'orange' },
@@ -2245,49 +2469,62 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
                                                 {deliveryScope === 'regional' ? 'Target Regions' : 'Specific Locations / Cities'}
                                             </label>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={deliveryLocationInput}
-                                                    onChange={e => setDeliveryLocationInput(e.target.value)}
-                                                    onKeyDown={e => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            if (deliveryLocationInput.trim()) {
-                                                                setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
-                                                                setDeliveryLocationInput('');
-                                                            }
-                                                        }
-                                                    }}
-                                                    placeholder={deliveryScope === 'regional' ? "Add region (e.g. Rift Valley, Coast)" : "Add city or radius (e.g. Nairobi CBD, 10km)"}
-                                                    className="flex-1 border-none bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-orange-500 outline-none shadow-sm"
+
+                                            {deliveryScope === 'regional' ? (
+                                                /* Modern searchable region multi-select for regional scope */
+                                                <RegionMultiSelect
+                                                    selectedRegions={deliveryLocations}
+                                                    onChange={setDeliveryLocations}
+                                                    placeholder="Search and select target regions..."
                                                 />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (deliveryLocationInput.trim()) {
-                                                            setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
-                                                            setDeliveryLocationInput('');
-                                                        }
-                                                    }}
-                                                    className="bg-orange-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center shadow-md active:scale-95 transition-all text-sm font-bold"
-                                                >
-                                                    Add
-                                                </button>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2 mt-3">
-                                                {deliveryLocations.map(loc => (
-                                                    <div key={loc} className="bg-white text-orange-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm border border-orange-100 group">
-                                                        {loc}
-                                                        <span
-                                                            className="material-icons text-[16px] cursor-pointer text-gray-300 group-hover:text-red-500 transition-colors"
-                                                            onClick={() => setDeliveryLocations(prev => prev.filter(l => l !== loc))}
+                                            ) : (
+                                                /* Original text input for local scope */
+                                                <>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={deliveryLocationInput}
+                                                            onChange={e => setDeliveryLocationInput(e.target.value)}
+                                                            onKeyDown={e => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    if (deliveryLocationInput.trim()) {
+                                                                        setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
+                                                                        setDeliveryLocationInput('');
+                                                                    }
+                                                                }
+                                                            }}
+                                                            placeholder="Add city or radius (e.g. Nairobi CBD, 10km)"
+                                                            className="flex-1 border-none bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-orange-500 outline-none shadow-sm"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (deliveryLocationInput.trim()) {
+                                                                    setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
+                                                                    setDeliveryLocationInput('');
+                                                                }
+                                                            }}
+                                                            className="bg-orange-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center shadow-md active:scale-95 transition-all text-sm font-bold"
                                                         >
-                                                            cancel
-                                                        </span>
+                                                            Add
+                                                        </button>
                                                     </div>
-                                                ))}
-                                            </div>
+                                                    <div className="flex flex-wrap gap-2 mt-3">
+                                                        {deliveryLocations.map(loc => (
+                                                            <div key={loc} className="bg-white text-orange-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm border border-orange-100 group">
+                                                                {loc}
+                                                                <span
+                                                                    className="material-icons text-[16px] cursor-pointer text-gray-300 group-hover:text-red-500 transition-colors"
+                                                                    onClick={() => setDeliveryLocations(prev => prev.filter(l => l !== loc))}
+                                                                >
+                                                                    cancel
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                 </div>

@@ -1,7 +1,72 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { fetchLightningDeals, LightningDealItem } from '@/lib/api';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 import { Product } from '@/types';
+
+const DealCardImage: React.FC<{ deal: LightningDealItem; title: string }> = ({ deal, title }) => {
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+    const images = useMemo(() => {
+        const gallery = Array.isArray((deal as any).gallery_media)
+            ? ((deal as any).gallery_media as any[])
+                .map((m) => m?.image_url || m?.thumbnail_url)
+                .filter((src): src is string => !!src)
+            : [];
+        const unique = Array.from(new Set([deal.image, ...gallery].filter(Boolean)));
+        return unique.length ? unique : [''];
+    }, [deal]);
+
+    useEffect(() => {
+        setActiveImageIndex(0);
+    }, [deal.id]);
+
+    const hasGallery = images.length > 1;
+
+    const navigateImage = (delta: number) => {
+        if (!hasGallery) return;
+        setActiveImageIndex((prev) => (prev + delta + images.length) % images.length);
+    };
+
+    return (
+        <div className="aspect-[4/5] relative bg-gray-100 dark:bg-gray-800">
+            <img src={images[activeImageIndex] || deal.image} alt={title} className="w-full h-full object-cover" />
+
+            {hasGallery && (
+                <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-between pointer-events-none opacity-0 invisible transition-opacity duration-200 group-hover:opacity-100 group-hover:visible group-active:opacity-100 group-active:visible group-focus-within:opacity-100 group-focus-within:visible">
+                    <button
+                        type="button"
+                        aria-label="Previous image"
+                        className="w-8 h-8 rounded-xl bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-90 transition-all border border-black/5 pointer-events-auto"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            navigateImage(-1);
+                        }}
+                        onTouchEnd={(e) => {
+                            e.stopPropagation();
+                        }}
+                    >
+                        <span className="material-icons-round text-gray-900 text-xl">chevron_left</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        aria-label="Next image"
+                        className="w-8 h-8 rounded-xl bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-90 transition-all border border-black/5 pointer-events-auto"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            navigateImage(1);
+                        }}
+                        onTouchEnd={(e) => {
+                            e.stopPropagation();
+                        }}
+                    >
+                        <span className="material-icons-round text-gray-900 text-xl">chevron_right</span>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface MobileLightningDealsRowProps {
     onProductClick: (product: Product) => void;
@@ -106,19 +171,17 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
                                 reviews: deal.reviews || 0
                             } as any as Product)}
                         >
-                            <div className="aspect-[4/5] relative bg-gray-100 dark:bg-gray-800">
-                                <img src={deal.image} alt={deal.title} className="w-full h-full object-cover" />
+                            <DealCardImage deal={deal} title={deal.title} />
 
-                                {/* Discount Tag */}
-                                <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-                                    -{deal.discountPercent}%
-                                </div>
+                            {/* Discount Tag */}
+                            <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                                -{deal.discountPercent}%
+                            </div>
 
-                                {/* Deal Type Badge */}
-                                <div className={`absolute bottom-2 left-2 right-2 bg-gradient-to-r ${badge.color} text-white text-[9px] font-bold px-2 py-1 rounded-lg shadow-lg flex items-center justify-center gap-1 backdrop-blur-sm`}>
-                                    <span className="material-icons text-[10px]">{badge.icon}</span>
-                                    {badge.text}
-                                </div>
+                            {/* Deal Type Badge */}
+                            <div className={`absolute bottom-[52px] left-2 right-2 bg-gradient-to-r ${badge.color} text-white text-[9px] font-bold px-2 py-1 rounded-lg shadow-lg flex items-center justify-center gap-1 backdrop-blur-sm`}>
+                                <span className="material-icons text-[10px]">{badge.icon}</span>
+                                {badge.text}
                             </div>
                             <div className="p-2">
                                 <div className="text-sm font-bold text-red-600 dark:text-red-400">

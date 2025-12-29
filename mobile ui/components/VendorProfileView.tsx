@@ -188,11 +188,8 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                     <div className="mb-6 text-left">
                         <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight mb-1">
                             {vendor.business_name}
-                            {vendor.is_verified && (
-                                <span className="material-icons text-blue-500 text-lg ml-2 align-middle">verified</span>
-                            )}
                         </h2>
-                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest">
                             <span className="flex items-center gap-1">
                                 <span className="material-icons text-xs text-blue-500">public</span>
                                 {vendor.business_country || 'Independent Seller'}
@@ -200,6 +197,52 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                             <span className="w-1 h-1 bg-gray-300 rounded-full" />
                             <span>Since {new Date(vendor.seller_since || Date.now()).getFullYear()}</span>
                         </div>
+
+                        {/* Vendor Badges Section */}
+                        {vendor.badges && vendor.badges.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {vendor.badges.map((badge, idx) => {
+                                    const badgeKey = badge.badge_type || badge.badge_name || '';
+                                    const badgeConfig: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {
+                                        speed_dove: { icon: 'flight', label: 'Speed Dove', bg: 'bg-sky-50 dark:bg-sky-900/30', text: 'text-sky-600 dark:text-sky-400', border: 'border-sky-200 dark:border-sky-800' },
+                                        new_seller: { icon: 'fiber_new', label: 'New Seller', bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800' },
+                                        free_delivery: { icon: 'local_shipping', label: 'Free Delivery', bg: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
+                                        nationwide_delivery: { icon: 'public', label: 'Nationwide Delivery', bg: 'bg-indigo-50 dark:bg-indigo-900/30', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800' },
+                                        trusted_shipper: { icon: 'verified_user', label: 'Trusted Shipper', bg: 'bg-teal-50 dark:bg-teal-900/30', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800' },
+                                        experienced_shipper: { icon: 'workspace_premium', label: 'Experienced Shipper', bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800' },
+                                        rising_star: { icon: 'trending_up', label: 'Rising Star', bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800' },
+                                        verified_seller: { icon: 'verified', label: 'Verified Seller', bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800' },
+                                    };
+                                    const config = badgeConfig[badgeKey] || {
+                                        icon: badge.badge_icon || 'military_tech',
+                                        label: badge.badge_name || badge.badge_label || (badgeKey ? badgeKey.replace(/_/g, ' ') : 'Badge'),
+                                        bg: 'bg-gray-50 dark:bg-white/5',
+                                        text: 'text-gray-600 dark:text-gray-400',
+                                        border: 'border-gray-200 dark:border-white/10'
+                                    };
+
+                                    return (
+                                        <div
+                                            key={(badgeKey || 'badge') + idx}
+                                            className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border", config.bg, config.text, config.border)}
+                                            title={badge.description || badge.badge_description || ''}
+                                        >
+                                            {badge.badge_icon_url ? (
+                                                <img
+                                                    src={badge.badge_icon_url}
+                                                    alt={config.label}
+                                                    className="w-4 h-4 object-contain"
+                                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                />
+                                            ) : (
+                                                <span className="material-icons text-sm">{config.icon}</span>
+                                            )}
+                                            <span className="text-[10px] font-black uppercase tracking-widest">{config.label}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* Stats Grid (2x2) */}

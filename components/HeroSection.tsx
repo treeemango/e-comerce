@@ -232,28 +232,28 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                     <span className="text-[10px] font-bold tracking-widest uppercase text-white/80">{deal.tag || 'TOP RATED'}</span>
                   </div>
 
-                  <h2 className={`text-4xl md:text-6xl font-black leading-none tracking-tight text-white transition-all duration-700 delay-500 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-[-40px] opacity-0'}`}>
+                  <h2 className={`text-4xl md:text-6xl font-black leading-tight tracking-tight text-white transition-all duration-700 delay-500 line-clamp-2 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-[-40px] opacity-0'}`}>
                     {deal.title}
                   </h2>
 
-                  <div className={`flex items-baseline gap-4 transition-all duration-700 delay-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-                    <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tighter">
+                  <div className={`flex flex-wrap items-baseline gap-x-4 gap-y-2 transition-all duration-700 delay-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                    <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tighter shrink-0">
                       {getPrice(deal.id, false)}
                     </span>
                     {deal.originalPrice > deal.price && (
-                      <span className="text-xl md:text-2xl text-white/40 line-through font-medium">
+                      <span className="text-xl md:text-2xl text-white/40 line-through font-medium shrink-0">
                         {getPrice(deal.id, true)}
                       </span>
                     )}
                     {(deal.discountPercent || 0) > 0 && (
-                      <span className={`text-sm font-bold px-3 py-1 rounded-lg bg-red-500 text-white animate-bounce flex items-center gap-1`}>
+                      <span className={`text-sm font-bold px-3 py-1 rounded-lg bg-red-500 text-white animate-bounce flex items-center gap-1 shrink-0`}>
                         <span className="material-icons text-xs">trending_down</span>
                         -{deal.discountPercent}%
                       </span>
                     )}
 
                     {(deal.rating || 0) > 0 && (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 backdrop-blur-md border border-amber-500/30">
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 backdrop-blur-md border border-amber-500/30 shrink-0">
                         <span className="material-icons text-amber-400 text-sm">star</span>
                         <span className="text-white font-bold text-sm">{(deal.rating || 0).toFixed(1)}</span>
                         {(deal.reviews || 0) > 0 && (

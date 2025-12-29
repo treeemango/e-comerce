@@ -11,6 +11,7 @@ interface ProductApprovalCardProps {
     canApprove: boolean;
     canReject: boolean;
     isProcessing: boolean;
+    embeddingReady: boolean;
 }
 
 const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
@@ -19,7 +20,8 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
     onReject,
     canApprove,
     canReject,
-    isProcessing
+    isProcessing,
+    embeddingReady
 }) => {
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
@@ -171,11 +173,24 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                         {canApprove && (
                             <button
                                 onClick={() => onApprove(product.id)}
-                                disabled={isProcessing}
-                                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-md hover:shadow-lg disabled:opacity-60"
+                                disabled={isProcessing || !embeddingReady}
+                                className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold shadow-md disabled:opacity-60 transition-all ${embeddingReady
+                                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg'
+                                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                title={!embeddingReady ? 'Waiting for AI embedding to be generated...' : 'Approve this product'}
                             >
-                                <i className="fas fa-check" />
-                                {isProcessing ? 'Processing...' : 'Approve'}
+                                {!embeddingReady ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin" />
+                                        <span>Generating AI...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-check" />
+                                        <span>{isProcessing ? 'Processing...' : 'Approve'}</span>
+                                    </>
+                                )}
                             </button>
                         )}
                         {!canApprove && !canReject && (
@@ -535,6 +550,7 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
     const [modelReady, setModelReady] = useState(false);
     const [modelProgress, setModelProgress] = useState(12);
     const [embeddingRun, setEmbeddingRun] = useState(false);
+    const [embeddingsCompleted, setEmbeddingsCompleted] = useState<Set<string>>(new Set());
     const modelTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
@@ -568,17 +584,28 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
             return;
         }
 
+        // Update progress while waiting - model download can take 1-2 minutes
         modelTimerRef.current = window.setInterval(() => {
-            setModelProgress(prev => Math.min(prev + Math.random() * 8 + 4, 92));
-        }, 420);
+            setModelProgress(prev => {
+                // Slowly increment but cap at 95% until model is actually ready
+                if (prev >= 95) return 95;
+                return prev + Math.random() * 3 + 1;
+            });
+        }, 800);
 
         try {
             await embeddingService.ensureInitialized();
+            // Model is now truly ready
             setModelProgress(100);
             setTimeout(() => setModelReady(true), 350);
         } catch (err) {
             console.error('Error initializing embedding model:', err);
-            setError('Unable to load AI tools. Please refresh the page.');
+            // Model took too long or failed - show error but still allow viewing products
+            setError('AI model is still loading. Embeddings will be generated when the model is ready. You can still approve/reject products.');
+            // Don't set modelReady to true - keep showing loading screen or set a reduced state
+            // For now, let's allow them to proceed but embeddings won't work
+            setModelProgress(100);
+            setTimeout(() => setModelReady(true), 350);
         } finally {
             if (modelTimerRef.current) {
                 clearInterval(modelTimerRef.current);
@@ -604,7 +631,23 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
 
     const processEmbeddings = async (pendingProducts: any[]) => {
         try {
-            if (!modelReady) {
+            const embeddingService = EmbeddingService.getInstance();
+
+            // Mark products that already have embeddings as ready
+            const alreadyHaveEmbeddings = pendingProducts.filter(p =>
+                p.main_image?.image_embedding || !p.main_image?.url
+            );
+            if (alreadyHaveEmbeddings.length > 0) {
+                setEmbeddingsCompleted(prev => {
+                    const newSet = new Set(prev);
+                    alreadyHaveEmbeddings.forEach(p => newSet.add(p.id));
+                    return newSet;
+                });
+                console.log(`[ProductApprovalView] ${alreadyHaveEmbeddings.length} products already have embeddings or no image.`);
+            }
+
+            // Double-check that the model is actually ready
+            if (!embeddingService.isReady()) {
                 console.log('[ProductApprovalView] Model not ready yet; deferring embedding generation.');
                 return;
             }
@@ -616,19 +659,36 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
 
             if (productsNeedingEmbedding.length === 0) {
                 console.log('[ProductApprovalView] All products already have embeddings.');
+                // Mark all products as ready
+                setEmbeddingsCompleted(prev => {
+                    const newSet = new Set(prev);
+                    pendingProducts.forEach(p => newSet.add(p.id));
+                    return newSet;
+                });
                 return;
             }
 
-            console.log(`[ProductApprovalView] Found ${productsNeedingEmbedding.length} products needing embeddings. Initializing model...`);
-            const embeddingService = EmbeddingService.getInstance();
+            console.log(`[ProductApprovalView] Found ${productsNeedingEmbedding.length} products needing embeddings.`);
 
             // CRITICAL: Wait for worker to be ready before proceeding
-            await embeddingService.ensureInitialized();
+            try {
+                await embeddingService.ensureInitialized();
+            } catch (err) {
+                console.warn('[ProductApprovalView] Could not initialize embedding model. Skipping embedding generation.', err);
+                return;
+            }
+
             console.log('[ProductApprovalView] Embedding model ready. Starting generation...');
 
             // Process sequentially
             for (const product of productsNeedingEmbedding) {
                 try {
+                    // Re-check readiness before each request in case something changed
+                    if (!embeddingService.isReady()) {
+                        console.log('[ProductApprovalView] Model became unavailable. Stopping embedding generation.');
+                        break;
+                    }
+
                     const imageUrl = product.main_image?.image_url || product.main_image?.url;
                     const mediaId = product.main_image?.media_id;
                     if (!imageUrl || !mediaId) continue;
@@ -638,6 +698,12 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                     const saved = await saveProductImageEmbedding(product.id, mediaId, embedding);
                     if (saved) {
                         console.log(`[ProductApprovalView] ✓ Saved embedding for ${product.title}`);
+                        // Mark this product's embedding as complete
+                        setEmbeddingsCompleted(prev => {
+                            const newSet = new Set(prev);
+                            newSet.add(product.id);
+                            return newSet;
+                        });
                     }
                 } catch (err) {
                     console.error(`[ProductApprovalView] Failed to generate embedding for ${product.title}:`, err);
@@ -849,6 +915,7 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                                 canApprove={canApprove}
                                 canReject={canReject}
                                 isProcessing={processingId === product.id}
+                                embeddingReady={embeddingsCompleted.has(product.id)}
                             />
                         );
                     })}

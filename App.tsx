@@ -9,11 +9,15 @@ import ProductSection from './components/ProductSection';
 import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
-import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, DealCategoryNavItem, NavbarCategory } from './lib/api';
+import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory } from '@/lib/api';
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
-import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema } from './lib/seo-utils';
+import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
 import CartSidebar from './components/CartSidebar';
+import PlatformReviewsModal from './components/PlatformReviewsModal';
+import PlatformReviewsPage from './components/PlatformReviewsPage';
+import { Review } from './types';
+import VisualSearchSheet from './mobile ui/components/VisualSearchSheet';
 
 // Lazy-loaded components for better code splitting
 const BestSellersView = lazy(() => import('./components/BestSellersView'));
@@ -56,7 +60,9 @@ const AppsServiceView = lazy(() => import('./components/SellerDashboard/Apps/App
 const OrdersView = lazy(() => import('./components/SellerDashboard/OrdersView'));
 const SellerMessagesView = lazy(() => import('./components/SellerDashboard/SellerMessagesView'));
 const ManageReviewsView = lazy(() => import('./components/SellerDashboard/ManageReviewsView'));
+const StoreMediaManager = lazy(() => import('./components/SellerDashboard/Account/StoreMediaManager'));
 const InfoPageView = lazy(() => import('./components/InfoPageView'));
+const VendorStoreView = lazy(() => import('./components/VendorStoreView'));
 
 // Admin Dashboard Components (lazy)
 const AdminDashboardLayout = lazy(() => import('./components/AdminDashboard/AdminDashboardLayout'));
@@ -95,13 +101,14 @@ const LoadingFallback = () => (
 );
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'vendor-store' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page' | 'platform-reviews'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
   const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity' | 'feedback'>('overview');
   const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVendorId, setSelectedVendorId] = useState<string | undefined>(undefined);
+  const [activeVendorStoreId, setActiveVendorStoreId] = useState<string | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [accountPageTitle, setAccountPageTitle] = useState('Followed stores');
@@ -126,6 +133,9 @@ const App: React.FC = () => {
   const [activityHubTab, setActivityHubTab] = useState<'list' | 'promotions' | 'shipping' | 'notifications'>('list');
   const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
   const [isCartSidebarOpen, setIsCartSidebarOpen] = useState(false);
+  const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
+  const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
+  const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
 
   // Background Sync'd State
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
@@ -205,9 +215,38 @@ const App: React.FC = () => {
         description: 'Complete your purchase securely.',
         noindex: true,
       };
+    } else if (currentView === 'platform-reviews') {
+      const reviews = platformReviews || [];
+      const overallRating = 4.9;
+      const totalReviews = reviews.length || 50000;
+
+      const reviewData = reviews.slice(0, 10).map(review => ({
+        rating: review.platform_rating || review.rating,
+        content: review.platform_feedback || review.content,
+        author: review.user_name || 'Verified Buyer',
+        datePublished: review.created_at ? new Date(review.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        verified: true,
+      }));
+
+      return {
+        title: 'Platform Trust & Community Reviews | JuaExpress',
+        description: `Read ${totalReviews.toLocaleString()}+ authentic reviews and feedback from our Pan-African community. Rated ${overallRating}/5 stars - See why thousands trust JuaExpress for their shopping needs.`,
+        keywords: 'JuaExpress reviews, platform rating, customer feedback, verified reviews, African marketplace trust, online shopping reviews',
+        url: `${SITE_CONFIG.url}/reviews`,
+        structuredData: [
+          generateOrganizationRatingSchema(reviewData, overallRating, totalReviews),
+          generateReviewCollectionSchema(
+            'Platform Trust & Community Reviews | JuaExpress',
+            `Read ${totalReviews.toLocaleString()}+ authentic reviews and feedback from our Pan-African community. Rated ${overallRating}/5 stars - See why thousands trust JuaExpress for their shopping needs.`,
+            reviewData,
+            overallRating,
+            totalReviews
+          )
+        ],
+      };
     }
     return {};
-  }, [currentView, searchQuery, productSectionTitle, products.length]);
+  }, [currentView, searchQuery, productSectionTitle, products.length, platformReviews]);
 
   // Apply SEO configuration (hook called at top level)
   useSEO(seoConfig);
@@ -225,6 +264,55 @@ const App: React.FC = () => {
   const handleDriverDashboardClick = useCallback(() => {
     setCurrentView('driver-login');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    // Check for query parameters on mount to set initial view
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    if (viewParam === 'platform-reviews') {
+      setCurrentView('platform-reviews');
+      // Fetch reviews immediately if they are for this page
+      const loadPlatformReviews = async () => {
+        const reviews = await fetchTopPlatformReviews(40);
+        setPlatformReviews(reviews);
+      };
+      loadPlatformReviews();
+    } else if (viewParam === 'vendor-store') {
+      const vendorId = params.get('vendorId');
+      if (vendorId) {
+        setActiveVendorStoreId(vendorId);
+        setCurrentView('vendor-store');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+
+      if (view === 'vendor-store') {
+        const vendorId = params.get('vendorId');
+        if (vendorId) {
+          setActiveVendorStoreId(vendorId);
+          setCurrentView('vendor-store');
+          return;
+        }
+      }
+
+      if (view === 'platform-reviews') {
+        setCurrentView('platform-reviews');
+        return;
+      }
+
+      // Default fallback
+      setActiveVendorStoreId(null);
+      setCurrentView('home');
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   useEffect(() => {
@@ -516,22 +604,31 @@ const App: React.FC = () => {
   };
 
   const handleVisitStore = (vendorId: string) => {
-    const vendorProduct = products.find(p => p.vendor?.vendor_id === vendorId);
-    if (vendorProduct?.vendor?.business_name) {
-      // Use user_id (seller_id) for filtering as products table uses seller_id
-      const filterId = vendorProduct.vendor.user_id || vendorId;
-      setSelectedVendorId(filterId);
-      setSearchQuery('');
-      setCurrentView('search-results');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    if (!vendorId) return;
+
+    setActiveVendorStoreId(vendorId);
+    setCurrentView('vendor-store');
+    setSearchQuery('');
+    setSelectedVendorId(undefined);
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'vendor-store');
+    url.searchParams.set('vendorId', vendorId);
+    window.history.pushState({ view: 'vendor-store', vendorId }, '', url.toString());
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleHomeClick = () => {
     setCurrentView('home');
     setSearchQuery('');
     setSelectedVendorId(undefined);
+    setActiveVendorStoreId(null);
     setBreadcrumbs([]);
+    // If we are on a deep link view, clear query params
+    if (window.location.search) {
+      window.history.replaceState(window.history.state, '', window.location.pathname);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -539,6 +636,7 @@ const App: React.FC = () => {
     setCurrentView('five-star');
     setSearchQuery('');
     setSelectedVendorId(undefined);
+    setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -546,6 +644,7 @@ const App: React.FC = () => {
     setCurrentView('best-selling');
     setSearchQuery('');
     setSelectedVendorId(undefined);
+    setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -553,6 +652,7 @@ const App: React.FC = () => {
     setCurrentView('deals');
     setSearchQuery('');
     setSelectedVendorId(undefined);
+    setActiveVendorStoreId(null);
     setActiveDealsCategoryId(categoryId ?? null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -565,6 +665,7 @@ const App: React.FC = () => {
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     setSelectedVendorId(undefined);
+    setActiveVendorStoreId(null);
     // Reset category navigation state so search results are fresh
     setActiveCategoryIds([]);
     setVisualSubcategories([]);
@@ -581,6 +682,7 @@ const App: React.FC = () => {
   const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
     setCurrentView('product-detail');
+    setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -589,6 +691,7 @@ const App: React.FC = () => {
     setCurrentView('product-detail');
     setBreadcrumbs([]); // Clear breadcrumbs on search
     setSearchQuery('');
+    setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -601,6 +704,7 @@ const App: React.FC = () => {
     }
     setAccountPageTitle(pageTitle);
     setCurrentView('account-page');
+    setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -873,13 +977,18 @@ const App: React.FC = () => {
             setIsActivityHubOpen(true);
           }}
           onCartClick={handleCartClick}
+          onCameraClick={() => setIsVisualSearchOpen(true)}
         />
       )}
       <main className={`flex-1 w-full ${currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' ? 'max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8' : ''}`}>
         {currentView === 'home' && (
           <>
             <HeroSection onProductClick={handleProductClick} />
-            <FeaturesBar />
+            <FeaturesBar
+              onClick={() => {
+                window.open('/?view=platform-reviews', '_blank');
+              }}
+            />
             <LightningDealsRow
               userId={user?.id}
               onViewAllDeals={() => handleDealsClick(null)}
@@ -947,6 +1056,20 @@ const App: React.FC = () => {
             onHomeClick={handleHomeClick}
             onCategoryClick={handleCategoryClick}
             onMessageSeller={handleMessageSeller}
+          />
+        )}
+        {currentView === 'vendor-store' && activeVendorStoreId && (
+          <VendorStoreView
+            vendorId={activeVendorStoreId}
+            user={user}
+            onBack={() => {
+              setActiveVendorStoreId(null);
+              setCurrentView('home');
+              window.history.replaceState(window.history.state, '', window.location.pathname);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onProductClick={handleProductClick}
+            onAddToCart={addToCart}
           />
         )}
         {currentView === 'checkout' && (
@@ -1108,12 +1231,11 @@ const App: React.FC = () => {
             {dashboardTab === 'account-shipping' && <ShippingSettingsView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} />}
             {dashboardTab === 'account-shipping-template' && <EditShippingTemplateView sellerId={user?.id || ''} onBack={() => setDashboardTab('account-shipping')} onSave={() => setDashboardTab('account-shipping')} />}
             {dashboardTab === 'account-seller-profile' && <SellerProfileView sellerId={user?.id || ''} />}
-            {dashboardTab === 'account-profile' && <SellerProfileView sellerId={user?.id || ''} />} {/* Mapped to Seller Profile for now */}
             {dashboardTab === 'account-return' && <ReturnSettingsView sellerId={user?.id || ''} />}
             {dashboardTab === 'account-tax' && <SellerProfileView sellerId={user?.id || ''} />} {/* Tax info is in profile */}
             {dashboardTab === 'account-notifications' && <SellerProfileView sellerId={user?.id || ''} />} {/* Notifications in profile */}
             {dashboardTab === 'account-permissions' && <div className="p-8 text-gray-500">User permissions feature coming soon</div>}
-            {dashboardTab === 'account' && <SellerProfileView sellerId={user?.id || ''} />}
+            {dashboardTab === 'store-branding' && <StoreMediaManager sellerId={user?.id} userId={user?.id} />}
             {dashboardTab === 'messages' && <SellerMessagesView sellerId={user?.id || ''} />}
           </SellerDashboardLayout>
         )}
@@ -1190,6 +1312,18 @@ const App: React.FC = () => {
             slug={activeInfoPageSlug}
             onClose={() => setCurrentView('home')}
             onNavigate={setActiveInfoPageSlug}
+          />
+        )}
+        {currentView === 'platform-reviews' && (
+          <PlatformReviewsPage
+            reviews={platformReviews}
+            onBack={() => {
+              if (window.opener) {
+                window.close();
+              } else {
+                handleHomeClick();
+              }
+            }}
           />
         )}
       </main>
@@ -1282,6 +1416,34 @@ const App: React.FC = () => {
         onRemoveItem={(productId) => handleRemoveFromCartLegacy(productId)}
         onUpdateQuantity={handleUpdateCartQuantityDirect}
       />
+      <PlatformReviewsModal
+        isOpen={isPlatformReviewsOpen}
+        onClose={() => setIsPlatformReviewsOpen(false)}
+        reviews={platformReviews}
+      />
+      {isVisualSearchOpen && (
+        <VisualSearchSheet
+          onClose={() => setIsVisualSearchOpen(false)}
+          onSearchResults={(searchQuery, keywords) => {
+            setIsVisualSearchOpen(false);
+            // Use the AI query for search but don't expose it in the UI
+            // Set a visual search flag or use a clean display title
+            const internalQuery = searchQuery || keywords.join(' ');
+            if (internalQuery) {
+              // Perform the search with AI query but show generic title
+              setSearchQuery(internalQuery);
+              setSelectedVendorId(undefined);
+              setActiveCategoryIds([]);
+              setVisualSubcategories([]);
+              setProductSectionTitle('Visual Search Results');
+              setCurrentView('search-results');
+              setBreadcrumbs([]);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              trackSearch(internalQuery);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -7,8 +7,8 @@ export const SITE_CONFIG = {
     description: 'Your African shopping destination - Modern e-commerce with personalized recommendations, fast delivery, and exceptional customer service',
     url: typeof window !== 'undefined' ? window.location.origin : 'https://juaexpress.com',
     logo: '/images/icon-512.png',
-    email: 'support@juaexpress.com',
-    phone: '+254-700-000-000',
+    email: 'juaexpress01@gmail.com',
+    phone: '0792345628',
     country: 'Kenya',
     currency: 'KES',
     locale: 'en_KE',
@@ -188,6 +188,146 @@ export function generateFAQSchema(faqs: Array<{ question: string; answer: string
 }
 
 /**
+ * Generate Organization AggregateRating structured data
+ * Perfect for platform/company reviews and ratings
+ */
+export function generateOrganizationRatingSchema(reviews: Array<{
+    rating: number;
+    content: string;
+    author: string;
+    datePublished: string;
+    verified?: boolean;
+}>, overallRating: number, totalReviews: number) {
+    const schema: any = {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: SITE_CONFIG.fullName,
+        url: SITE_CONFIG.url,
+        logo: `${SITE_CONFIG.url}${SITE_CONFIG.logo}`,
+        description: SITE_CONFIG.description,
+        aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: overallRating,
+            reviewCount: totalReviews,
+            bestRating: 5,
+            worstRating: 1,
+        },
+        review: reviews.slice(0, 10).map(review => ({
+            '@type': 'Review',
+            author: {
+                '@type': 'Person',
+                name: review.author,
+            },
+            reviewRating: {
+                '@type': 'Rating',
+                ratingValue: review.rating,
+                bestRating: 5,
+                worstRating: 1,
+            },
+            reviewBody: review.content,
+            datePublished: review.datePublished,
+            ...(review.verified && {
+                additionalProperty: {
+                    '@type': 'PropertyValue',
+                    name: 'Verified Purchase',
+                    value: 'true',
+                },
+            }),
+        })),
+    };
+
+    return schema;
+}
+
+/**
+ * Generate WebPage with Review collection structured data
+ * For review aggregation pages
+ */
+export function generateReviewCollectionSchema(
+    pageTitle: string,
+    pageDescription: string,
+    reviews: Array<{
+        rating: number;
+        content: string;
+        author: string;
+        datePublished: string;
+        verified?: boolean;
+    }>,
+    overallRating: number,
+    totalReviews: number
+) {
+    return {
+        '@context': 'https://schema.org',
+        '@graph': [
+            {
+                '@type': 'WebPage',
+                '@id': `${SITE_CONFIG.url}/reviews#webpage`,
+                url: `${SITE_CONFIG.url}/reviews`,
+                name: pageTitle,
+                description: pageDescription,
+                isPartOf: {
+                    '@type': 'WebSite',
+                    '@id': `${SITE_CONFIG.url}#website`,
+                    url: SITE_CONFIG.url,
+                    name: SITE_CONFIG.fullName,
+                    publisher: {
+                        '@type': 'Organization',
+                        '@id': `${SITE_CONFIG.url}#organization`,
+                        name: SITE_CONFIG.fullName,
+                        logo: {
+                            '@type': 'ImageObject',
+                            url: `${SITE_CONFIG.url}${SITE_CONFIG.logo}`,
+                        },
+                    },
+                },
+                about: {
+                    '@type': 'Organization',
+                    '@id': `${SITE_CONFIG.url}#organization`,
+                    name: SITE_CONFIG.fullName,
+                    aggregateRating: {
+                        '@type': 'AggregateRating',
+                        ratingValue: overallRating,
+                        reviewCount: totalReviews,
+                        bestRating: 5,
+                        worstRating: 1,
+                    },
+                },
+                mainEntity: {
+                    '@type': 'ItemList',
+                    numberOfItems: reviews.length,
+                    itemListElement: reviews.slice(0, 20).map((review, index) => ({
+                        '@type': 'ListItem',
+                        position: index + 1,
+                        item: {
+                            '@type': 'Review',
+                            author: {
+                                '@type': 'Person',
+                                name: review.author,
+                            },
+                            reviewRating: {
+                                '@type': 'Rating',
+                                ratingValue: review.rating,
+                                bestRating: 5,
+                                worstRating: 1,
+                            },
+                            reviewBody: review.content,
+                            datePublished: review.datePublished,
+                            ...(review.verified && {
+                                additionalProperty: {
+                                    '@type': 'PropertyValue',
+                                    name: 'Verified Purchase',
+                                    value: 'true',
+                                },
+                            }),
+                        },
+                    })),
+                },
+            },
+        ],
+    };
+}
+
+/**
  * Generate Article structured data
  * Perfect for corporate, news, and complex info pages
  */
@@ -337,23 +477,25 @@ export function removeStructuredData(id = 'structured-data') {
  * Generate complete page SEO config for product detail page
  */
 export function getProductPageSEO(product: Product, vendor?: VendorInfo) {
-    const price = product.price.toLocaleString('en-KE', { style: 'currency', currency: SITE_CONFIG.currency });
+    const price = typeof product.price === 'number'
+        ? product.price.toLocaleString('en-KE', { style: 'currency', currency: SITE_CONFIG.currency })
+        : '';
 
     // Priority: Product SEO Title > Derived Title
-    const title = product.seo_title || `${product.title} - ${price}`;
+    const title = (product as any).seo_title || (price ? `${product.title} - ${price}` : product.title);
 
     // Priority: Product Meta Description > Derived Description
-    let description = product.meta_description;
+    let description = (product as any).meta_description;
     if (!description) {
         description = product.description
-            ? `${product.description.substring(0, 150)}... Price: ${price}. ${product.rating ? `Rated ${product.rating}/5 from ${product.reviews} reviews.` : ''}`
-            : `Buy ${product.title} at ${price}. ${vendor?.business_name ? `Sold by ${vendor.business_name}.` : ''} Fast delivery on JuaExpress.`;
+            ? `${product.description.substring(0, 150)}... ${price ? `Price: ${price}. ` : ''}${product.rating ? `Rated ${product.rating}/5 from ${product.reviews} reviews.` : ''}`
+            : `Buy ${product.title}${price ? ` at ${price}` : ''}. ${vendor?.business_name ? `Sold by ${vendor.business_name}.` : ''} Fast delivery on JuaExpress.`;
     }
 
     // Append keywords
     const keywords = [
-        ...(product.seo_keywords || []),
-        ...(product.tags || []),
+        ...((product as any).seo_keywords || []),
+        ...((product as any).tags || []),
         product.title,
         product.categoryName || 'products',
         'online shopping',
@@ -366,7 +508,7 @@ export function getProductPageSEO(product: Product, vendor?: VendorInfo) {
         description,
         keywords,
         image: product.image,
-        url: product.canonical_url || `${SITE_CONFIG.url}/product/${product.id}`,
+        url: (product as any).canonical_url || `${SITE_CONFIG.url}/product/${product.id}`,
         type: 'product',
         noindex: !product.title // Example safety, though usually we want to index
     };

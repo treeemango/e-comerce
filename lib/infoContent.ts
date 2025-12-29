@@ -224,12 +224,12 @@ export const infoContent: Record<string, InfoPageContent> = {
         sections: [
             {
                 title: '24/7 Customer Support',
-                content: 'For questions about orders, shipping, or returns, our team is available around the clock.\nEmail: support@juaexpress.com\nLive Chat: Available in the JuaExpress App and on the website.',
+                content: 'For questions about orders, shipping, or returns, our team is available around the clock.\nEmail: juaexpress01@gmail.com\nLive Chat: Available in the JuaExpress App and on the website.',
                 icon: 'support_agent'
             },
             {
                 title: 'Business & Vendor Partnerships',
-                content: 'Interested in selling on JuaExpress or exploring corporate partnerships?\nEmail: partnerships@juaexpress.com\nSeller Portal: seller.juaexpress.com',
+                content: 'Interested in selling on JuaExpress or exploring corporate partnerships?\nEmail: juaexpress01@gmail.com\nSeller Portal: seller.juaexpress.com',
                 icon: 'handshake'
             },
             {
@@ -239,7 +239,7 @@ export const infoContent: Record<string, InfoPageContent> = {
             },
             {
                 title: 'Media & Legal',
-                content: 'Press Inquiries: press@juaexpress.com\nLegal Department: legal@juaexpress.com',
+                content: 'Press Inquiries: juaexpress01@gmail.com\nLegal Department: juaexpress01@gmail.com',
                 icon: 'gavel'
             }
         ]
@@ -306,7 +306,7 @@ export const infoContent: Record<string, InfoPageContent> = {
             },
             {
                 title: 'Media Contact',
-                content: 'For press inquiries, please reach out to our communications team at press@juaexpress.com.',
+                content: 'For press inquiries, please reach out to our communications team at juaexpress01@gmail.com.',
                 icon: 'mail'
             }
         ]

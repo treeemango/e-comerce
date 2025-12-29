@@ -98,6 +98,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
 
   const showVideo = isHovered && hasVideo && isVideoPlaying;
   const videoMedia = validMedia.find(m => m.type === 'video' || m.type === 'youtube');
+  // Check if product has its own rating - only show if product has actual reviews
+  // Products with 0 reviews but a rating value are showing inherited vendor ratings - hide those
   const hasProductRating = (product.rating ?? 0) > 0 && (product.reviews ?? 0) > 0;
   const hasVendorRating = (product.vendor?.vendor_rating ?? 0) > 0 && (product.vendor?.review_count ?? 0) > 0;
   const hasStock = typeof product.stock === 'number' && product.stock >= 0;
@@ -105,7 +107,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
   const computedDiscountPercent = hasStrikePrice
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : (product.discountPercent ?? product.discount_percent ?? 0);
-  const locationLabel = product.vendor?.business_country;
+  const locationLabel = product.vendor?.business_country || (product as any).vendorCountry || (product as any).vendor_country;
 
   const couponValue = product.activeCoupon
     ? product.activeCoupon.amount
@@ -405,15 +407,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
             </div>
           )}
 
-          {showVendorMeta && product.vendor && hasVendorRating && (
-            <div className="mb-2 flex items-center justify-end gap-2">
-              <span className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-                <span className="material-icons !text-[12px] text-slate-900 dark:text-slate-100">star</span>
-                <span className="font-bold text-slate-700 dark:text-slate-200">{product.vendor.vendor_rating?.toFixed(1)}</span>
-                <span>({product.vendor.review_count})</span>
-              </span>
-            </div>
-          )}
+          {/* Vendor rating removed from product cards - only product-specific ratings should be shown */}
 
           {(() => {
             const deliveryLabel = product.deliveryTimeEstimate
@@ -451,8 +445,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                     </span>
                   </span>
                 )}
-                {/* Only show country badge if no specific delivery_locations are set */}
-                {locationLabel && !(product.delivery_locations && product.delivery_locations.length > 0) && (
+                {/* Always show vendor country alongside local/nationwide delivery */}
+                {locationLabel && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/30 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
                     <span className="material-icons !text-[13px] leading-none">public</span>
                     <span className="leading-none">{locationLabel}</span>

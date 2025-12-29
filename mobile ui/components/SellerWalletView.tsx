@@ -7,9 +7,11 @@ import { supabase } from '../../lib/supabase';
 
 interface SellerWalletViewProps {
     sellerId: string;
+    onBack?: () => void;
+    stats?: any;
 }
 
-export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId }) => {
+export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId, onBack }) => {
     const [balance, setBalance] = useState<SellerBalanceSummary | null>(null);
     const [payouts, setPayouts] = useState<SellerPayout[]>([]);
     const [loading, setLoading] = useState(true);
@@ -101,6 +103,19 @@ export const SellerWalletView: React.FC<SellerWalletViewProps> = ({ sellerId }) 
                 <div className="absolute top-0 right-0 p-4 opacity-5">
                     <span className="material-icons text-9xl text-orange-600">account_balance_wallet</span>
                 </div>
+
+                <div className="relative z-20 flex items-center gap-3 mb-6">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-2xl active:scale-90 transition-transform"
+                        >
+                            <span className="material-icons-round text-gray-600 dark:text-gray-400 text-lg">arrow_back</span>
+                        </button>
+                    )}
+                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Wallet & Payouts</h2>
+                </div>
+
                 <div className="relative z-10 text-center">
                     <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">Total Available</p>
                     <h1 className="text-5xl font-black text-slate-800 tracking-tight mb-6">

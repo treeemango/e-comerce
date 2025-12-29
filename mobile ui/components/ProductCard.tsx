@@ -14,6 +14,23 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, onVisualSearch, onAddToCart, showSellerLine = false }) => {
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [isPressed, setIsPressed] = useState(false);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+    const images = useMemo(() => {
+        const gallery = Array.isArray(product.gallery_media)
+            ? product.gallery_media
+                .map((m) => m.image_url || m.thumbnail_url)
+                .filter((src): src is string => !!src)
+            : [];
+        const unique = Array.from(new Set([product.image, ...gallery].filter(Boolean)));
+        return unique.length ? unique : [''];
+    }, [product.gallery_media, product.image]);
+
+    const hasGallery = images.length > 1;
+
+    useEffect(() => {
+        setActiveImageIndex(0);
+    }, [product.id]);
 
     // Currency conversion for product prices
     const priceValues = useMemo(() => {
@@ -112,10 +129,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
         (product.originalPrice && product.price ?
             Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100) : 0);
 
-    const hasGallery = product.gallery_media && product.gallery_media.length > 1;
     const isLowStock = product.stock && product.stock <= 5 && product.stock > 0;
     const isNew = product.is_new || (product.created_at &&
         new Date(product.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+
+    const navigateImage = (delta: number) => {
+        if (!hasGallery) return;
+        setActiveImageIndex((prev) => {
+            const next = (prev + delta + images.length) % images.length;
+            return next;
+        });
+    };
 
     return (
         <div
@@ -131,11 +155,46 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
             {/* Image Container */}
             <div className="aspect-[4/5] overflow-hidden bg-gray-50 dark:bg-gray-900 relative">
                 <img
-                    src={product.image || 'https://images.unsplash.com/photo-1560393464-5c69a73c5770?auto=format&fit=crop&q=80&w=400'}
+                    src={images[activeImageIndex] || 'https://images.unsplash.com/photo-1560393464-5c69a73c5770?auto=format&fit=crop&q=80&w=400'}
                     alt={product.title}
                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                 />
+
+                {/* Image Selector (<>), only when multiple images exist */}
+                {hasGallery && (
+                    <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-between pointer-events-none opacity-0 invisible transition-opacity duration-200 group-hover:opacity-100 group-hover:visible group-active:opacity-100 group-active:visible group-focus-within:opacity-100 group-focus-within:visible">
+                        <button
+                            type="button"
+                            aria-label="Previous image"
+                            className="w-9 h-9 rounded-xl bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-90 transition-all border border-black/5 pointer-events-auto"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigateImage(-1);
+                            }}
+                            onTouchEnd={(e) => {
+                                e.stopPropagation();
+                            }}
+                        >
+                            <span className="material-icons-round text-gray-900 text-xl">chevron_left</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            aria-label="Next image"
+                            className="w-9 h-9 rounded-xl bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-90 transition-all border border-black/5 pointer-events-auto"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigateImage(1);
+                            }}
+                            onTouchEnd={(e) => {
+                                e.stopPropagation();
+                            }}
+                        >
+                            <span className="material-icons-round text-gray-900 text-xl">chevron_right</span>
+                        </button>
+                    </div>
+                )}
 
                 {/* Simplified Badges - Top Left */}
                 <div className="absolute top-2 left-2 flex flex-col gap-1.5 z-10 transition-transform duration-300">

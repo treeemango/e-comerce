@@ -43,6 +43,242 @@ const DELIVERY_SCOPE_OPTIONS = [
     { value: 'local', label: 'Local', detail: 'Within one city or radius' }
 ];
 
+// Predefined regions for the regional delivery option
+const PREDEFINED_REGIONS = [
+    // Global Continents
+    { id: 'africa', name: 'Africa', icon: '🌍', group: 'Continents' },
+    { id: 'europe', name: 'Europe', icon: '🇪🇺', group: 'Continents' },
+    { id: 'asia', name: 'Asia', icon: '🌏', group: 'Continents' },
+    { id: 'north_america', name: 'North America', icon: '🌎', group: 'Continents' },
+    { id: 'south_america', name: 'South America', icon: '🌎', group: 'Continents' },
+    { id: 'oceania', name: 'Oceania', icon: '🌏', group: 'Continents' },
+    // African Sub-regions
+    { id: 'east_africa', name: 'East Africa', icon: '🌍', group: 'Africa' },
+    { id: 'west_africa', name: 'West Africa', icon: '🌍', group: 'Africa' },
+    { id: 'north_africa', name: 'North Africa', icon: '🌍', group: 'Africa' },
+    { id: 'southern_africa', name: 'Southern Africa', icon: '🌍', group: 'Africa' },
+    { id: 'central_africa', name: 'Central Africa', icon: '🌍', group: 'Africa' },
+    // European Sub-regions
+    { id: 'western_europe', name: 'Western Europe', icon: '🇪🇺', group: 'Europe' },
+    { id: 'eastern_europe', name: 'Eastern Europe', icon: '🇪🇺', group: 'Europe' },
+    { id: 'northern_europe', name: 'Northern Europe', icon: '🇪🇺', group: 'Europe' },
+    { id: 'southern_europe', name: 'Southern Europe', icon: '🇪🇺', group: 'Europe' },
+    // Asian Sub-regions
+    { id: 'middle_east', name: 'Middle East', icon: '🌏', group: 'Asia' },
+    { id: 'southeast_asia', name: 'Southeast Asia', icon: '🌏', group: 'Asia' },
+    { id: 'south_asia', name: 'South Asia', icon: '🌏', group: 'Asia' },
+    { id: 'east_asia', name: 'East Asia', icon: '🌏', group: 'Asia' },
+    { id: 'central_asia', name: 'Central Asia', icon: '🌏', group: 'Asia' },
+    // Economic Zones & Trade Blocs
+    { id: 'eac', name: 'East African Community (EAC)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'sadc', name: 'SADC (Southern Africa)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'ecowas', name: 'ECOWAS (West Africa)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'comesa', name: 'COMESA', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'eu', name: 'European Union (EU)', icon: '🇪🇺', group: 'Trade Blocs' },
+    { id: 'gcc', name: 'Gulf Cooperation Council (GCC)', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'asean', name: 'ASEAN', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'nafta', name: 'NAFTA / USMCA', icon: '🤝', group: 'Trade Blocs' },
+    { id: 'mercosur', name: 'Mercosur', icon: '🤝', group: 'Trade Blocs' },
+    // Worldwide
+    { id: 'worldwide', name: 'Worldwide / Global', icon: '🌐', group: 'Global' },
+];
+
+// Mobile-optimized Searchable Multi-Select for Regions
+interface MobileRegionMultiSelectProps {
+    selectedRegions: string[];
+    onChange: (regions: string[]) => void;
+    placeholder?: string;
+}
+
+const MobileRegionMultiSelect: React.FC<MobileRegionMultiSelectProps> = ({
+    selectedRegions,
+    onChange,
+    placeholder = 'Tap to select regions...'
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const filteredRegions = PREDEFINED_REGIONS.filter(region =>
+        region.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        region.group.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Group filtered regions
+    const groupedRegions = filteredRegions.reduce((acc, region) => {
+        if (!acc[region.group]) acc[region.group] = [];
+        acc[region.group].push(region);
+        return acc;
+    }, {} as Record<string, typeof PREDEFINED_REGIONS>);
+
+    const handleToggleRegion = (regionId: string) => {
+        if (selectedRegions.includes(regionId)) {
+            onChange(selectedRegions.filter(r => r !== regionId));
+        } else {
+            onChange([...selectedRegions, regionId]);
+        }
+    };
+
+    const getRegionName = (id: string) => {
+        const region = PREDEFINED_REGIONS.find(r => r.id === id);
+        return region ? region.name : id;
+    };
+
+    const getRegionIcon = (id: string) => {
+        const region = PREDEFINED_REGIONS.find(r => r.id === id);
+        return region?.icon || '📍';
+    };
+
+    return (
+        <div ref={containerRef} className="relative">
+            {/* Selected regions chips */}
+            {selectedRegions.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                    {selectedRegions.map(regionId => (
+                        <div
+                            key={regionId}
+                            className="bg-gradient-to-r from-orange-50 to-orange-100 text-orange-800 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 shadow-sm border border-orange-200"
+                        >
+                            <span>{getRegionIcon(regionId)}</span>
+                            <span className="truncate max-w-[100px]">{getRegionName(regionId)}</span>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleToggleRegion(regionId); }}
+                                className="text-orange-400 active:text-red-500 transition-colors"
+                            >
+                                <span className="material-icons text-[12px]">close</span>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Search input trigger */}
+            <button
+                type="button"
+                onClick={() => setIsOpen(true)}
+                className={cn(
+                    "w-full flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all text-left",
+                    selectedRegions.length > 0
+                        ? "border-orange-200 bg-orange-50/50"
+                        : "border-gray-200 bg-gray-50"
+                )}
+            >
+                <span className="material-icons text-orange-500 text-lg">travel_explore</span>
+                <span className="flex-1 text-sm font-medium text-gray-500">{placeholder}</span>
+                <span className="material-icons text-gray-400 text-sm">expand_more</span>
+            </button>
+
+            {/* Full-screen mobile modal */}
+            {isOpen && (
+                <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-in slide-in-from-bottom-4 duration-200">
+                    {/* Header */}
+                    <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 safe-area-top">
+                        <div className="flex items-center justify-between mb-3">
+                            <button
+                                type="button"
+                                onClick={() => setIsOpen(false)}
+                                className="text-gray-500 active:bg-gray-100 p-1 rounded-lg"
+                            >
+                                <span className="material-icons">close</span>
+                            </button>
+                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Select Regions</h3>
+                            <button
+                                type="button"
+                                onClick={() => setIsOpen(false)}
+                                className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold active:bg-orange-700"
+                            >
+                                Done
+                            </button>
+                        </div>
+
+                        {/* Search input */}
+                        <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2">
+                            <span className="material-icons text-gray-400 text-lg">search</span>
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search regions..."
+                                className="flex-1 bg-transparent outline-none text-sm font-medium text-gray-700 placeholder-gray-400"
+                                autoFocus
+                            />
+                            {searchTerm && (
+                                <button type="button" onClick={() => setSearchTerm('')} className="text-gray-400">
+                                    <span className="material-icons text-sm">clear</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Selected count and clear */}
+                        {selectedRegions.length > 0 && (
+                            <div className="flex items-center justify-between mt-3 px-1">
+                                <span className="text-xs text-gray-500">
+                                    <strong className="text-orange-600">{selectedRegions.length}</strong> region(s) selected
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => onChange([])}
+                                    className="text-[10px] font-bold text-red-500 active:text-red-700 uppercase"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Scrollable content */}
+                    <div className="flex-1 overflow-y-auto px-4 py-3">
+                        {Object.keys(groupedRegions).length === 0 ? (
+                            <div className="text-center py-12 text-gray-400">
+                                <span className="material-icons text-4xl mb-2">search_off</span>
+                                <p className="text-sm">No regions found</p>
+                            </div>
+                        ) : (
+                            Object.entries(groupedRegions).map(([group, regions]) => (
+                                <div key={group} className="mb-4">
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 py-2 sticky top-0 bg-white/95 backdrop-blur-sm">
+                                        {group}
+                                    </div>
+                                    <div className="space-y-1">
+                                        {regions.map(region => {
+                                            const isSelected = selectedRegions.includes(region.id);
+                                            return (
+                                                <button
+                                                    key={region.id}
+                                                    type="button"
+                                                    onClick={() => handleToggleRegion(region.id)}
+                                                    className={cn(
+                                                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all active:scale-[0.98]",
+                                                        isSelected
+                                                            ? "bg-orange-100 border border-orange-200"
+                                                            : "bg-gray-50 border border-gray-100 active:bg-gray-100"
+                                                    )}
+                                                >
+                                                    <span className="text-lg">{region.icon}</span>
+                                                    <span className={cn(
+                                                        "flex-1 text-sm",
+                                                        isSelected ? "font-bold text-orange-800" : "text-gray-700"
+                                                    )}>{region.name}</span>
+                                                    {isSelected ? (
+                                                        <span className="material-icons text-orange-600 text-lg">check_circle</span>
+                                                    ) : (
+                                                        <span className="material-icons text-gray-300 text-lg">radio_button_unchecked</span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     sellerId,
     onClose,
@@ -396,19 +632,20 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
         if (currentStep === 0) {
             if (!title || !categoryId) { alert("Title and Category are required."); return; }
         } else if (currentStep === 2) {
-            // For variants, validate that at least one variant has a price
+            // For products with variants, validate that at least one variant has a price
             if (hasVariants) {
                 const hasValidPrice = variants.some(v => v.price > 0);
                 if (!hasValidPrice) {
                     alert("At least one variant must have a price set.");
                     return;
                 }
-            } else {
-                // For simple products, require base price
-                if (!price) {
-                    alert("Selling Price is required.");
-                    return;
-                }
+            }
+            // For simple products, pricing is on step 3, so no validation needed here
+        } else if (currentStep === 3) {
+            // For simple products (without variants), validate base price on this step
+            if (!hasVariants && !price) {
+                alert("Selling Price is required.");
+                return;
             }
         }
         if (currentStep < STEPS.length - 1) setCurrentStep(prev => prev + 1);
@@ -1525,44 +1762,57 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">
                                             {deliveryScope === 'regional' ? 'Target Regions' : 'Specific Locations / Radius'}
                                         </label>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={deliveryLocationInput}
-                                                onChange={e => setDeliveryLocationInput(e.target.value)}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        if (deliveryLocationInput.trim()) {
-                                                            setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
-                                                            setDeliveryLocationInput('');
-                                                        }
-                                                    }
-                                                }}
-                                                placeholder={deliveryScope === 'regional' ? "Add region (e.g. Rift Valley, Coast)" : "Add city or radius (e.g. Kilimani, 10km)"}
-                                                className="flex-1 border p-3 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none outline-none text-sm"
+
+                                        {deliveryScope === 'regional' ? (
+                                            /* Modern searchable region multi-select for regional scope */
+                                            <MobileRegionMultiSelect
+                                                selectedRegions={deliveryLocations}
+                                                onChange={setDeliveryLocations}
+                                                placeholder="Tap to select target regions..."
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (deliveryLocationInput.trim()) {
-                                                        setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
-                                                        setDeliveryLocationInput('');
-                                                    }
-                                                }}
-                                                className="bg-orange-500 text-white p-3 rounded-xl flex items-center justify-center"
-                                            >
-                                                <span className="material-icons text-sm">add</span>
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2 mt-1">
-                                            {deliveryLocations.map(loc => (
-                                                <div key={loc} className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 shadow-sm border border-orange-200">
-                                                    {loc}
-                                                    <span className="material-icons text-[14px] cursor-pointer hover:text-red-500" onClick={() => setDeliveryLocations(prev => prev.filter(l => l !== loc))}>cancel</span>
+                                        ) : (
+                                            /* Original text input for local scope */
+                                            <>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={deliveryLocationInput}
+                                                        onChange={e => setDeliveryLocationInput(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                if (deliveryLocationInput.trim()) {
+                                                                    setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
+                                                                    setDeliveryLocationInput('');
+                                                                }
+                                                            }
+                                                        }}
+                                                        placeholder="Add city or radius (e.g. Kilimani, 10km)"
+                                                        className="flex-1 border p-3 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none outline-none text-sm"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (deliveryLocationInput.trim()) {
+                                                                setDeliveryLocations(prev => [...new Set([...prev, deliveryLocationInput.trim()])]);
+                                                                setDeliveryLocationInput('');
+                                                            }
+                                                        }}
+                                                        className="bg-orange-500 text-white p-3 rounded-xl flex items-center justify-center"
+                                                    >
+                                                        <span className="material-icons text-sm">add</span>
+                                                    </button>
                                                 </div>
-                                            ))}
-                                        </div>
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                    {deliveryLocations.map(loc => (
+                                                        <div key={loc} className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 shadow-sm border border-orange-200">
+                                                            {loc}
+                                                            <span className="material-icons text-[14px] cursor-pointer hover:text-red-500" onClick={() => setDeliveryLocations(prev => prev.filter(l => l !== loc))}>cancel</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>

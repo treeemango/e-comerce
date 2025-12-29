@@ -10,13 +10,15 @@ interface SellerOrdersViewProps {
     onOrderClick?: (orderId: string) => void;
     loading?: boolean;
     onRefresh?: () => Promise<void>;
+    onBack?: () => void;
 }
 
 export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
     orders,
     onOrderClick,
     loading,
-    onRefresh
+    onRefresh,
+    onBack
 }) => {
     // aligning with ManageOrdersView.tsx statuses: unshipped (paid), pending, canceled, shipped
     const [activeTab, setActiveTab] = useState<'all' | 'unshipped' | 'pending' | 'shipped' | 'delivered' | 'canceled'>('unshipped');
@@ -79,8 +81,16 @@ export const SellerOrdersView: React.FC<SellerOrdersViewProps> = ({
     return (
         <div className="pb-24 bg-gray-50 dark:bg-black min-h-screen">
             <div className="bg-white dark:bg-gray-900 sticky top-0 z-10 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center justify-between mb-5">
-                    <div>
+                <div className="flex items-center gap-4 mb-5">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-2xl active:scale-90 transition-transform"
+                        >
+                            <span className="material-icons-round text-gray-600 dark:text-gray-400 text-lg">arrow_back</span>
+                        </button>
+                    )}
+                    <div className="flex-1">
                         <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Orders</h2>
                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{orders.length} Total</p>
                     </div>

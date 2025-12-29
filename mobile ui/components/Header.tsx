@@ -5,6 +5,7 @@ interface HeaderProps {
   onCameraClick?: () => void;
   onUserClick?: () => void;
   onNotificationClick?: () => void;
+  onCategoryClick?: (categoryIds: string[], title: string, subcategories?: any[]) => void;
   userAvatar?: string | null;
   userName?: string | null;
   notificationCount?: number;
@@ -21,23 +22,9 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="bg-white dark:bg-black sticky top-0 z-40 transition-shadow duration-300">
-      <div className="flex items-center justify-between px-4 py-3 gap-4 max-w-[520px] mx-auto">
+      <div className="flex items-center justify-between px-4 py-3 gap-3 max-w-[520px] mx-auto">
 
-        {/* User / Profile - Moved to left for modern apps like Temu/Shein flow */}
-        <button
-          className="relative flex-shrink-0 active:scale-95 transition-transform"
-          onClick={onUserClick}
-        >
-          {userAvatar ? (
-            <img src={userAvatar} alt={userName || 'User'} className="w-9 h-9 rounded-full border-2 border-gray-100 dark:border-gray-800 object-cover shadow-sm" />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-[10px] font-black border border-gray-100 dark:border-gray-700">
-              {userName ? userName.slice(0, 2).toUpperCase() : <span className="material-icons-round text-xl text-gray-400">person</span>}
-            </div>
-          )}
-        </button>
-
-        {/* Search Bar - Unified */}
+        {/* Search Bar - Now on the left */}
         <div
           className="flex-grow relative cursor-pointer group active:scale-[0.98] transition-all"
           onClick={onSearchClick}
@@ -60,6 +47,26 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="material-icons-round text-primary text-xl">photo_camera</span>
           </button>
         </div>
+
+        {/* User / Account Icon - Between search and bell */}
+        <button
+          className="relative flex-shrink-0 active:scale-95 transition-transform"
+          onClick={onUserClick}
+        >
+          {userAvatar ? (
+            <img src={userAvatar} alt={userName || 'User'} className="w-9 h-9 rounded-full border-2 border-gray-100 dark:border-gray-800 object-cover shadow-sm" />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border border-gray-200 dark:border-gray-700">
+              {userName ? (
+                <span className="text-[11px] font-black text-gray-600 dark:text-gray-300 tracking-tight">
+                  {userName.slice(0, 2).toUpperCase()}
+                </span>
+              ) : (
+                <span className="material-icons-round text-xl text-gray-400">person_outline</span>
+              )}
+            </div>
+          )}
+        </button>
 
         {/* Notification Bell with Badge */}
         <button

@@ -1,33 +1,53 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { fetchSellerInventory, fetchSellerStats, fetchSellerAnalytics } from '../../lib/api';
-import { SellerInventoryItem, SellerStats, SellerAnalyticsSummary } from '../../types';
+import { fetchSellerInventory, fetchSellerStats, fetchSellerAnalytics, fetchVendorFullProfile } from '../../lib/api';
+import { SellerInventoryItem, SellerStats, SellerAnalyticsSummary, VendorBadge } from '../../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { useCurrencyConverter, formatPrice, getCurrencySymbol } from '@/lib/currency';
+import SellerPlatformFeedback from './SellerPlatformFeedback';
 
 interface DashboardOverviewProps {
     sellerId?: string;
 }
 
-
+// Official Badge 2030 configuration for display
+const BADGE_CONFIG: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {
+    // Official Badge 2030 Types
+    speed_dove: { icon: 'flight', label: 'Speed Dove', bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' },
+    new_seller: { icon: 'fiber_new', label: 'New Seller', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+    free_delivery: { icon: 'local_shipping', label: 'Free Delivery', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
+    nationwide_delivery: { icon: 'public', label: 'Nationwide Delivery', bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
+    trusted_shipper: { icon: 'verified_user', label: 'Trusted Shipper', bg: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200' },
+    experienced_shipper: { icon: 'workspace_premium', label: 'Experienced Shipper', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+    // Additional common badge types
+    rising_star: { icon: 'trending_up', label: 'Rising Star', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+    verified_seller: { icon: 'verified', label: 'Verified Seller', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+    top_rated: { icon: 'star', label: 'Top Rated', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+    fast_shipper: { icon: 'bolt', label: 'Fast Shipper', bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
+    trusted_seller: { icon: 'verified_user', label: 'Trusted Seller', bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
+    high_volume: { icon: 'trending_up', label: 'High Volume', bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' },
+};
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
     const [stats, setStats] = useState<SellerStats | null>(null);
     const [analytics, setAnalytics] = useState<SellerAnalyticsSummary | null>(null);
     const [recentInventory, setRecentInventory] = useState<SellerInventoryItem[]>([]);
+    const [badges, setBadges] = useState<VendorBadge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const loadData = async () => {
             if (sellerId) {
-                const [statsData, inventoryData, analyticsData] = await Promise.all([
+                const [statsData, inventoryData, analyticsData, vendorProfile] = await Promise.all([
                     fetchSellerStats(sellerId),
                     fetchSellerInventory(sellerId),
-                    fetchSellerAnalytics(sellerId, 30)
+                    fetchSellerAnalytics(sellerId, 30),
+                    fetchVendorFullProfile(sellerId)
                 ]);
 
                 setStats(statsData);
                 setRecentInventory(inventoryData);
                 setAnalytics(analyticsData);
+                setBadges(vendorProfile?.badges || []);
             }
             setIsLoading(false);
         };
@@ -140,6 +160,71 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
                 ))}
             </div>
 
+            {/* Your Badges Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <span className="material-icons text-amber-500">emoji_events</span>
+                        <h3 className="text-lg font-bold text-gray-900">Your Badges</h3>
+                    </div>
+                    <span className="text-sm text-gray-500">{badges.length} earned</span>
+                </div>
+
+                {badges.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                        {badges.map((badge, idx) => {
+                            const badgeKey = badge.badge_type || badge.badge_name || '';
+                            const config = BADGE_CONFIG[badgeKey] || {
+                                icon: badge.badge_icon || 'military_tech',
+                                label: badge.badge_name || badge.badge_label || (badgeKey ? badgeKey.replace(/_/g, ' ') : 'Badge'),
+                                bg: 'bg-gray-50',
+                                text: 'text-gray-600',
+                                border: 'border-gray-200'
+                            };
+                            const earnedDate = badge.earned_at || badge.earned_date;
+                            return (
+                                <div
+                                    key={(badgeKey || 'badge') + idx}
+                                    className={`inline-flex items-center gap-3 px-4 py-3 rounded-2xl border ${config.bg} ${config.text} ${config.border} transition-all hover:scale-[1.02] hover:shadow-md cursor-help group shadow-sm`}
+                                    title={badge.description || badge.badge_description || ''}
+                                >
+                                    <div className="flex-shrink-0">
+                                        {badge.badge_icon_url ? (
+                                            <img
+                                                src={badge.badge_icon_url}
+                                                alt={config.label}
+                                                className="w-8 h-8 object-contain drop-shadow-sm"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                                                <span className="material-icons-round text-xl">{config.icon}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-black uppercase tracking-wider mb-0.5">{config.label}</span>
+                                        {earnedDate && (
+                                            <span className="text-[10px] font-bold opacity-60 uppercase tracking-tight">
+                                                Earned {new Date(earnedDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className="text-center py-8 text-gray-400">
+                        <span className="material-icons text-4xl mb-2">military_tech</span>
+                        <p className="text-sm">Start selling to earn badges!</p>
+                        <p className="text-xs mt-1">Badges reward great seller performance</p>
+                    </div>
+                )}
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Sales Trend Chart */}
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -208,6 +293,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
                         })}
                     </div>
                 </div>
+
+                {/* Seller Platform Feedback */}
+                <SellerPlatformFeedback sellerId={sellerId || ''} />
             </div>
 
             {/* Inventory Table (Existing) */}

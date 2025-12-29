@@ -49,6 +49,8 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
         delivery_time_estimate: deal.delivery_time_estimate,
         delivery_time_days: deal.delivery_time_days,
         delivery_scope: deal.delivery_scope,
+        seller_id: (deal as any).seller_id || (deal as any).vendor_id,
+        vendor: (deal as any).vendor,
         stock: 50,
         in_stock: deal.in_stock ?? true,
         listing_type: deal.listing_type

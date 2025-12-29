@@ -31,6 +31,8 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
         fit_rating: undefined,
         value_rating: undefined,
         quality_rating: undefined,
+        platform_rating: undefined,
+        platform_feedback: '',
         photos: []
     });
 
@@ -38,9 +40,11 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
     const [consInput, setConsInput] = useState('');
     const [uploading, setUploading] = useState(false);
 
-    const handleRatingClick = (rating: number, type: 'overall' | 'fit' | 'value' | 'quality') => {
+    const handleRatingClick = (rating: number, type: 'overall' | 'fit' | 'value' | 'quality' | 'platform') => {
         if (type === 'overall') {
             setFormData({ ...formData, rating });
+        } else if (type === 'platform') {
+            setFormData({ ...formData, platform_rating: rating });
         } else {
             setFormData({ ...formData, [`${type}_rating`]: rating });
         }
@@ -101,6 +105,11 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
             return;
         }
 
+        if (!formData.platform_rating || formData.platform_rating < 1) {
+            alert('Please rate your platform experience');
+            return;
+        }
+
         setUploading(true);
 
         try {
@@ -119,11 +128,11 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
         }
     };
 
-    const renderStarRating = (currentRating: number, type: 'overall' | 'fit' | 'value' | 'quality', label: string) => {
+    const renderStarRating = (currentRating: number, type: 'overall' | 'fit' | 'value' | 'quality' | 'platform', label: string) => {
         return (
             <div className="space-y-2">
                 <label className="block text-sm font-semibold text-slate-900 dark:text-white">
-                    {label} {type === 'overall' && <span className="text-red-500">*</span>}
+                    {label} {(type === 'overall' || type === 'platform') && <span className="text-red-500">*</span>}
                 </label>
                 <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
@@ -131,7 +140,7 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
                             key={star}
                             type="button"
                             onClick={() => handleRatingClick(star, type)}
-                            className={`text-3xl transition-all hover:scale-110 ${star <= currentRating ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'
+                            className={`text-3xl transition-all hover:scale-110 ${star <= currentRating ? (type === 'platform' ? 'text-blue-500' : 'text-yellow-400') : 'text-slate-300 dark:text-slate-600'
                                 }`}
                         >
                             <span className="material-icons text-inherit">
@@ -309,6 +318,34 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
                             />
                             <span className="text-sm font-medium text-slate-900 dark:text-white">I would buy this again</span>
                         </label>
+                    </div>
+
+                    {/* Platform Experience Section */}
+                    <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-6 space-y-6">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white">
+                                <span className="material-icons">verified_user</span>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">JuaExpress Experience</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Help us improve the overall platform</p>
+                            </div>
+                        </div>
+
+                        {renderStarRating(formData.platform_rating || 0, 'platform', 'How would you rate your platform experience?')}
+
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                                Platform Feedback (Optional)
+                            </label>
+                            <textarea
+                                placeholder="E.g. JuaExpress is trustworthy, fast delivery, or reliable."
+                                value={formData.platform_feedback}
+                                onChange={(e) => setFormData({ ...formData, platform_feedback: e.target.value })}
+                                className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none transition-colors resize-none text-sm"
+                                rows={3}
+                            />
+                        </div>
                     </div>
 
                     {/* Photo Upload */}

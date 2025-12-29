@@ -169,6 +169,7 @@ export interface VendorInfo {
     order_completion_rate?: number;
     badges?: VendorBadge[];
     is_verified?: boolean;
+    verification_level?: 'unverified' | 'basic' | 'premium' | 'enterprise';
     business_country?: string;
     cancellation_rate?: number;
     response_time?: string;
@@ -177,13 +178,48 @@ export interface VendorInfo {
     is_following?: boolean;
     banner_url?: string;
     certificates?: MediaItem[];
+    return_policy?: string;
+    shipping_policy?: string;
 }
 
 export interface VendorBadge {
-    badge_type: string;
-    badge_label: string;
-    badge_icon?: string;
-    badge_color?: string;
+    // Core identifiers
+    badge_type?: string;        // Internal slug: speed_dove, new_seller, trusted_shipper, etc.
+    badge_name?: string;        // User-friendly display name
+
+    // Description (both field names supported)
+    description?: string;
+    badge_description?: string;
+
+    // Badge metadata
+    badge_tier?: number;        // Level 1-5
+    badge_rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+    badge_category?: string;    // Category grouping
+
+    // Points & scoring
+    score_earned?: number;      // Reputation points from this badge
+
+    // Timestamps (both field names supported)
+    earned_at?: string;
+    earned_date?: string;       // Alias for earned_at
+
+    // Visual assets
+    badge_icon_url?: string;    // Path to badge image asset (e.g., /badges/speed_dove.png)
+    badge_icon?: string;        // Material icon name (legacy)
+    badge_color?: string;       // Hex code for UI styling (e.g., #4CAF50)
+
+    // Legacy/alias fields
+    badge_label?: string;
+    tier_level?: number;        // Alias for badge_tier
+}
+
+// Output from get_vendor_badge_stats RPC function
+export interface VendorBadgeStats {
+    total_badges: number;           // Count of all active badges
+    total_reputation_score: number; // Sum of all score_earned values
+    highest_rarity: string | null;  // Highest rarity rank held
+    newest_badge: VendorBadge | null; // Most recently earned badge
+    badge_history_count: number;    // Total historical milestones
 }
 
 export interface Category {
@@ -295,8 +331,11 @@ export interface Review {
     fit_rating?: number;
     value_rating?: number;
     quality_rating?: number;
+    platform_rating?: number;
+    platform_feedback?: string;
     created_at: string;
     updated_at: string;
+    // Display fields from joins
     user_name?: string;
     user_avatar?: string;
     product_title?: string;
@@ -381,6 +420,8 @@ export interface SubmitReviewData {
     fit_rating?: number;
     value_rating?: number;
     quality_rating?: number;
+    platform_rating?: number;
+    platform_feedback?: string;
     photos?: File[];
 }
 

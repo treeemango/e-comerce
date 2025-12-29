@@ -83,7 +83,7 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             // Since we cannot locate fetchVendorInfo definition easily, we implement direct fetch here for safety
             const { data: vendors, error: vendorError } = await supabase
                 .from('vendors')
-                .select('user_id, business_name, address_country, rating, review_count, is_verified, logo_url')
+                .select('user_id, business_name, address_country, rating, review_count, is_verified, logo_url, completed_orders, follower_count, total_products')
                 .in('user_id', sellerIds);
 
             if (!vendorError && vendors) {
@@ -95,7 +95,10 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
                         vendor_rating: v.rating,
                         review_count: v.review_count,
                         is_verified: v.is_verified,
-                        logo_url: v.logo_url
+                        logo_url: v.logo_url,
+                        completed_orders: v.completed_orders || 0,
+                        follower_count: v.follower_count || 0,
+                        total_products: v.total_products || 0
                     });
                 });
             }
@@ -176,7 +179,7 @@ export const fetchHeroDeals = async (userId?: string, limit = 5): Promise<Lightn
             category_id: item.category_id || item.category_handle || undefined,
             category_name: item.category_name || undefined,
             rating: (typeof ratingFromSummary === 'number' ? ratingFromSummary : (typeof item.rating === 'number' ? item.rating : 0)) || 0,
-            reviews: (typeof reviewsFromSummary === 'number' ? reviewsFromSummary : (typeof item.reviews === 'number' ? item.reviews : 0)) || 0,
+            reviews: (typeof reviewsFromSummary === 'number' ? reviewsFromSummary : (typeof item.review_count === 'number' ? item.review_count : (typeof item.reviews === 'number' ? item.reviews : 0))) || 0,
             soldCount: item.sales_count || item.sold_count || 0,
             stock: item.stock || 0,
             condition: item.condition || undefined,
@@ -226,7 +229,10 @@ export const fetchLightningDeals = async (userId?: string, limit = 8, offset = 0
                         vendor_rating: v.rating,
                         review_count: v.review_count,
                         is_verified: v.is_verified,
-                        logo_url: v.logo_url
+                        logo_url: v.logo_url,
+                        completed_orders: v.completed_orders || 0,
+                        follower_count: v.follower_count || 0,
+                        total_products: v.total_products || 0
                     });
                 });
             }
@@ -388,7 +394,7 @@ export const fetchDealsProducts = async (
                 currency: item.currency,
                 seller_id: item.seller_id || item.vendor_id || undefined,
                 rating: item.rating || 0,
-                reviews: 0,
+                reviews: reviewsFromSummary || item.review_count || 0,
                 image: primaryImage,
                 stock: item.stock ?? item.stock_quantity ?? undefined,
                 condition: item.condition || undefined,
@@ -441,7 +447,27 @@ export const fetchDealsProducts = async (
         dealPriority: cat.has_hot_deal ? 'hot_deal' : cat.user_has_history ? 'personalized' : 'trending',
     }));
 
-    return { products: mappedProducts, categories: mappedCategories };
+    // Attach vendor info to deal products
+    if (mappedProducts.length === 0) {
+        return { products: mappedProducts, categories: mappedCategories };
+    }
+
+    const productIds = mappedProducts.map(p => p.id.toString());
+    const vendorMap = await fetchVendorInfo(productIds);
+
+    const enrichedProducts = mappedProducts.map(product => {
+        const sellerId = product.seller_id?.toString();
+        let vendor = undefined;
+        if (sellerId) {
+            vendor = vendorMap.get(sellerId);
+        }
+        return {
+            ...product,
+            vendor: vendor || undefined
+        };
+    });
+
+    return { products: enrichedProducts, categories: mappedCategories };
 };
 
 export const fetchDealsNavbarCategories = async (
@@ -543,8 +569,9 @@ export const fetchProducts = async (): Promise<Product[]> => {
             promoCode: item.promoCode || item.promo_code,
             discountPercent: item.discountPercent || item.discount_percent,
             currency: item.currency || 'USD',
+            seller_id: item.seller_id || item.vendor_id || undefined,
             rating: (typeof ratingFromSummary === 'number' ? ratingFromSummary : (typeof item.rating === 'number' ? item.rating : 0)) || 0,
-            reviews: (typeof reviewsFromSummary === 'number' ? reviewsFromSummary : (typeof item.reviews === 'number' ? item.reviews : 0)) || 0,
+            reviews: (typeof reviewsFromSummary === 'number' ? reviewsFromSummary : (typeof item.review_count === 'number' ? item.review_count : (typeof item.reviews === 'number' ? item.reviews : 0))) || 0,
             image: item.featured_image_url || '',
             media: item.gallery_media ? item.gallery_media.map((m: any) => ({
                 id: m.id,
@@ -894,6 +921,47 @@ export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<
                 name: m.original_filename || (m.media_type === 'license' ? 'Business License' : 'Document')
             }));
 
+        // Fetch badges using get_vendor_badges RPC (returns the actual array)
+        let badgesData: any[] = vendor.badges || [];
+        try {
+            console.log('[fetchVendorFullProfile] Calling get_vendor_badges RPC for:', vendor.id);
+            const { data: rpcBadges, error: badgeError } = await supabase
+                .rpc('get_vendor_badges', { p_vendor_id: vendor.id });
+
+            if (badgeError) {
+                console.error('[fetchVendorFullProfile] Error from get_vendor_badges RPC:', badgeError);
+            } else if (rpcBadges) {
+                console.log('[fetchVendorFullProfile] Badges from RPC:', rpcBadges);
+                badgesData = rpcBadges;
+            }
+
+            // If empty, try fetching from the dedicated badges table as a fallback
+            if (!badgesData || badgesData.length === 0) {
+                console.log('[fetchVendorFullProfile] Badges empty, trying banner_2030_seller_badges table');
+                const { data: badgeTableData } = await supabase
+                    .from('badge_2030_seller_badges')
+                    .select('badges')
+                    .eq('seller_id', vendor.id)
+                    .single();
+
+                if (badgeTableData?.badges) {
+                    badgesData = badgeTableData.badges;
+                    console.log('[fetchVendorFullProfile] Badges from badge_2030_seller_badges table:', badgesData);
+                }
+            }
+        } catch (badgeRpcError) {
+            console.warn('[fetchVendorFullProfile] Exception during badge fetch:', badgeRpcError);
+        }
+
+        // Final badges sync check
+        if (badgesData && badgesData.length > 0 && (!vendor.badges || vendor.badges.length === 0)) {
+            console.log('[fetchVendorFullProfile] Syncing found badges back to vendors table view');
+        }
+
+        // Debug: Log what badges data we're getting
+        console.log('[fetchVendorFullProfile] Final badges data:', badgesData);
+        console.log('[fetchVendorFullProfile] RPC badges:', rpcMetrics?.badges);
+
         // Merge: prefer RPC metrics (live), fallback to vendor table
         return {
             vendor_id: vendor.id,
@@ -905,18 +973,242 @@ export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<
             review_count: rpcMetrics?.review_count ?? vendor.review_count ?? 0,
             total_products: rpcMetrics?.total_products ?? vendor.product_count ?? 0,
             completed_orders: rpcMetrics?.completed_orders ?? vendor.completed_orders ?? 0,
-            badges: rpcMetrics?.badges || [],
+            badges: badgesData,
             is_verified: rpcMetrics?.is_verified ?? (vendor.verification_status === 'approved' || vendor.is_verified),
+            verification_level: vendor.verification_level || (vendor.verification_status === 'approved' ? 'basic' : 'unverified'),
             business_country: rpcMetrics?.business_country ?? vendor.address_country ?? 'Independent Seller',
-            logo_url: logoMedia?.image_url,
-            banner_url: bannerMedia?.image_url,
+            logo_url: logoMedia?.image_url || vendor.logo_url,
+            banner_url: bannerMedia?.image_url || vendor.banner_url,
             seller_since: vendor.created_at,
             follower_count: vendor.follower_count ?? 0,
-            certificates
+            certificates,
+            return_policy: vendor.return_policy,
+            shipping_policy: vendor.shipping_policy
         };
     } catch (e) {
         console.error('Unexpected error in fetchVendorFullProfile:', e);
         return null;
+    }
+};
+
+// Vendor Media Types
+export type VendorMediaType = 'logo' | 'banner' | 'license' | 'other_document';
+
+export interface VendorMediaItem {
+    id: string;
+    vendor_id: string;
+    image_url: string;
+    storage_path?: string;
+    media_type: VendorMediaType;
+    is_main?: boolean;
+    mime_type?: string;
+    file_size?: number;
+    original_filename?: string;
+    uploaded_by?: string;
+    created_at?: string;
+}
+
+// Fetch all media for a vendor
+export const fetchVendorMedia = async (vendorId: string): Promise<VendorMediaItem[]> => {
+    const { data, error } = await supabase
+        .from('vendor_media')
+        .select('*')
+        .eq('vendor_id', vendorId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching vendor media:', error);
+        return [];
+    }
+
+    return data || [];
+};
+
+// Fetch vendor badge statistics using RPC function
+export const fetchVendorBadgeStats = async (vendorId: string): Promise<{
+    total_badges: number;
+    total_reputation_score: number;
+    highest_rarity: string | null;
+    newest_badge: any | null;
+    badge_history_count: number;
+} | null> => {
+    try {
+        const { data, error } = await supabase
+            .rpc('get_vendor_badge_stats', { p_vendor_id: vendorId });
+
+        if (error) {
+            console.error('Error fetching vendor badge stats:', error);
+            return null;
+        }
+
+        // RPC returns array, get first row
+        if (data && data.length > 0) {
+            return data[0];
+        }
+
+        return {
+            total_badges: 0,
+            total_reputation_score: 0,
+            highest_rarity: null,
+            newest_badge: null,
+            badge_history_count: 0
+        };
+    } catch (e) {
+        console.error('Unexpected error in fetchVendorBadgeStats:', e);
+        return null;
+    }
+};
+
+// Upload vendor media - complete flow (upload + db record + vendor update)
+export const uploadVendorMediaComplete = async (
+    vendorId: string,
+    file: File,
+    mediaType: VendorMediaType,
+    uploaderId?: string
+): Promise<{ success: boolean; media?: VendorMediaItem; error?: string }> => {
+    try {
+        // Generate unique filename structure based on media types (matching actual dashboard)
+        const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const folder = mediaType === 'logo' ? 'logo' : mediaType === 'banner' ? 'banner' : mediaType === 'license' ? 'license' : 'docs';
+        const fileName = `${folder}/${vendorId}_${Date.now()}.${fileExt}`;
+        const storagePath = `${fileName}`; // Relative to bucket
+
+        // Upload to storage using the universal 'seller-documents' bucket
+        const { error: uploadError } = await supabase.storage
+            .from('seller-documents')
+            .upload(fileName, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('Storage upload error:', uploadError);
+            return { success: false, error: uploadError.message };
+        }
+
+        // Get public URL from 'seller-documents' bucket
+        const { data: urlData } = supabase.storage
+            .from('seller-documents')
+            .getPublicUrl(fileName);
+
+        const imageUrl = urlData.publicUrl;
+
+        // If uploading logo or banner, set is_main and remove old ones
+        if (mediaType === 'logo' || mediaType === 'banner') {
+            // Delete existing media of same type
+            await supabase
+                .from('vendor_media')
+                .delete()
+                .eq('vendor_id', vendorId)
+                .eq('media_type', mediaType);
+        }
+
+        // Insert into vendor_media table
+        const { data: mediaData, error: insertError } = await supabase
+            .from('vendor_media')
+            .insert({
+                vendor_id: vendorId,
+                image_url: imageUrl,
+                storage_path: storagePath,
+                media_type: mediaType,
+                is_main: mediaType === 'logo' || mediaType === 'banner',
+                mime_type: file.type,
+                file_size: file.size,
+                original_filename: file.name,
+                uploaded_by: uploaderId
+            })
+            .select()
+            .single();
+
+        if (insertError) {
+            console.error('Database insert error:', insertError);
+            return { success: false, error: insertError.message };
+        }
+
+        // Update vendor table for logo/banner shortcuts
+        if (mediaType === 'logo') {
+            await supabase
+                .from('vendors')
+                .update({ logo_url: imageUrl, logo_media_id: mediaData.id })
+                .eq('id', vendorId);
+        } else if (mediaType === 'banner') {
+            await supabase
+                .from('vendors')
+                .update({ banner_url: imageUrl, banner_media_id: mediaData.id })
+                .eq('id', vendorId);
+        } else if (mediaType === 'license') {
+            await supabase
+                .from('vendors')
+                .update({ business_license_media_id: mediaData.id })
+                .eq('id', vendorId);
+        }
+
+        return { success: true, media: mediaData };
+    } catch (e) {
+        console.error('Unexpected error uploading vendor media:', e);
+        return { success: false, error: 'Upload failed' };
+    }
+};
+
+// Delete vendor media
+export const deleteVendorMedia = async (
+    mediaId: string,
+    vendorId: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        // Get media details first
+        const { data: media, error: fetchError } = await supabase
+            .from('vendor_media')
+            .select('*')
+            .eq('id', mediaId)
+            .eq('vendor_id', vendorId)
+            .single();
+
+        if (fetchError || !media) {
+            return { success: false, error: 'Media not found' };
+        }
+
+        // Delete from storage if we have the path
+        if (media.storage_path) {
+            // Path is stored relative to bucket or with old prefix
+            const fileName = media.storage_path.replace('vendor-media/', '');
+            await supabase.storage
+                .from('seller-documents')
+                .remove([fileName]);
+        }
+
+        // Delete from database
+        const { error: deleteError } = await supabase
+            .from('vendor_media')
+            .delete()
+            .eq('id', mediaId);
+
+        if (deleteError) {
+            return { success: false, error: deleteError.message };
+        }
+
+        // Clear vendor table references if needed
+        if (media.media_type === 'logo') {
+            await supabase
+                .from('vendors')
+                .update({ logo_url: null, logo_media_id: null })
+                .eq('id', vendorId);
+        } else if (media.media_type === 'banner') {
+            await supabase
+                .from('vendors')
+                .update({ banner_url: null, banner_media_id: null })
+                .eq('id', vendorId);
+        } else if (media.media_type === 'license') {
+            await supabase
+                .from('vendors')
+                .update({ business_license_media_id: null })
+                .eq('id', vendorId);
+        }
+
+        return { success: true };
+    } catch (e) {
+        console.error('Unexpected error deleting vendor media:', e);
+        return { success: false, error: 'Delete failed' };
     }
 };
 
@@ -966,7 +1258,15 @@ export const fetchBestSellingProducts = async (
         delivery_time_estimate: item.delivery_time_estimate,
         delivery_locations: item.delivery_locations,
         vendor: {
-            business_country: item.vendor_country
+            vendor_id: item.vendor_id,
+            business_name: item.business_name || item.vendor_name,
+            business_country: item.vendor_country,
+            user_id: item.seller_id || item.user_id,
+            follower_count: item.follower_count || 0,
+            completed_orders: item.completed_orders || 0,
+            vendor_rating: item.vendor_rating || item.avg_rating || 0,
+            total_products: item.total_products || 0,
+            is_verified: item.is_verified || false
         },
         stock: 10,
         media: [],
@@ -1004,7 +1304,15 @@ export const fetchTopRatedProducts = async (
         delivery_time_estimate: item.delivery_time_estimate,
         delivery_locations: item.delivery_locations,
         vendor: {
-            business_country: item.vendor_country
+            vendor_id: item.vendor_id,
+            business_name: item.business_name || item.vendor_name,
+            business_country: item.vendor_country,
+            user_id: item.seller_id || item.user_id,
+            follower_count: item.follower_count || 0,
+            completed_orders: item.completed_orders || 0,
+            vendor_rating: item.vendor_rating || item.avg_rating || 0,
+            total_products: item.total_products || 0,
+            is_verified: item.is_verified || false
         },
         // Default values for standard Product interface compatibility
         stock: 10,
@@ -1104,6 +1412,7 @@ export const fetchFilteredProducts = async (
         promoCode: item.promoCode || item.promo_code,
         discountPercent: item.discountPercent || item.discount_percent,
         currency: item.currency,
+        seller_id: item.seller_id || item.vendor_id || undefined,
         rating: item.rating || 0,
         reviews: item.review_count || 0,
         image: item.featured_image_url || '',
@@ -1259,16 +1568,8 @@ export const fetchProductsWithVendors = async (): Promise<Product[]> => {
         let vendor = undefined;
 
         if (sellerId) {
-            // Try direct lookup first
+            // Try direct lookup by seller_id
             vendor = vendorMap.get(sellerId);
-
-            // If not found, iterate through vendor map to find matching vendor
-            if (!vendor) {
-                for (const [vendorId, vendorInfo] of vendorMap.entries()) {
-                    vendor = vendorInfo;
-                    break;
-                }
-            }
         }
 
         return {
@@ -2387,6 +2688,80 @@ export const fetchProductReviews = async (
     return { reviews, total: reviews.length };
 };
 
+export const fetchTopPlatformReviews = async (limit: number = 20): Promise<Review[]> => {
+    // Fetch high-rated reviews from the enhanced_reviews table or similar
+    // For now, we fetch recently approved reviews with rating >= 4
+    const { data, error } = await supabase
+        .from('enhanced_reviews')
+        .select(`
+            id,
+            product_id,
+            user_id,
+            rating,
+            content,
+            title,
+            status,
+            helpful_votes,
+            total_votes,
+            is_verified_purchase,
+            created_at,
+            pros,
+            cons,
+            recommended,
+            would_buy_again,
+            fit_rating,
+            value_rating,
+            quality_rating,
+            platform_rating,
+            platform_feedback,
+            users:user_id (
+                full_name,
+                name,
+                email,
+                avatar_url
+            ),
+            products (
+                title,
+                media:media!media_product_fk (
+                    image_url,
+                    is_main
+                )
+            )
+        `)
+        .eq('status', 'approved')
+        .not('platform_rating', 'is', null) // Ensure it has a platform rating
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        console.error('Error fetching platform reviews:', error);
+        return [];
+    }
+
+    return (data || []).map((review: any) => {
+        // Find main image or use first available
+        const productMedia = review.products?.media || [];
+        const mainImage = productMedia.find((m: any) => m.is_main) || productMedia[0];
+        const user = Array.isArray(review.users) ? review.users[0] : review.users;
+        const userName =
+            (user?.full_name && String(user.full_name).trim()) ||
+            (user?.name && String(user.name).trim()) ||
+            (user?.email ? String(user.email).split('@')[0] : null) ||
+            'Anonymous';
+
+        return {
+            ...review,
+            updated_at: review.created_at,
+            user_name: userName,
+            user_avatar: user?.avatar_url || null,
+            product_title: review.products?.title || 'Product',
+            product_image: mainImage?.image_url || null,
+            photos: [],
+            responses: []
+        };
+    });
+};
+
 
 // ------------------------------------------------------------------
 // Seller Dashboard API Functions
@@ -2522,8 +2897,8 @@ export const fetchPricingSuggestions = async (sellerId: string) => {
         .from('pricing_suggestions')
         .select(`
             *,
-            products (id, title, featured_image_url)
-        `)
+            products(id, title, featured_image_url)
+                `)
         .eq('seller_id', sellerId);
 
     if (error) {
@@ -2538,9 +2913,9 @@ export const fetchReturnRequests = async (sellerId: string) => {
         .from('return_requests')
         .select(`
             *,
-            products (id, title, featured_image_url),
-            orders (id, total_amount, created_at, user_id)
-        `)
+            products(id, title, featured_image_url),
+            orders(id, total_amount, created_at, user_id)
+                `)
         .order('created_at', { ascending: false });
     // RLS should handle filtering by seller via order or product linkage if set up, 
     // but currently return_requests might not directly have seller_id? 
@@ -2566,9 +2941,9 @@ export const fetchReturnRequests = async (sellerId: string) => {
         .from('return_requests')
         .select(`
             *,
-            products (id, title, featured_image_url),
-            orders!inner (id, seller_id, total_amount) 
-        `)
+            products(id, title, featured_image_url),
+            orders!inner(id, seller_id, total_amount)
+            `)
         .eq('orders.seller_id', sellerId)
         .order('created_at', { ascending: false });
 
@@ -2746,7 +3121,7 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             created_at,
             updated_at,
             status,
-            total:total_price,
+            total: total_price,
             tax_amount,
             tax_rate,
             delivery_fee,
@@ -2757,21 +3132,21 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             fulfillment_type,
             shipped_at,
             shipment_proof_url,
-            items:order_items!order_items_order_id_fkey (
+            items: order_items!order_items_order_id_fkey(
                 id,
                 product_id,
                 price,
                 quantity,
-                product:products!order_items_product_id_fkey (
+                product: products!order_items_product_id_fkey(
                     id,
                     title,
                     currency,
-                    media:media!media_product_fk (
+                    media: media!media_product_fk(
                         image_url
                     )
                 )
             )
-        `)
+            `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
@@ -2886,7 +3261,7 @@ export const fetchUserCoupons = async (userId: string): Promise<UserCoupon[]> =>
         .select(`
             claimed_at,
             used_at,
-            coupon:coupon_id (
+            coupon: coupon_id(
                 id,
                 seller_id,
                 name,
@@ -2901,7 +3276,7 @@ export const fetchUserCoupons = async (userId: string): Promise<UserCoupon[]> =>
                 used_quantity,
                 created_at
             )
-        `)
+            `)
         .eq('user_id', userId)
         .order('claimed_at', { ascending: false });
 
@@ -2962,7 +3337,7 @@ export const createCoupon = async (
             .insert({
                 seller_id: sellerId,
                 name: couponData.name,
-                code: couponData.code || `COUPON-${Date.now().toString().slice(-6)}`, // Auto-generate if empty
+                code: couponData.code || `COUPON - ${Date.now().toString().slice(-6)}`, // Auto-generate if empty
                 discount_amount: couponData.discount_amount,
                 discount_percentage: couponData.discount_percentage,
                 start_time: couponData.start_time,
@@ -3112,9 +3487,9 @@ export const fetchShippingTemplates = async (sellerId: string) => {
     const { data, error } = await supabase
         .from('shipping_templates')
         .select(`
-            *,
-            shipping_template_regions (*)
-        `)
+        *,
+            shipping_template_regions(*)
+                `)
         .eq('seller_id', sellerId);
 
     if (error) {
@@ -3370,8 +3745,8 @@ export const fetchPendingDriverApplications = async () => {
         .from('delivery_partners')
         .select(`
             *,
-            vehicles:delivery_partner_vehicles(*)
-        `)
+            vehicles: delivery_partner_vehicles(*)
+            `)
         .eq('verification_status', 'pending')
         .order('created_at', { ascending: false });
     return { data, error };
@@ -3486,7 +3861,7 @@ export const uploadVendorMediaToStorage = async (file: File, bucketPath: string)
     // 1. Upload to Storage
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-    const filePath = `${bucketPath}/${fileName}`;
+    const filePath = `${bucketPath} / ${fileName}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
         .from('seller-documents')
@@ -3641,6 +4016,8 @@ export const voteOnReview = async (
 };
 
 export const submitReview = async (reviewData: SubmitReviewData): Promise<string | null> => {
+    console.log('Submitting review data:', JSON.stringify(reviewData, null, 2));
+
     // First, insert the review
     const { data: review, error: reviewError } = await supabase
         .from('enhanced_reviews')
@@ -3658,6 +4035,8 @@ export const submitReview = async (reviewData: SubmitReviewData): Promise<string
             fit_rating: reviewData.fit_rating,
             value_rating: reviewData.value_rating,
             quality_rating: reviewData.quality_rating,
+            platform_rating: reviewData.platform_rating,
+            platform_feedback: reviewData.platform_feedback,
             is_verified_purchase: !!reviewData.order_id,
             status: 'pending'
         })
@@ -3738,15 +4117,17 @@ export const fetchUserReviews = async (userId: string): Promise<Review[]> => {
             quality_rating,
             created_at,
             updated_at,
-            users:user_id (
+            users: user_id(
                 name,
+                full_name,
+                name,
+                email,
                 avatar_url
-            ),
-            products:product_id (
+            products: product_id(
                 title,
                 featured_image_url
             )
-        `)
+            `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
@@ -3758,8 +4139,16 @@ export const fetchUserReviews = async (userId: string): Promise<Review[]> => {
     // Map the joined data to the expected Review format
     const reviews = (data || []).map((review: any) => ({
         ...review,
-        user_name: review.users?.name || 'Anonymous',
-        user_avatar: review.users?.avatar_url || null,
+        user_name: (() => {
+            const user = Array.isArray(review.users) ? review.users[0] : review.users;
+            return (
+                (user?.full_name && String(user.full_name).trim()) ||
+                (user?.name && String(user.name).trim()) ||
+                (user?.email ? String(user.email).split('@')[0] : null) ||
+                'Anonymous'
+            );
+        })(),
+        user_avatar: (Array.isArray(review.users) ? review.users[0]?.avatar_url : review.users?.avatar_url) || null,
         product_title: review.products?.title || 'Product',
         product_image: review.products?.featured_image_url || null
     }));
@@ -3808,22 +4197,24 @@ export const fetchSellerReviews = async (sellerId: string): Promise<Review[]> =>
             quality_rating,
             created_at,
             updated_at,
-            users:user_id (
+            users: user_id(
                 name,
+                full_name,
+                name,
+                email,
                 avatar_url
-            ),
-            products:product_id (
+            products: product_id(
                 title,
                 featured_image_url
             ),
-            review_responses (
+            review_responses(
                 id,
                 responder_id,
                 responder_type,
                 response_text,
                 created_at
             )
-        `)
+                `)
         .in('product_id', productIds)
         .order('created_at', { ascending: false });
 
@@ -3835,8 +4226,16 @@ export const fetchSellerReviews = async (sellerId: string): Promise<Review[]> =>
     // Map data
     const reviews = (data || []).map((review: any) => ({
         ...review,
-        user_name: review.users?.name || 'Anonymous',
-        user_avatar: review.users?.avatar_url || null,
+        user_name: (() => {
+            const user = Array.isArray(review.users) ? review.users[0] : review.users;
+            return (
+                (user?.full_name && String(user.full_name).trim()) ||
+                (user?.name && String(user.name).trim()) ||
+                (user?.email ? String(user.email).split('@')[0] : null) ||
+                'Anonymous'
+            );
+        })(),
+        user_avatar: (Array.isArray(review.users) ? review.users[0]?.avatar_url : review.users?.avatar_url) || null,
         product_title: review.products?.title || 'Product',
         product_image: review.products?.featured_image_url || null,
         responses: (review.review_responses || []).sort((a: any, b: any) =>
@@ -4179,14 +4578,14 @@ export interface BestSellingProduct extends Product {
 }
 
 export const fetchBestSellingItems = async (interval: string): Promise<BestSellingProduct[]> => {
-    console.log(`Fetching best selling items for interval: ${interval}`);
+    console.log(`Fetching best selling items for interval: ${interval} `);
     const { data, error } = await supabase.rpc('get_best_selling_products', {
         time_interval: interval,
         p_limit: 10 // Increase limit for better variety
     });
 
     if (error) {
-        console.error(`Error fetching best-selling items for ${interval}:`, error);
+        console.error(`Error fetching best - selling items for ${interval}: `, error);
         return [];
     }
 
@@ -4788,18 +5187,18 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
         const { data, error } = await supabase
             .from('products')
             .select(`
-                id, title, seller_id, category_id, created_at,
-                sellers:seller_id (business_name),
-                categories:category_id (name),
-                brands:brand_id (name),
-                media:media!media_product_fk (id, image_url, is_main, media_type, images(image_embedding)),
-                product_variants (id, price, stock, sku, image_url, options, is_default),
-                quantity_discounts (min_quantity, unit_price),
-                description, status, currency, tags, condition,
-                seo_title, meta_description, use_case_tags, occasion_tags,
-                delivery_scope, delay_credit,
-                listing_type, has_quantity_discount, free_delivery, is_express_delivery, delivery_locations, sale_unit
-            `)
+    id, title, seller_id, category_id, created_at,
+        sellers: seller_id(business_name),
+            categories: category_id(name),
+                brands: brand_id(name),
+                    media: media!media_product_fk(id, image_url, is_main, media_type, images(image_embedding)),
+                        product_variants(id, price, stock, sku, image_url, options, is_default),
+                        quantity_discounts(min_quantity, unit_price),
+                        description, status, currency, tags, condition,
+                        seo_title, meta_description, use_case_tags, occasion_tags,
+                        delivery_scope, delay_credit,
+                        listing_type, has_quantity_discount, free_delivery, is_express_delivery, delivery_locations, sale_unit
+                            `)
             .eq('status', 'pending')
             .order('created_at', { ascending: false });
 
@@ -4819,7 +5218,7 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
 
             const variants = (p.product_variants || []).map((v: any, idx: number) => ({
                 id: v.id,
-                title: v.title || `Variant ${idx + 1}`,
+                title: v.title || `Variant ${idx + 1} `,
                 price: v.price,
                 stock: v.stock,
                 sku: v.sku,
@@ -4948,21 +5347,21 @@ export async function fetchPendingSellerVerifications(): Promise<SellerVerificat
         const { data: vendors, error } = await supabase
             .from('vendors')
             .select(`
-                id,
-                user_id,
-                business_name,
-                business_email,
-                business_phone,
-                business_address,
-                verification_status,
-                created_at,
-                verified_by,
-                verified_at,
-                verification_notes,
-                monthly_revenue,
-                years_in_business,
-                bank_details,
-                tax_id
+    id,
+        user_id,
+        business_name,
+        business_email,
+        business_phone,
+        business_address,
+        verification_status,
+        created_at,
+        verified_by,
+        verified_at,
+        verification_notes,
+        monthly_revenue,
+        years_in_business,
+        bank_details,
+        tax_id
             `)
             .eq('verification_status', 'pending')
             .order('created_at', { ascending: false });
@@ -5113,7 +5512,7 @@ export async function fetchAllUsers(filters?: {
             query = query.eq('role', filters.role);
         }
         if (filters?.search) {
-            query = query.or(`email.ilike.%${filters.search}%,name.ilike.%${filters.search}%`);
+            query = query.or(`email.ilike.% ${filters.search}%, name.ilike.% ${filters.search}% `);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false });
@@ -5156,14 +5555,14 @@ export async function fetchAdminActivityLog(limit: number = 50): Promise<AdminAc
         const { data, error } = await supabase
             .from('admin_activity_log')
             .select(`
-                id,
-                admin_id,
-                action,
-                resource_type,
-                resource_id,
-                details,
-                created_at,
-                users:admin_id (name)
+    id,
+        admin_id,
+        action,
+        resource_type,
+        resource_id,
+        details,
+        created_at,
+        users: admin_id(name)
             `)
             .order('created_at', { ascending: false })
             .limit(limit);
@@ -5216,10 +5615,10 @@ export async function fetchTableData(
         const { data, error } = await query;
 
         if (error) {
-            console.error(`Error fetching data from ${tableName}:`, error);
+            console.error(`Error fetching data from ${tableName}: `, error);
             // Fallback to minimal select if column-specific query fails (e.g. migration skew)
             if (error.message?.includes('column')) {
-                console.warn(`Fallback: Fetching * from ${tableName}`);
+                console.warn(`Fallback: Fetching * from ${tableName} `);
                 const { data: fallbackData } = await supabase.from(tableName).select('*').limit(50);
                 return fallbackData || [];
             }
@@ -5228,7 +5627,7 @@ export async function fetchTableData(
 
         return data || [];
     } catch (error) {
-        console.error(`Error in fetchTableData for ${tableName}:`, error);
+        console.error(`Error in fetchTableData for ${tableName}: `, error);
         return [];
     }
 }
@@ -5372,7 +5771,7 @@ export const fetchVerticals = async (): Promise<ShopifyVertical[]> => {
 };
 
 export const fetchCategories = async (verticalId: string): Promise<ShopifyCategory[]> => {
-    console.log(`Fetching categories for vertical: ${verticalId}`);
+    console.log(`Fetching categories for vertical: ${verticalId} `);
     const { data, error } = await supabase
         .from('shopify_categories')
         .select('*')
@@ -5631,7 +6030,7 @@ export const getSellerUnreadCount = async (userId: string): Promise<number> => {
         const { data: conversations, error: convError } = await supabase
             .from('conversations')
             .select('unread_count, last_message_sender_id')
-            .or(`seller_id.eq.${userId},buyer_id.eq.${userId}`);
+            .or(`seller_id.eq.${userId}, buyer_id.eq.${userId} `);
 
         if (convError || !conversations) {
             return 0;
@@ -5662,6 +6061,9 @@ export interface SellerProfile {
     banner_url: string;
     contact_email: string;
     phone: string;
+    website_url?: string;
+    business_email?: string;
+    shop_name?: string;
     address_line1: string;
     city: string;
     state: string;
@@ -5669,26 +6071,35 @@ export interface SellerProfile {
     country: string;
     return_settings?: any;
     verification_status?: string;
+    bank_details?: any;
+    tax_id?: string;
+    registration_number?: string;
+    return_policy?: string;
+    shipping_policy?: string;
+    documents?: any[];
 }
 
 export const fetchSellerProfile = async (sellerId: string): Promise<SellerProfile | null> => {
     // Check vendors table for approved sellers
     const { data: vendors, error } = await supabase
         .from('vendors')
-        .select('*')
+        .select(`
+            *,
+            vendor_media (*)
+        `)
         .eq('user_id', sellerId)
-        .limit(1);
+        .single();
 
     if (error) {
         console.error('Error fetching seller profile:', error);
         return null; // Return null on error
     }
 
-    if (!vendors || vendors.length === 0) {
+    if (!vendors) {
         return null;
     }
 
-    const data = vendors[0];
+    const data = vendors;
 
     return {
         id: data.user_id,
@@ -5698,13 +6109,22 @@ export const fetchSellerProfile = async (sellerId: string): Promise<SellerProfil
         banner_url: data.banner_url || "",
         contact_email: data.business_email || "",
         phone: data.business_phone || "",
+        website_url: data.website_url || "",
+        business_email: data.business_email || "",
+        shop_name: data.shop_name || data.business_name || "",
         address_line1: data.address_street || data.business_address || "",
         city: data.address_city || "",
         state: data.address_state || "",
         postal_code: data.address_postal_code || "",
         country: data.address_country || "",
         return_settings: data.return_settings || {},
-        verification_status: data.verification_status
+        verification_status: data.verification_status,
+        tax_id: data.tax_id || "",
+        registration_number: data.registration_number || "",
+        return_policy: data.return_policy || "",
+        shipping_policy: data.shipping_policy || "",
+        bank_details: data.bank_details || {},
+        documents: data.vendor_media || []
     };
 };
 
@@ -5714,6 +6134,20 @@ export const saveSellerProfile = async (profile: SellerProfile): Promise<boolean
         .update({
             business_name: profile.business_name,
             business_description: profile.description,
+            business_phone: profile.phone,
+            website_url: profile.website_url,
+            business_email: profile.business_email || profile.contact_email,
+            shop_name: profile.shop_name,
+            address_street: profile.address_line1,
+            address_city: profile.city,
+            address_state: profile.state,
+            address_postal_code: profile.postal_code,
+            address_country: profile.country,
+            tax_id: profile.tax_id,
+            registration_number: profile.registration_number,
+            return_policy: profile.return_policy,
+            shipping_policy: profile.shipping_policy,
+            bank_details: profile.bank_details
         })
         .eq('user_id', profile.id);
 
@@ -5786,7 +6220,7 @@ export const fulfillOrder = async (orderId: string, trackingNumber?: string) => 
     await supabase.from('order_tracking_events').insert({
         order_id: orderId,
         event_type: 'shipped',
-        event_description: `Order fulfilled and shipped${trackingNumber ? ` (Tracking: ${trackingNumber})` : ''}`
+        event_description: `Order fulfilled and shipped${trackingNumber ? ` (Tracking: ${trackingNumber})` : ''} `
     });
 
     return true;
@@ -5851,7 +6285,7 @@ export const fulfillParcelOrder = async (
 
     if (updateError) {
         console.error('Error updating order for parcel fulfillment:', updateError);
-        return { success: false, message: `Order update failed: ${updateError.message}` };
+        return { success: false, message: `Order update failed: ${updateError.message} ` };
     }
 
     // 3. Insert Delivery Proof (OTP type)
@@ -5862,7 +6296,7 @@ export const fulfillParcelOrder = async (
             proof_type: 'otp',
             proof_data: otp,
             verification_status: 'pending',
-            notes: `Waybill: ${waybillNumber} via ${parcelService}. Collection Point: ${collectionPoint || 'N/A'}`
+            notes: `Waybill: ${waybillNumber} via ${parcelService}. Collection Point: ${collectionPoint || 'N/A'} `
         })
         .select();
 
@@ -5870,14 +6304,14 @@ export const fulfillParcelOrder = async (
 
     if (proofError) {
         console.error('Error creating delivery proof OTP:', proofError);
-        return { success: false, message: `OTP generation failed: ${proofError.message}` };
+        return { success: false, message: `OTP generation failed: ${proofError.message} ` };
     }
 
     // 4. Add tracking event
     await supabase.from('order_tracking_events').insert({
         order_id: orderId,
         event_type: 'shipped',
-        event_description: `Parcel sent via ${parcelService} (Waybill: ${waybillNumber}). Collection Point: ${collectionPoint || 'N/A'}`
+        event_description: `Parcel sent via ${parcelService} (Waybill: ${waybillNumber}). Collection Point: ${collectionPoint || 'N/A'} `
     });
 
     // 5. Release transport fees to seller initially
@@ -5915,7 +6349,7 @@ export const verifyParcelOTP = async (orderId: string, otpCode: string) => {
 
     if (error) {
         console.error('[verifyParcelOTP] RPC error:', error);
-        return { success: false, message: `Verification failed: ${error.message}` };
+        return { success: false, message: `Verification failed: ${error.message} ` };
     }
 
     return {
@@ -5936,7 +6370,7 @@ export const confirmOrderReceiptBuyer = async (orderId: string) => {
 
     if (error) {
         console.error('[confirmOrderReceiptBuyer] RPC error:', error);
-        return { success: false, message: `Confirmation failed: ${error.message}` };
+        return { success: false, message: `Confirmation failed: ${error.message} ` };
     }
 
     return {
@@ -7379,6 +7813,7 @@ export const applyReferralCode = async (code: string): Promise<boolean> => {
         return false;
     }
 };
+
 
 
 

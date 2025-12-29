@@ -15,6 +15,7 @@ import { CartView } from './components/CartView';
 import { MobileDealsPage } from './components/MobileDealsPage'; // Import new page
 import { BestSellersScreen } from './components/BestSellersScreen';
 import { TopRatedScreen } from './components/TopRatedScreen';
+import { NewArrivalsScreen } from './components/NewArrivalsScreen';
 import { CheckoutSheet } from './components/CheckoutSheet';
 import { OrderSuccessSheet } from './components/OrderSuccessSheet';
 import { ProductDetails } from './components/ProductDetails';
@@ -31,11 +32,11 @@ import { FollowedStoresView } from './components/FollowedStoresView';
 import { SellerOnboardingView } from './components/SellerOnboardingView';
 import { ProductCard } from './components/ProductCard';
 import { VendorProfileView } from './components/VendorProfileView';
+import { BuyerProfileView } from './components/BuyerProfileView';
 import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute } from '@/lib/api';
-import { Product } from '@/types';
+import { Product, Review, UserCoupon, BuyerOrder } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
-import { UserCoupon, BuyerOrder } from '@/types';
 import { formatPrice, getUserCurrency, setUserCurrency } from '@/lib/currency';
 import { useNotifications } from '@/components/NotificationContext';
 import { playCartAddSound } from '@/lib/sounds';
@@ -44,6 +45,8 @@ import NotificationInbox from '@/components/NotificationInbox';
 import { WriteReviewModal } from '@/components/WriteReviewModal';
 import { MobileFeedbackSheet } from './components/MobileFeedbackSheet';
 import MobileWriteReviewSheet from './components/MobileWriteReviewSheet';
+import { PlatformReviewsView } from './components/PlatformReviewsView';
+import { fetchTopPlatformReviews } from '@/lib/api';
 
 
 import VisualSearchSheet from './components/VisualSearchSheet';
@@ -51,7 +54,7 @@ import { OrderPrice } from '@/components/OrderPrice';
 import { detectUserCurrency } from '@/lib/currency-service';
 import { trackProductViewAuto } from '@/lib/tracking';
 
-type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications';
+type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications' | 'profile';
 
 type CartItem = {
     product: Product;
@@ -91,6 +94,7 @@ const App: React.FC = () => {
     const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
     const [showQRCodeOrderId, setShowQRCodeOrderId] = useState<string | null>(null);
     const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
+    const [isVisualSearchActive, setIsVisualSearchActive] = useState(false);
     const [disputingOrderId, setDisputingOrderId] = useState<string | null>(null);
     const [disputeReason, setDisputeReason] = useState('');
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
@@ -100,6 +104,8 @@ const App: React.FC = () => {
     const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
     const [recentOrders, setRecentOrders] = useState<BuyerOrder[]>([]);
     const [isFeedbackSheetOpen, setIsFeedbackSheetOpen] = useState(false);
+    const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
+    const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -191,6 +197,20 @@ const App: React.FC = () => {
     }, [userProfile]);
 
     useEffect(() => {
+        // Handle initial URL state for deep linking
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get('view');
+        if (view === 'platform-reviews') {
+            const loadReviews = async () => {
+                const reviews = await fetchTopPlatformReviews(20);
+                setPlatformReviews(reviews);
+                setIsPlatformReviewsOpen(true);
+            };
+            loadReviews();
+        }
+    }, []);
+
+    useEffect(() => {
         const onPopState = (event: PopStateEvent) => {
             const view = (event.state as any)?.view;
             if (selectedProduct) {
@@ -214,6 +234,34 @@ const App: React.FC = () => {
                 setIsOrderSuccessOpen(false);
                 return;
             }
+            if (isPlatformReviewsOpen) {
+                setIsPlatformReviewsOpen(false);
+                setPlatformReviews([]);
+                return;
+            }
+            if (view === 'platform-reviews') {
+                setIsPlatformReviewsOpen(false); // Close if popping state back from it? Or open?
+                // Actually popstate handles "going back". If we go back to a state where view is NOT platform-reviews, we should close it.
+                // If we popstate TO platform-reviews, we should open it.
+            }
+
+            if (isPlatformReviewsOpen && view !== 'platform-reviews') {
+                setIsPlatformReviewsOpen(false);
+                setPlatformReviews([]);
+                return;
+            }
+
+            if (view === 'platform-reviews') {
+                // Creating an async wrapper to fetch reviews if opened via history navigation
+                const loadReviews = async () => {
+                    const reviews = await fetchTopPlatformReviews(20);
+                    setPlatformReviews(reviews);
+                    setIsPlatformReviewsOpen(true);
+                };
+                loadReviews();
+                return;
+            }
+
             if (typeof view === 'string') {
                 setActiveTab(view);
             }
@@ -555,20 +603,53 @@ const App: React.FC = () => {
                 );
             }
             case 'reviews': {
+                const reviewableItems = recentOrders
+                    .filter(order => order.status === 'delivered')
+                    .flatMap(order => (order.items || []).map(item => ({ ...item, orderId: order.id })));
+
                 return (
                     <AccountSection title="Your reviews" description="Rate recent purchases" onBack={() => setActiveAccountSection(null)}>
                         <div className="flex flex-col gap-3">
-                            {products.slice(0, 3).map((p, idx) => (
-                                <div key={p.id ?? idx} className="flex gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
-                                    <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                                        <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
+                            {reviewableItems.length > 0 ? (
+                                reviewableItems.map((item, idx) => (
+                                    <div key={item.id || idx} className="flex gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+                                        <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                                            {item.image_url ? (
+                                                <img src={item.image_url} alt={item.product_title} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
+                                                    <span className="material-icons text-gray-400">inventory_2</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="mb-2">
+                                                <span className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Review Title</span>
+                                                <div className="text-sm font-semibold text-black dark:text-white line-clamp-1">{item.product_title}</div>
+                                            </div>
+
+                                            <div>
+                                                <span className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Your Experience</span>
+                                                <button
+                                                    onClick={() => {
+                                                        setReviewingProductId(item.product_id);
+                                                        setReviewingOrderId(item.orderId);
+                                                    }}
+                                                    className="mt-0.5 inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-orange-600 transition-colors"
+                                                >
+                                                    <span className="material-icons text-xs">edit_note</span>
+                                                    Write a review
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-semibold text-black dark:text-white line-clamp-2">{p.title}</div>
-                                        <button className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-primary">Write a review</button>
-                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
+                                    <span className="material-icons text-gray-300 text-4xl mb-2">rate_review</span>
+                                    <p className="text-sm text-gray-500">No reviewable items found. Items appear here after they are delivered.</p>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </AccountSection>
                 );
@@ -715,6 +796,16 @@ const App: React.FC = () => {
                     />
                 );
             }
+            case 'profile': {
+                if (!userProfile) return null;
+                return (
+                    <BuyerProfileView
+                        user={userProfile}
+                        onBack={() => setActiveAccountSection(null)}
+                        onUpdate={refreshUserProfile}
+                    />
+                );
+            }
             case 'notifications': {
                 return (
                     <AccountSection
@@ -742,6 +833,7 @@ const App: React.FC = () => {
 
     const handleBackFromSearch = () => {
         setSearchQuery(null);
+        setIsVisualSearchActive(false); // Reset visual search flag
         setActiveTab('home');
     };
 
@@ -937,6 +1029,7 @@ const App: React.FC = () => {
                     userName={userProfile?.name || userProfile?.email}
                     notificationCount={history.length + userCoupons.length}
                     cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+                    isVisualSearch={isVisualSearchActive}
                 />
             );
         }
@@ -979,6 +1072,14 @@ const App: React.FC = () => {
                         onVisualSearch={setVisualSearchProduct}
                     />
                 );
+            case 'new':
+                return (
+                    <NewArrivalsScreen
+                        onBack={() => setActiveTab('home')}
+                        onProductClick={handleProductClick}
+                        onVisualSearch={setVisualSearchProduct}
+                    />
+                );
             case 'categories':
                 return (
                     <CategoriesPage
@@ -1014,8 +1115,8 @@ const App: React.FC = () => {
                 // Otherwise, show seller dashboard
                 return sellerView === 'dashboard' ? (
                     <SellerDashboard
-                        sellerId={userProfile?.id}
-                        userName={userProfile?.name || userProfile?.email}
+                        sellerId={userProfile?.id || ''}
+                        userName={userProfile?.name || userProfile?.email || 'Seller'}
                         storeName={storeName || 'Marketplace Seller'}
                         onSignOut={handleSellerSignOut}
                         onSwitchAccount={() => setSellerView('guest')}
@@ -1023,6 +1124,7 @@ const App: React.FC = () => {
                         onOpenMessages={() => setIsAccountOpen(true)}
                         onOpenOrders={() => setActiveAccountSection('orders')}
                         onOpenPayouts={() => setActiveAccountSection('credit')}
+                        onClose={() => setActiveTab('home')}
                     />
                 ) : (
                     <SellerAccess
@@ -1098,6 +1200,11 @@ const App: React.FC = () => {
                                     onViewAllDeals={() => setActiveTab('deals')}
                                     onVisualSearch={setVisualSearchProduct}
                                     onFilterClick={setActiveTab}
+                                    onPlatformReviewsClick={async () => {
+                                        const reviews = await fetchTopPlatformReviews(20);
+                                        setPlatformReviews(reviews);
+                                        setIsPlatformReviewsOpen(true);
+                                    }}
                                 />
                             )}
                         </main>
@@ -1169,6 +1276,12 @@ const App: React.FC = () => {
                             onProductClick={handleProductClick}
                             showPromotions={false}
                             onVisualSearch={setVisualSearchProduct}
+                            onPlatformReviewsClick={async () => {
+                                const reviews = await fetchTopPlatformReviews(20);
+                                setPlatformReviews(reviews);
+                                setIsPlatformReviewsOpen(true);
+                                window.history.pushState({ view: 'platform-reviews' }, '', '?view=platform-reviews');
+                            }}
                         />
                     </div>
                 </div>
@@ -1239,6 +1352,14 @@ const App: React.FC = () => {
                         onCameraClick={() => setIsVisualSearchOpen(true)}
                         onUserClick={() => setIsAccountOpen(true)}
                         onNotificationClick={() => setActiveAccountSection('notifications')}
+                        onCategoryClick={(categoryIds, title, subcategories) => {
+                            // Use the first category ID as the main department ID
+                            if (categoryIds.length > 0) {
+                                setCategoryViewOpen({ departmentId: categoryIds[0], departmentName: title });
+                                setSelectedCategoryForSubs({ id: categoryIds[0], name: title });
+                                setActiveSubcategoryId('all');
+                            }
+                        }}
                         userAvatar={userProfile?.avatar_url}
                         userName={userProfile?.name || userProfile?.email}
                         notificationCount={history.length + userCoupons.length}
@@ -1372,9 +1493,12 @@ const App: React.FC = () => {
                     onClose={() => setIsVisualSearchOpen(false)}
                     onSearchResults={(searchQuery, keywords) => {
                         setIsVisualSearchOpen(false);
-                        // Use the AI-generated search query to search products
-                        if (searchQuery) {
-                            setSearchQuery(searchQuery);
+                        // Use the AI query for search but don't expose it in the UI
+                        const internalQuery = searchQuery || keywords.join(' ');
+                        if (internalQuery) {
+                            // Store internally for search but don't display
+                            setSearchQuery(internalQuery);
+                            setIsVisualSearchActive(true); // Mark as visual search
                             setActiveTab('search_results');
                         }
                     }}
@@ -1409,6 +1533,22 @@ const App: React.FC = () => {
                 isOpen={isFeedbackSheetOpen}
                 onClose={() => setIsFeedbackSheetOpen(false)}
             />
+            {isPlatformReviewsOpen && (
+                <PlatformReviewsView
+                    onBack={() => {
+                        setIsPlatformReviewsOpen(false);
+                        setPlatformReviews([]);
+                        // Go back in history if possible, or replace state to home
+                        if (window.history.length > 1) {
+                            window.history.back();
+                        } else {
+                            window.history.pushState({ view: 'home' }, '', '/');
+                            setActiveTab('home');
+                        }
+                    }}
+                    reviews={platformReviews}
+                />
+            )}
         </div>
     );
 };

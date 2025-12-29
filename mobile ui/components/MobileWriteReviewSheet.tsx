@@ -24,10 +24,12 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
     const [fitRating, setFitRating] = useState(0);
     const [valueRating, setValueRating] = useState(0);
     const [qualityRating, setQualityRating] = useState(0);
+    const [platformRating, setPlatformRating] = useState(0);
 
     // Text content
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+    const [platformFeedback, setPlatformFeedback] = useState('');
 
     // Tags
     const [pros, setPros] = useState<string[]>([]);
@@ -83,6 +85,11 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
             return;
         }
 
+        if (platformRating < 1) {
+            alert('Please rate your platform experience');
+            return;
+        }
+
         setUploading(true);
 
         try {
@@ -91,15 +98,17 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
                 user_id: userId,
                 order_id: orderId,
                 rating,
-                fit_rating: fitRating || undefined,
-                value_rating: valueRating || undefined,
-                quality_rating: qualityRating || undefined,
+                fit_rating: fitRating || 0,
+                value_rating: valueRating || 0,
+                quality_rating: qualityRating || 0,
                 content,
                 title,
                 recommended,
                 would_buy_again: wouldBuyAgain,
                 pros,
                 cons,
+                platform_rating: platformRating,
+                platform_feedback: platformFeedback.trim() ? platformFeedback.trim() : '',
                 photos
             };
 
@@ -141,15 +150,15 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             {/* Sheet */}
-            <div className="mt-auto bg-gray-50 rounded-t-[2.5rem] relative z-10 max-h-[95vh] overflow-y-auto w-full shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="mt-auto bg-gray-50 rounded-t-[2.5rem] relative z-10 max-h-[95vh] w-full shadow-2xl animate-in slide-in-from-bottom duration-300 flex flex-col overflow-hidden">
                 {/* Handle */}
-                <div className="flex justify-center pt-3 pb-2 sticky top-0 bg-gray-50 z-20">
+                <div className="flex justify-center pt-3 pb-2 bg-gray-50">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
                 </div>
 
                 {/* Header */}
-                <div className="px-6 pb-4 border-b border-gray-100 bg-gray-50 sticky top-4 z-20">
-                    <div className="flex justify-between items-center">
+                <div className="px-6 pb-4 border-b border-gray-100 bg-gray-50 shrink-0">
+                    <div className="flex justify-between items-center text-left">
                         <div>
                             <h2 className="text-xl font-black text-gray-900">Write Review</h2>
                             {productName && (
@@ -162,15 +171,15 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 space-y-8 pb-32">
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-8 text-left pb-12">
                     {/* Overall Star Rating */}
                     <div className="bg-white p-6 rounded-3xl shadow-sm text-center">
-                        <label className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 block">Overall Rating</label>
+                        <label className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 block text-center">Overall Rating</label>
                         <div className="flex justify-center">
                             {renderStars(rating, setRating, '5xl')}
                         </div>
-                        <p className="text-sm font-medium text-gray-400 mt-2">
+                        <p className="text-sm font-medium text-gray-400 mt-2 text-center">
                             {rating === 0 ? 'Tap to rate' : rating === 5 ? 'Excellent!' : rating === 4 ? 'Detailed' : rating === 3 ? 'Average' : 'Poor'}
                         </p>
                     </div>
@@ -190,6 +199,34 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
                         <div className="flex items-center justify-between">
                             <label className="text-xs font-medium text-gray-500">Quality</label>
                             {renderStars(qualityRating, setQualityRating, 'xl', 'text-orange-400')}
+                        </div>
+                    </div>
+
+                    {/* Platform Experience */}
+                    <div className="bg-blue-50/50 p-6 rounded-3xl shadow-sm space-y-6 border border-blue-100">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white">
+                                <span className="material-icons">verified_user</span>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900">Platform Experience</h3>
+                                <p className="text-[10px] text-gray-500">How would you rate JuaExpress?</p>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-center">
+                            {renderStars(platformRating, setPlatformRating, '4xl', 'text-blue-500')}
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2 block">Platform Feedback (Optional)</label>
+                            <textarea
+                                value={platformFeedback}
+                                onChange={(e) => setPlatformFeedback(e.target.value)}
+                                placeholder="E.g. JuaExpress is trustworthy, fast delivery, or reliable."
+                                rows={2}
+                                className="w-full px-4 py-3 bg-white border border-blue-100 rounded-xl text-sm font-medium placeholder-gray-300 focus:ring-2 focus:ring-blue-500 resize-none"
+                            />
                         </div>
                     </div>
 
@@ -326,7 +363,7 @@ const MobileWriteReviewSheet: React.FC<MobileWriteReviewSheetProps> = ({
                 </div>
 
                 {/* Footer Action */}
-                <div className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-100 safe-area-bottom rounded-t-3xl z-30">
+                <div className="p-6 bg-white border-t border-gray-100 safe-area-bottom rounded-t-3xl shrink-0">
                     <button
                         onClick={handleSubmit}
                         disabled={uploading || rating === 0}

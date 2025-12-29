@@ -6,9 +6,10 @@ import { formatCurrency } from '../../lib/utils';
 
 interface SellerReviewsViewProps {
     sellerId: string;
+    onBack?: () => void;
 }
 
-export const SellerReviewsView: React.FC<SellerReviewsViewProps> = ({ sellerId }) => {
+export const SellerReviewsView: React.FC<SellerReviewsViewProps> = ({ sellerId, onBack }) => {
     const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
     const [responseTime, setResponseTime] = useState<Record<string, string>>({});
@@ -64,8 +65,15 @@ export const SellerReviewsView: React.FC<SellerReviewsViewProps> = ({ sellerId }
 
     return (
         <div className="bg-gray-50 min-h-full pb-20">
+            <div className="flex items-center gap-3 p-5 bg-white border-b border-gray-100 shadow-sm">
+                {onBack && (
+                    <button onClick={onBack} className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center active:scale-95 transition-all">
+                        <span className="material-icons-round text-gray-600">chevron_left</span>
+                    </button>
+                )}
+                <h2 className="text-xl font-black text-slate-800">Product Reviews</h2>
+            </div>
             <div className="p-5">
-                <h2 className="text-xl font-black text-slate-800 mb-6">Product Reviews</h2>
 
                 <div className="space-y-4">
                     {reviews.map(review => (
@@ -154,8 +162,8 @@ export const SellerReviewsView: React.FC<SellerReviewsViewProps> = ({ sellerId }
                                         onClick={() => handleSubmitResponse(review.id)}
                                         disabled={!responseTime[review.id] || submitting[review.id]}
                                         className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${!responseTime[review.id] || submitting[review.id]
-                                                ? 'bg-gray-100 text-gray-400'
-                                                : 'bg-orange-600 text-white shadow-lg shadow-orange-200'
+                                            ? 'bg-gray-100 text-gray-400'
+                                            : 'bg-orange-600 text-white shadow-lg shadow-orange-200'
                                             }`}
                                     >
                                         {submitting[review.id] ? 'Posting...' : 'Post Response'}

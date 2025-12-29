@@ -12,7 +12,7 @@ interface AccountOverlayProps {
     recentOrders?: BuyerOrder[];
     onSignOut?: () => void;
     onSignIn?: () => void;
-    onNavigate?: (section: 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'wishlist' | 'notifications') => void;
+    onNavigate?: (section: 'orders' | 'coupons' | 'credit' | 'reviews' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'wishlist' | 'notifications' | 'profile') => void;
 }
 
 export const AccountOverlay: React.FC<AccountOverlayProps> = ({
@@ -37,13 +37,13 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
 
             {/* Premium Menu Sheet */}
             <div
-                className="absolute top-[64px] right-3 w-[330px] bg-white/90 dark:bg-black/90 backdrop-blur-2xl rounded-[32px] shadow-[0_24px_64px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_64px_rgba(0,0,0,0.4)] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-300 border border-white/50 dark:border-gray-800/50"
+                className="absolute top-[64px] right-3 left-3 sm:left-auto sm:w-[330px] max-h-[calc(100vh-80px)] bg-white/90 dark:bg-black/90 backdrop-blur-2xl rounded-[32px] shadow-[0_24px_64px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_64px_rgba(0,0,0,0.4)] overflow-hidden overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-300 border border-white/50 dark:border-gray-800/50"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* User Header Section */}
                 <div className="p-6 pb-4">
                     <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 cursor-pointer active:scale-95 transition-transform" onClick={() => isAuthed && onNavigate?.('profile')}>
                             <div className="relative">
                                 <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800 border-2 border-white dark:border-gray-700 shadow-xl">
                                     {avatarUrl ? (
@@ -165,6 +165,7 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
                 {/* Navigation List Menu */}
                 <div className="py-2 bg-gray-50/50 dark:bg-black/20">
                     {[
+                        { icon: 'person_outline', label: 'My Profile', key: 'profile' as const },
                         { icon: 'star_outline', label: 'Your Reviews', key: 'reviews' as const },
                         { icon: 'favorite_border', label: 'Curated Wishlist', key: 'wishlist' as const },
                         { icon: 'storefront', label: 'Followed Stores', key: 'stores' as const },

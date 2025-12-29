@@ -21,6 +21,8 @@ interface FlaggedReview {
     cons?: string[];
     recommended?: boolean;
     would_buy_again?: boolean;
+    platform_rating?: number;
+    platform_feedback?: string;
     photos?: { photo_url: string }[];
 }
 
@@ -54,6 +56,8 @@ const ModerationQueueView: React.FC = () => {
                     cons,
                     recommended,
                     would_buy_again,
+                    platform_rating,
+                    platform_feedback,
                     products!enhanced_reviews_product_id_fkey(title),
                     review_photos(photo_url)
                 `)
@@ -165,9 +169,15 @@ const ModerationQueueView: React.FC = () => {
                                     </div>
 
                                     {/* Main Content */}
-                                    <div className="bg-gray-50 rounded-xl p-4">
-                                        <h4 className="font-bold text-gray-900 mb-2">{review.title || 'No Title'}</h4>
-                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{review.content}</p>
+                                    <div className="bg-gray-50 rounded-xl p-5 space-y-4">
+                                        <div>
+                                            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-1">Review Title</span>
+                                            <h4 className="font-bold text-gray-900">{review.title || 'No Title'}</h4>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-1">Your Experience</span>
+                                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{review.content}</p>
+                                        </div>
                                     </div>
 
                                     {/* Sub-Ratings Grid -- FIXED: Safely check for rating values */}
@@ -243,6 +253,36 @@ const ModerationQueueView: React.FC = () => {
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Platform Experience Feedback */}
+                                    {(review.platform_rating !== undefined || review.platform_feedback) && (
+                                        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 mt-2">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+                                                        <span className="material-icons text-white text-sm">stars</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Platform Experience</span>
+                                                        <p className="text-sm font-bold text-indigo-900">JuaExpress Feedback</p>
+                                                    </div>
+                                                </div>
+                                                {review.platform_rating !== undefined && (
+                                                    <div className="flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-indigo-100 shadow-sm">
+                                                        <span className="material-icons text-indigo-600 text-sm">star</span>
+                                                        <span className="text-sm font-black text-indigo-600">{review.platform_rating}.0</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {review.platform_feedback ? (
+                                                <p className="text-sm text-indigo-800 leading-relaxed font-medium italic">
+                                                    "{review.platform_feedback}"
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-indigo-400 italic">No text feedback provided for platform.</p>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Recommendation & Buy Again */}
                                     <div className="flex gap-4 pt-2 border-t border-gray-100">

@@ -286,13 +286,18 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
 
                 {/* Empty State Illustration */}
                 {cartItems.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-24 animate-in fade-in duration-700">
-                        <div className="w-24 h-24 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center mb-6">
-                            <span className="material-icons-round text-4xl text-gray-300 dark:text-gray-700">bag</span>
+                    <div className="flex flex-col items-center justify-center py-20 animate-in fade-in zoom-in duration-1000">
+                        {/* Large Minimalist Empty Bag Icon */}
+                        <div className="relative w-48 h-48 mb-8 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-gray-100 dark:bg-gray-900/50 rounded-full scale-100"></div>
+                            <div className="absolute inset-0 bg-gray-50 dark:bg-gray-800/20 rounded-full scale-90 blur-xl"></div>
+                            <span className="material-icons-round text-7xl text-gray-300 dark:text-gray-700 relative z-10">shopping_bag</span>
                         </div>
-                        <h3 className="text-[17px] font-black text-black dark:text-white uppercase tracking-tight mb-2">Bag is empty</h3>
-                        <p className="text-[12px] text-gray-400 font-medium text-center px-12 leading-relaxed">
-                            Discover our curated selection and add items to your collection.
+
+                        <h3 className="text-[20px] font-black text-black dark:text-white uppercase tracking-widest mb-3">Bag is empty</h3>
+                        <p className="text-[13px] text-gray-400 font-medium text-center px-16 leading-relaxed mb-10 max-w-[320px]">
+                            Discover our curated selection and add items
+                            to your collection.
                         </p>
                     </div>
                 )}

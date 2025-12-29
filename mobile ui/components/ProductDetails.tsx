@@ -220,11 +220,16 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
             if (product.id) {
                 try {
                     const vendorMap = await fetchVendorInfo([product.id.toString()]);
-                    const sellerId = product.seller_id?.toString() || product.vendor?.user_id;
+                    // Try getting seller ID from multiple possible sources
+                    const sellerId = product.seller_id?.toString() ||
+                        product.vendor_id?.toString() ||
+                        product.vendor?.vendor_id ||
+                        product.vendor?.user_id;
+
                     if (sellerId && vendorMap.has(sellerId)) {
                         setVendorInfo(vendorMap.get(sellerId) || null);
                     } else if (vendorMap.size > 0) {
-                        // Fallback: use the first (and likely only) vendor in the map
+                        // Fallback: use the first vendor retrieved for this product
                         setVendorInfo(Array.from(vendorMap.values())[0]);
                     }
                 } catch (error) {
@@ -677,11 +682,19 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             )}
                         </div>
                     </div>
-                    {product.discountPercent && (
-                        <div className="bg-price-red text-white px-3 py-1.5 rounded-xl font-black text-sm shadow-lg shadow-red-200 dark:shadow-none animate-pulse">
-                            -{product.discountPercent}%
-                        </div>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {product.discountPercent && (
+                            <div className="bg-price-red text-white px-3 py-1.5 rounded-xl font-black text-sm shadow-lg shadow-red-200 dark:shadow-none animate-pulse">
+                                -{product.discountPercent}%
+                            </div>
+                        )}
+                        {product.lower_than_similar && (
+                            <div className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs shadow-lg shadow-emerald-200 dark:shadow-none">
+                                <span className="material-icons-round text-sm">trending_down</span>
+                                <span>Lower than similar</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Integrated Promotions */}
@@ -973,31 +986,31 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
             </div>
 
             {/* Premium Seller Section */}
-            {product.vendor?.business_name && (
+            {(product.vendor?.business_name || vendorInfo?.business_name) && (
                 <div className="px-4">
                     <div className="bg-white dark:bg-surface-dark p-6 rounded-[32px] flex flex-col gap-6 border border-gray-100 dark:border-white/5 shadow-premium">
                         {/* Header info */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 rounded-full border-4 border-gray-50 dark:border-white/5 overflow-hidden bg-gray-100 dark:bg-gray-900 flex items-center justify-center text-xs font-black shadow-inner">
-                                    {product.vendor.logo_url ? (
-                                        <img src={product.vendor.logo_url} alt="" className="w-full h-full object-cover" />
+                                    {(vendorInfo?.logo_url || product.vendor?.logo_url) ? (
+                                        <img src={vendorInfo?.logo_url || product.vendor?.logo_url} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                        product.vendor.business_name.slice(0, 2).toUpperCase()
+                                        (vendorInfo?.business_name || product.vendor?.business_name || 'Vendor').slice(0, 2).toUpperCase()
                                     )}
                                 </div>
                                 <div className="flex flex-col min-w-0">
                                     <div className="flex items-center gap-1.5 mb-1">
-                                        <span className="text-base font-black text-gray-900 dark:text-white tracking-tight leading-none truncate">{product.vendor.business_name}</span>
-                                        {product.vendor.is_verified && (
+                                        <span className="text-base font-black text-gray-900 dark:text-white tracking-tight leading-none truncate">{vendorInfo?.business_name || product.vendor?.business_name}</span>
+                                        {(vendorInfo?.is_verified || product.vendor?.is_verified) && (
                                             <span className="material-icons-round text-blue-500 text-sm">verified</span>
                                         )}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {(product.vendor.business_country || product.vendor.business_country !== 'Independent Seller') && (
+                                        {(vendorInfo?.business_country || product.vendor?.business_country) && (
                                             <div className="flex items-center gap-1 text-[10px] font-black text-gray-400 tracking-tighter uppercase">
                                                 <span className="material-icons-outlined text-xs text-blue-500">public</span>
-                                                <span>From {product.vendor.business_country}</span>
+                                                <span>From {vendorInfo?.business_country || product.vendor?.business_country}</span>
                                             </div>
                                         )}
                                     </div>
@@ -1053,7 +1066,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         </div>
 
                         {/* Certificates / Documents Branding */}
-                        {product.vendor.is_verified && (
+                        {(vendorInfo?.is_verified || product.vendor?.is_verified) && (
                             <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-500/5 rounded-2xl border border-blue-100/50 dark:border-blue-500/10">
                                 <span className="material-icons-round text-blue-500">verified_user</span>
                                 <div className="flex-1">

@@ -5,8 +5,8 @@ import { getSellerUnreadCount } from '@/lib/api';
 
 interface SellerDashboardLayoutProps {
     children: React.ReactNode;
-    activeTab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount';
-    onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount') => void;
+    activeTab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'store-branding' | 'settings' | 'messages' | 'create-auto-discount';
+    onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'store-branding' | 'settings' | 'messages' | 'create-auto-discount') => void;
     user: any;
     onSignOut: () => void;
 }
@@ -104,9 +104,7 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
             label: 'My account',
             icon: 'person',
             submenu: [
-                { id: 'account-profile', label: 'Account profile' },
-                { id: 'account-seller-profile', label: 'Seller profile' },
-                { id: 'account-tax', label: 'Tax information' },
+                { id: 'store-branding', label: 'Store identity' },
                 { id: 'account-shipping', label: 'Shipping settings' },
                 { id: 'account-return', label: 'Return settings' },
                 { id: 'account-permissions', label: 'User permissions' },

@@ -14,6 +14,7 @@ interface HeaderProps {
   onFiveStarClick?: () => void;
   onBestSellingClick?: () => void;
   onSearch?: (query: string) => void;
+  onCameraClick?: () => void;
   onCategoryClick?: (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: string[]) => void;
   onAccountPageClick?: (pageTitle: string) => void;
   onProductClick?: (product: Product) => void;
@@ -32,6 +33,7 @@ const Header: React.FC<HeaderProps> = ({
   onFiveStarClick,
   onBestSellingClick,
   onSearch,
+  onCameraClick,
   onCategoryClick,
   onAccountPageClick,
   onProductClick,
@@ -56,6 +58,15 @@ const Header: React.FC<HeaderProps> = ({
   const [currentCurrency, setCurrentCurrency] = useState<string>(getUserCurrency());
   const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
   const { history } = useNotifications();
+  const [isMobileCategoriesOpen, setIsMobileCategoriesOpen] = useState(false);
+  const [isTopCategoriesOverlayOpen, setIsTopCategoriesOverlayOpen] = useState(false);
+  const [selectedOverlayDepartmentId, setSelectedOverlayDepartmentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) {
+      setIsMobileCategoriesOpen(false);
+    }
+  }, [isMobileMenuOpen]);
 
   // Prepare currency conversion for recent views
   const recentViewPriceValues = useMemo(() =>
@@ -215,13 +226,20 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="relative bg-primary text-white py-4 px-4 lg:px-6 flex items-center justify-between z-[51]">
+    <header
+      className="relative bg-primary text-white py-4 px-4 lg:px-6 flex items-center justify-between z-[51]"
+      onMouseLeave={() => {
+        setIsMobileMenuOpen(false);
+        setIsTopCategoriesOverlayOpen(false);
+      }}
+    >
       {/* Left Section: Logo & Categories */}
       <div className="flex items-center space-x-4 lg:space-x-6">
-        {/* Mobile Menu Button */}
+        {/* Mobile Menu Button - Visible below 1340px */}
         <button
-          className="lg:hidden text-white"
+          className="min-[1340px]:hidden text-white py-2"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          onMouseEnter={() => setIsMobileMenuOpen(true)}
         >
           <span className="material-icons">menu</span>
         </button>
@@ -236,7 +254,8 @@ const Header: React.FC<HeaderProps> = ({
           JuaExpress
         </span>
 
-        <div className="hidden lg:flex items-center space-x-4">
+        {/* Desktop Links - Hidden below 1340px */}
+        <div className="hidden min-[1340px]:flex items-center space-x-4">
           <a
             href="#"
             className="flex items-center space-x-1 hover:text-gray-200 transition-colors"
@@ -260,7 +279,7 @@ const Header: React.FC<HeaderProps> = ({
             Best-Selling Items
           </a>
 
-          {/* Categories Dropdown Group */}
+          {/* Categories Dropdown Group - Always visible on desktop layout */}
           <div className="group relative">
             <button className="bg-black bg-opacity-80 px-4 py-2 rounded-full flex items-center space-x-2 text-sm font-medium hover:bg-opacity-100 transition-all">
               <span>Categories</span>
@@ -390,11 +409,14 @@ const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Middle Section: Search Bar */}
-      <div className="flex-1 max-w-md mx-4 lg:mx-6 hidden sm:block">
+      <div className="flex-1 max-w-5xl mx-4 lg:mx-8 hidden sm:block min-w-[200px]">
         <div className="relative group">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-30">
+            <span className="material-icons text-gray-400 group-focus-within:text-primary transition-colors">search</span>
+          </div>
           <input
-            className="w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 rounded-full py-2 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-white transition-all shadow-inner relative z-20"
-            placeholder="Search JuaExpress"
+            className="w-full bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-200 rounded-full h-11 pl-10 pr-12 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-white dark:focus:bg-gray-700 transition-all shadow-sm focus:shadow-md relative z-20 border border-transparent focus:border-primary/20"
+            placeholder="Search for products, brands and more..."
             type="search"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
@@ -403,10 +425,14 @@ const Header: React.FC<HeaderProps> = ({
             onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
           />
           <button
-            className="absolute right-0 top-0 h-full px-4 text-white bg-black rounded-r-full hover:bg-gray-800 transition-colors z-20"
-            onClick={handleSearchSubmit}
+            className="absolute right-1 top-1 bottom-1 px-4 bg-primary text-white rounded-full hover:bg-primary-dark transition-colors z-20 shadow-md flex items-center justify-center transform active:scale-95"
+            onClick={(e) => {
+              e.preventDefault();
+              if (onCameraClick) onCameraClick();
+            }}
+            title="Search with camera"
           >
-            <span className="material-icons">search</span>
+            <span className="material-icons text-lg">photo_camera</span>
           </button>
 
           {/* Search Dropdown */}
@@ -762,19 +788,46 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
+
       {/* Mobile Drawer (Basic) */}
       {
         isMobileMenuOpen && (
-          <div className="absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-xl lg:hidden p-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="absolute top-full left-0 w-full bg-white dark:bg-gray-900 shadow-xl min-[1340px]:hidden p-4 border-t border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
             <nav className="space-y-3">
-              <a
-                href="#"
-                className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
-                onClick={() => setIsMobileMenuOpen(false)}
+              {/* User Account Section - Only if logged in */}
+              {user && (
+                <button
+                  className="flex items-center gap-3 w-full py-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded transition-colors text-left"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    if (onAccountPageClick) onAccountPageClick('Your profile'); // Navigate to main profile
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center text-white text-base font-medium">
+                    {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-sm font-normal text-gray-500 dark:text-gray-400 block">Hello, {user.name?.split(' ')[0] || 'User'}</span>
+                    <span className="text-base font-bold text-gray-900 dark:text-white block">Orders & Account</span>
+                  </div>
+                  <span className="material-icons text-gray-400">chevron_right</span>
+                </button>
+              )}
+              {user && <hr className="border-gray-100 dark:border-gray-800" />}
+              <button
+                className="flex items-center justify-between w-full text-gray-800 dark:text-white py-2"
+                onClick={() => {
+                  setIsMobileMenuOpen(false); // Close the drawer
+                  setIsTopCategoriesOverlayOpen(true); // Open the full overlay
+                }}
               >
-                <span className="material-icons text-primary">category</span>
-                <span>Categories</span>
-              </a>
+                <div className="flex items-center space-x-2">
+                  <span className="material-icons text-primary">category</span>
+                  <span>Categories</span>
+                </div>
+                <span className="material-icons text-gray-400">chevron_right</span>
+              </button>
+
               <a
                 href="#"
                 className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
@@ -787,6 +840,7 @@ const Header: React.FC<HeaderProps> = ({
                 <span className="material-icons text-slate-900 dark:text-slate-100">star</span>
                 <span>5-Star Rated</span>
               </a>
+
               <a
                 href="#"
                 className="flex items-center space-x-2 text-gray-800 dark:text-white py-2"
@@ -796,9 +850,10 @@ const Header: React.FC<HeaderProps> = ({
                   if (onBestSellingClick) onBestSellingClick();
                 }}
               >
-                <span className="material-icons text-red-500">local_fire_department</span>
+                <span className="material-icons text-orange-500">local_fire_department</span>
                 <span>Best-Selling Items</span>
               </a>
+
               {user ? (
                 <a
                   href="#"
@@ -828,6 +883,150 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         )
       }
+
+      {/* Full Screen Categories Overlay (Department View) */}
+      {isTopCategoriesOverlayOpen && (
+        <div className="absolute top-full left-0 w-full h-[calc(100vh-80px)] z-[40] bg-white dark:bg-black flex flex-col shadow-2xl border-t border-gray-100 dark:border-gray-800 animate-in slide-in-from-top-5 duration-200">
+          {/* Header of Overlay */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-surface-dark">
+            <h2 className="text-lg font-bold text-black dark:text-white flex items-center gap-2">
+              <span className="material-icons text-primary">category</span>
+              Browse Categories
+            </h2>
+            <button
+              onClick={() => setIsTopCategoriesOverlayOpen(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors shadow-sm border border-gray-200 dark:border-gray-600"
+            >
+              <span className="material-icons text-gray-500 dark:text-gray-400 font-bold">close</span>
+            </button>
+          </div>
+
+          {/* Two-Column Content */}
+          <div className="flex flex-1 overflow-hidden">
+            {/* Left Sidebar: Departments */}
+            <aside className="w-[30%] bg-gray-50 dark:bg-surface-dark overflow-y-auto border-r border-gray-100 dark:border-gray-800">
+              <div className="p-3">
+                <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Departments</span>
+              </div>
+              {parentCategories.map((parent) => {
+                const isSelected = (selectedOverlayDepartmentId || parentCategories[0]?.id) === parent.id;
+                return (
+                  <button
+                    key={parent.id}
+                    onClick={() => {
+                      setSelectedOverlayDepartmentId(parent.id);
+                      setIsTopCategoriesOverlayOpen(false); // Close overlay
+                      // Trigger navigation
+                      const childIds = getSubcategoryIdsForParent(parent.id); // Get children just in case, but we navigate to parent
+                      const visualSubcats = getVisualSubcategoriesForParent(parent.id);
+
+                      if (onCategoryClick) {
+                        const homeCrumb = { label: 'Home', type: 'home' } as const;
+                        const parentCrumb = {
+                          label: parent.name,
+                          type: 'category',
+                          id: parent.id,
+                          data: {
+                            title: parent.name,
+                            categoryIds: childIds,
+                            visualCategories: visualSubcats
+                          }
+                        } as const;
+
+                        onCategoryClick(
+                          [parent.id], // Pass parent ID as the main category ID
+                          parent.name,
+                          visualSubcats,
+                          [homeCrumb, parentCrumb]
+                        );
+                      }
+                    }}
+                    onMouseEnter={() => setSelectedOverlayDepartmentId(parent.id)}
+                    className={`w-full text-left py-4 px-4 text-[13px] leading-tight transition-all duration-300 relative group ${isSelected
+                      ? 'bg-white dark:bg-black text-primary font-black border-l-4 border-primary shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium border-l-4 border-transparent'
+                      }`}
+                  >
+                    <span>{parent.name}</span>
+                  </button>
+                );
+              })}
+            </aside>
+
+            {/* Right Content: Subcategories Grid */}
+            <main className="flex-1 overflow-y-auto bg-white dark:bg-black p-4 pb-20">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.15em]">
+                  {parentCategories.find(p => p.id === (selectedOverlayDepartmentId || parentCategories[0]?.id))?.name}
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {overlayData
+                  .filter(d => d.parent_category_id === (selectedOverlayDepartmentId || parentCategories[0]?.id))
+                  .sort((a, b) => b.trend_score - a.trend_score)
+                  .map((item) => (
+                    <button
+                      key={item.subcategory_id}
+                      className="flex flex-col items-center gap-2 group text-center"
+                      onClick={() => {
+                        setIsTopCategoriesOverlayOpen(false);
+                        // Trigger navigation logic
+                        const childIds = getSubcategoryIdsForParent(item.parent_category_id);
+                        const visualSubcats = getVisualSubcategoriesForParent(item.parent_category_id);
+
+                        if (onCategoryClick) {
+                          const homeCrumb = { label: 'Home', type: 'home' } as const;
+                          const parentCrumb = {
+                            label: item.parent_category_name,
+                            type: 'category',
+                            id: item.parent_category_id,
+                            data: {
+                              title: item.parent_category_name,
+                              categoryIds: childIds,
+                              visualCategories: visualSubcats
+                            }
+                          } as const;
+                          const subCrumb = {
+                            label: item.subcategory_name,
+                            type: 'subcategory',
+                            id: item.subcategory_id
+                          } as const;
+
+                          onCategoryClick(
+                            [item.subcategory_id],
+                            item.subcategory_name,
+                            [],
+                            [homeCrumb, parentCrumb, subCrumb]
+                          );
+                        }
+                      }}
+                    >
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 group-hover:border-primary transition-colors">
+                        {item.trending_product_image_url ? (
+                          <img
+                            src={item.trending_product_image_url}
+                            alt={item.subcategory_name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <span className="material-icons text-gray-300">image</span>
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 group-hover:text-primary transition-colors line-clamp-2">
+                        {item.subcategory_name}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            </main>
+          </div>
+        </div>
+      )}
+
+
     </header >
   );
 };

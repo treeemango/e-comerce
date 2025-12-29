@@ -2,8 +2,30 @@ import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Load environment variables from .env file
+function loadEnv() {
+    const envPath = path.join(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const envVars = envContent.split('\n').reduce((acc, line) => {
+            const [key, ...valueParts] = line.split('=');
+            if (key && valueParts.length > 0) {
+                acc[key.trim()] = valueParts.join('=').trim();
+            }
+            return acc;
+        }, {} as Record<string, string>);
+
+        Object.entries(envVars).forEach(([key, value]) => {
+            if (!process.env[key]) {
+                process.env[key] = value;
+            }
+        });
+    }
+}
+
+loadEnv();
+
 // Initialize Supabase client
-// Note: You'll need to set these environment variables
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
@@ -119,7 +141,7 @@ async function generateSitemap() {
     const { data: products, error: productsError } = await supabase
         .from('products')
         .select('id, title, updated_at')
-        .eq('is_active', true)
+        .in('status', ['active', 'approved'])
         .limit(1000); // Adjust limit as needed
 
     if (productsError) {

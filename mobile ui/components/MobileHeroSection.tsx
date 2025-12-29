@@ -108,7 +108,7 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
     if (deals.length === 0) return null;
 
     return (
-        <div className="relative w-full h-[220px] overflow-hidden">
+        <div className="relative w-full h-[260px] overflow-hidden">
             {deals.map((deal, idx) => {
                 const isActive = idx === currentSlide;
                 const theme = getTheme(deal.category_id || deal.category_name, idx);
@@ -133,16 +133,20 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                                     <span className="text-[8px] font-black text-white/90 uppercase tracking-tighter">{deal.tag || 'Elite Deal'}</span>
                                 </div>
 
-                                <h2 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-lg">
+                                <h2 className="text-lg font-black text-white leading-tight line-clamp-2 drop-shadow-lg">
                                     {deal.title}
                                 </h2>
 
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-black text-white">{getConvertedPrice(idx, deal.price)}</span>
+                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="text-xl font-black text-white truncate max-w-[120px]">{getConvertedPrice(idx, deal.price)}</span>
                                     {deal.discountPercent > 0 && (
-                                        <span className="text-[10px] font-bold text-red-100 px-1.5 py-0.5 bg-red-600 rounded-lg">-{deal.discountPercent}%</span>
+                                        <span className="text-[8px] font-bold text-red-100 px-1 py-0.5 bg-red-600 rounded-md shrink-0">-{deal.discountPercent}%</span>
                                     )}
                                 </div>
+
+                                <p className="text-[10px] text-white/70 line-clamp-2 leading-relaxed max-w-[160px]">
+                                    {deal.description || deal.metaDescription || `Discover the best of ${deal.category_name || 'premium products'}`}
+                                </p>
 
                                 <button
                                     onClick={() => onProductClick?.({
@@ -156,20 +160,22 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                                         rating: deal.rating,
                                         reviews: deal.reviews,
                                         category: deal.category_name,
+                                        seller_id: deal.seller_id || deal.vendor_id,
+                                        vendor: deal.vendor,
                                     } as Product)}
-                                    className="mt-2 bg-white text-black text-[10px] font-black px-5 py-2 rounded-xl shadow-xl w-fit flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform"
+                                    className="mt-1 bg-white text-black text-[9px] font-black px-4 py-2 rounded-xl shadow-xl w-fit flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform"
                                 >
                                     GET IT NOW
-                                    <span className="material-icons-outlined text-xs">arrow_forward</span>
+                                    <span className="material-icons-outlined text-[10px]">arrow_forward</span>
                                 </button>
                             </div>
 
                             {/* Product Visual */}
-                            <div className="relative w-[130px] h-[160px] flex items-center justify-center">
+                            <div className="relative w-[120px] h-[180px] flex items-center justify-center shrink-0">
                                 {/* Glass Platform */}
                                 <div className="absolute bottom-4 inset-x-0 h-4 bg-black/40 blur-xl rounded-[100%] scale-x-50" />
 
-                                <div className="relative w-full h-full flex items-center justify-center p-2 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
+                                <div className="relative w-full h-[150px] flex items-center justify-center p-2 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
                                     <img
                                         src={deal.image}
                                         alt={deal.title}
@@ -178,9 +184,9 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                                 </div>
 
                                 {((deal.rating ?? 0) > 0 && (deal.reviews ?? 0) > 0) && (
-                                    <div className="absolute -top-2 -right-2 bg-white shadow-xl p-2 rounded-xl rotate-12 flex items-center gap-0.5 border border-white">
-                                        <span className="material-icons-round text-slate-900 dark:text-slate-100 text-[10px]">star</span>
-                                        <span className="text-[10px] font-black">{deal.rating?.toFixed(1)}</span>
+                                    <div className="absolute -top-1 -right-1 bg-white shadow-xl p-1.5 rounded-lg rotate-12 flex items-center gap-0.5 border border-white">
+                                        <span className="material-icons-round text-slate-900 dark:text-slate-100 text-[8px]">star</span>
+                                        <span className="text-[9px] font-black">{deal.rating?.toFixed(1)}</span>
                                     </div>
                                 )}
                             </div>

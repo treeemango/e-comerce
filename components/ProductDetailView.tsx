@@ -219,7 +219,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
    useEffect(() => {
       const hydrateVendor = async () => {
-         if (resolvedVendor) return;
+         const isPartialData = !resolvedVendor?.business_name || !resolvedVendor?.follower_count;
+         if (resolvedVendor && !isPartialData) return;
          if (!product.id) return;
          const vendorMap = await fetchVendorInfo([product.id.toString()]);
          const candidateKeys = [product.seller_id, product.vendor?.vendor_id]
@@ -951,6 +952,12 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         {discountPercent !== null && discountPercent > 0 && (
                            <span className="text-xs font-bold text-orange-600 border border-orange-600 px-1 rounded">-{discountPercent}%</span>
                         )}
+                        {product.lower_than_similar && (
+                           <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 px-2 py-0.5 rounded ml-1">
+                              <span className="material-icons text-[12px]">trending_down</span>
+                              Lower than similar
+                           </span>
+                        )}
                      </div>
                      {showPromo && (
                         <div className="text-xs text-orange-700 dark:text-orange-400 font-medium">
@@ -1369,16 +1376,16 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            {/* Header with Logo */}
                            <div className="flex items-center gap-4 mb-4">
                               {vendor.logo_url ? (
-                                 <img src={vendor.logo_url} alt={vendor.business_name} className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-100 dark:border-slate-700" />
+                                 <img src={vendor.logo_url} alt={vendor.business_name} className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700" />
                               ) : (
-                                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-black text-xl uppercase">
-                                    {vendor.business_name.charAt(0)}
+                                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-black text-xl uppercase">
+                                    {vendor.business_name?.charAt(0) || '?'}
                                  </div>
                               )}
                               <div className="flex-1 min-w-0">
                                  <div className="flex items-center gap-2">
                                     <h3 className="font-black text-slate-900 dark:text-white truncate">{vendor.business_name}</h3>
-                                    {vendor.is_verified && <span className="material-icons-round text-blue-500 text-sm flex-shrink-0">verified</span>}
+                                    {vendor.is_verified && <span className="material-icons-round text-blue-500 text-base" title="Verified">verified</span>}
                                  </div>
                                  {/* Country Badge */}
                                  {vendor.business_country && vendor.business_country !== 'Independent Seller' && (
@@ -1738,10 +1745,23 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         {/* Wholesale Price Tiers (Image 1 style) */}
                         {quantityDiscounts.length > 0 && (
                            <div className="space-y-4">
-                              <div className="flex items-center gap-2">
-                                 <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm">25% off</span>
-                                 <span className="text-[10px] font-bold text-red-600">Lower priced than similar</span>
-                              </div>
+                              {/* Dynamic discount badge + lower_than_similar from backend */}
+                              {(() => {
+                                 const comparePrice = product.compare_at_price || product.rrp_price || displayRRP;
+                                 const discountPct = comparePrice && comparePrice > product.price
+                                    ? Math.round(((comparePrice - product.price) / comparePrice) * 100)
+                                    : 0;
+                                 return (discountPct > 0 || product.lower_than_similar) ? (
+                                    <div className="flex items-center gap-2">
+                                       {discountPct > 0 && (
+                                          <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm">{discountPct}% off</span>
+                                       )}
+                                       {product.lower_than_similar && (
+                                          <span className="text-[10px] font-bold text-red-600">Lower priced than similar</span>
+                                       )}
+                                    </div>
+                                 ) : null;
+                              })()}
                               <div className="flex gap-6 overflow-x-auto pb-2 scrollbar-hide">
                                  <div className="flex-shrink-0">
                                     <div className="text-[10px] text-slate-500 mb-1">2 - 99 pieces</div>

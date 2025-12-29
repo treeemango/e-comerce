@@ -41,5 +41,5 @@ USING (
 INSERT INTO public.admin_permissions (user_id, email, role, permission_level)
 SELECT id, email, 'super_admin', 'super_admin'
 FROM auth.users
-WHERE email = 'admin@juaexpress.com' -- Replace with your actual admin email if known, or run manually
+WHERE email = 'juaexpress01@gmail.com' -- Replace with your actual admin email if known, or run manually
 ON CONFLICT (user_id) DO NOTHING;

@@ -15,6 +15,7 @@ interface SearchResultsProps {
     userName?: string | null;
     notificationCount?: number;
     cartCount?: number;
+    isVisualSearch?: boolean; // Hide AI keywords when true
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({
@@ -26,7 +27,8 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     userAvatar,
     userName,
     notificationCount = 0,
-    cartCount = 0
+    cartCount = 0,
+    isVisualSearch = false
 }) => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -40,6 +42,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
         delivery_locations: [],
         vendor_countries: []
     });
+
+    // Display text - hide AI keywords for visual search
+    const displayQuery = isVisualSearch ? 'Visual Search' : query;
 
     React.useEffect(() => {
         const performSearch = async () => {
@@ -76,9 +81,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         className="flex-grow flex items-center bg-gray-100 dark:bg-gray-900 rounded-2xl px-4 py-2.5 cursor-pointer active:scale-[0.98] transition-all"
                         onClick={onBack}
                     >
-                        <span className="material-icons-round text-primary text-lg mr-2">search</span>
-                        <span className="flex-grow text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate">{query}</span>
-                        <span className="material-icons-round text-gray-400 text-sm ml-2">edit</span>
+                        <span className="material-icons-round text-primary text-lg mr-2">
+                            {isVisualSearch ? 'photo_camera' : 'search'}
+                        </span>
+                        <span className="flex-grow text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate">{displayQuery}</span>
+                        {!isVisualSearch && <span className="material-icons-round text-gray-400 text-sm ml-2">edit</span>}
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -139,7 +146,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     {/* Meta Info */}
                     <div className="px-5 py-4 flex items-center justify-between">
                         <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">
-                            {loading ? 'Searching...' : `${searchResults.length} Results for "${query}"`}
+                            {loading ? 'Searching...' : isVisualSearch
+                                ? `${searchResults.length} Similar Products Found`
+                                : `${searchResults.length} Results for "${query}"`
+                            }
                         </div>
                         <div className="flex items-center gap-1 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                             <span className="material-icons-round text-sm">verified_user</span>
@@ -173,7 +183,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                                     <span className="material-icons-round text-gray-300 dark:text-gray-800 text-4xl">search_off</span>
                                 </div>
                                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">No matching items</h3>
-                                <p className="text-sm text-gray-500 mb-8 max-w-[240px]">We couldn't find anything for "{query}". Try adjusting your filters or search keywords.</p>
+                                <p className="text-sm text-gray-500 mb-8 max-w-[240px]">
+                                    {isVisualSearch
+                                        ? "We couldn't find similar products. Try taking a clearer photo or cropping to focus on the product."
+                                        : `We couldn't find anything for "${query}". Try adjusting your filters or search keywords.`
+                                    }
+                                </p>
                                 <button
                                     onClick={onBack}
                                     className="px-8 py-3 rounded-2xl bg-primary text-white font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all"

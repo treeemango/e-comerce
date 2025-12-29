@@ -64,6 +64,7 @@ export class EmbeddingService {
     /**
      * Ensures the worker is ready. Waits for the existing iframe to signal readiness.
      * Note: The iframe is created by AIBackgroundLayer in the layout.
+     * The model download can take 1-2 minutes on slow connections.
      */
     public async ensureInitialized(attempt = 1): Promise<void> {
         if (this.isWorkerReady) return;
@@ -75,28 +76,34 @@ export class EmbeddingService {
             // If it's missing, we can't do much but wait.
         }
 
-        // Wait for readiness signal
+        // Wait for readiness signal - model download can take 1-2 minutes
         return new Promise((resolve, reject) => {
             if (this.isWorkerReady) {
                 resolve();
                 return;
             }
 
-            // Short timeout to check if it becomes ready
+            // Extended timeout: 120 seconds (600 checks × 200ms) to allow full model download
             let checkCount = 0;
+            const MAX_CHECKS = 600; // 120 seconds total wait time
+            const CHECK_INTERVAL = 200; // Check every 200ms
+
             const checkInterval = setInterval(() => {
                 checkCount++;
                 if (this.isWorkerReady) {
                     clearInterval(checkInterval);
+                    console.log('[EmbeddingService] Model is now ready for embedding generation.');
                     resolve();
-                } else if (checkCount > 20) { // Wait up to 2s
+                } else if (checkCount > MAX_CHECKS) {
                     clearInterval(checkInterval);
-                    // If still not ready, we proceed but warn. 
-                    // New requests will try to initialize logic if needed.
-                    console.log('[EmbeddingService] Worker not yet fully ready, proceeding with request hope.');
-                    resolve();
+                    console.warn('[EmbeddingService] Model initialization timed out after 120 seconds. Model may still be downloading.');
+                    // Don't resolve - reject to indicate model is not ready
+                    reject(new Error('Model initialization timed out. Please wait for the model to finish downloading.'));
+                } else if (checkCount % 50 === 0) {
+                    // Log progress every 10 seconds
+                    console.log(`[EmbeddingService] Waiting for model... (${checkCount * CHECK_INTERVAL / 1000}s elapsed)`);
                 }
-            }, 100);
+            }, CHECK_INTERVAL);
         });
     }
 
