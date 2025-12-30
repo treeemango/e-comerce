@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useNotifications, Notification } from './NotificationContext';
+import { useNotifications, Notification, dispatchNotificationAction } from './NotificationContext';
 
 const NotificationItem: React.FC<{ notification: Notification }> = ({ notification }) => {
     const { dismissNotification } = useNotifications();
@@ -48,6 +48,8 @@ const NotificationItem: React.FC<{ notification: Notification }> = ({ notificati
             onClick={() => {
                 if (notification.onClick) {
                     notification.onClick();
+                } else if (notification.action) {
+                    dispatchNotificationAction(notification.action);
                 }
                 dismissNotification(notification.id);
             }}

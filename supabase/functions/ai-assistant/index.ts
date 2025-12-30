@@ -1,8 +1,56 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // @ts-ignore: Deno is available in the Edge Function environment
 const GROK_API_KEY = (Deno as any).env.get("GROK_API_KEY");
 console.log("GROK_API_KEY detected:", !!GROK_API_KEY);
+
+// Optional: enforce feature flags from DB (preferred). If env vars are missing,
+// the function will default to allowing all actions.
+const SUPABASE_URL = (Deno as any).env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = (Deno as any).env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    : null;
+
+function featureKeyForAction(action: string): string | null {
+    switch (action) {
+        case "improve_title":
+        case "generate_description":
+        case "generate_seo":
+        case "generate_tags":
+        case "generate_use_case_tags":
+        case "generate_occasion_tags":
+            return "listing_assistant";
+        case "suggest_chat_reply":
+            return "seller_chat_reply";
+        case "answer_product_question":
+            return "product_questions";
+        case "analyze_product_image":
+            return "image_matching";
+        case "explain_product":
+            return "product_explain";
+        default:
+            return null;
+    }
+}
+
+async function isFeatureEnabled(key: string): Promise<boolean> {
+    if (!supabaseAdmin) return true;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("ai_feature_flags")
+            .select("enabled")
+            .eq("key", key)
+            .maybeSingle();
+
+        if (error) return true;
+        if (!data) return true;
+        return !!data.enabled;
+    } catch {
+        return true;
+    }
+}
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -17,6 +65,24 @@ serve(async (req: Request) => {
     try {
         const { action, params } = await req.json();
         console.log(`Action: ${action}`, "Params:", JSON.stringify(params).slice(0, 200));
+
+        const featureKey = featureKeyForAction(action);
+        if (featureKey) {
+            const enabled = await isFeatureEnabled(featureKey);
+            if (!enabled) {
+                return new Response(
+                    JSON.stringify({
+                        error: 'This AI feature is currently turned off by the platform admin.',
+                        code: 'AI_FEATURE_DISABLED',
+                        feature: featureKey,
+                    }),
+                    {
+                    status: 403,
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    }
+                );
+            }
+        }
 
         if (!GROK_API_KEY) {
             throw new Error("GROK_API_KEY is not set");

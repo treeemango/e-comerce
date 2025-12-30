@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { fullyApprovePayout } from '@/lib/api';
-import type { PayoutRequest } from '@/types';
+import { fullyApprovePayout, ensureSupportConversation, sendMessage } from '@/lib/api';
+import type { PayoutRequest, AdminPermissions } from '@/types';
 
-const PayoutApprovalsView: React.FC = () => {
+interface PayoutApprovalsViewProps {
+    permissions?: AdminPermissions;
+}
+
+const PayoutApprovalsView: React.FC<PayoutApprovalsViewProps> = ({ permissions }) => {
     const [requests, setRequests] = useState<PayoutRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
@@ -49,6 +53,7 @@ const PayoutApprovalsView: React.FC = () => {
         const reason = prompt('Reason for rejection:');
         if (!reason) return;
 
+        const request = requests.find(r => r.id === id);
         const { error } = await supabase
             .from('payout_requests')
             .update({ status: 'rejected', admin_notes: reason, processed_at: new Date().toISOString() })
@@ -57,6 +62,24 @@ const PayoutApprovalsView: React.FC = () => {
         if (error) {
             alert('Failed to reject payout');
         } else {
+            // Automate rejection message
+            if (request && request.seller_id) {
+                try {
+                    const adminId = permissions?.user_id || '00000000-0000-0000-0000-000000000000';
+                    const conversationId = await ensureSupportConversation(request.seller_id);
+                    if (conversationId) {
+                        await sendMessage(
+                            conversationId,
+                            adminId,
+                            request.seller_id,
+                            `Your payout request for £${request.amount.toLocaleString()} has been rejected.\n\nReason: ${reason}`
+                        );
+                    }
+                } catch (msgErr) {
+                    console.error('Failed to send rejection message:', msgErr);
+                }
+            }
+
             alert('Payout rejected');
             loadRequests();
         }

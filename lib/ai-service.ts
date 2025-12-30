@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { assertAIFeatureEnabled } from './ai-feature-flags';
 
 export interface AIResult {
     result: string;
@@ -21,6 +22,22 @@ export interface ImageAnalysisResult {
 
 class AIService {
     private async callFunction(action: string, params: any): Promise<string> {
+        // Default to allowing calls if the flag table isn't present.
+        // Enforced again server-side in the Edge Function.
+        if (
+            action === 'improve_title' ||
+            action === 'generate_description' ||
+            action === 'generate_seo' ||
+            action === 'generate_tags' ||
+            action === 'generate_use_case_tags' ||
+            action === 'generate_occasion_tags'
+        ) {
+            await assertAIFeatureEnabled('listing_assistant');
+        }
+        if (action === 'analyze_product_image') {
+            await assertAIFeatureEnabled('image_matching');
+        }
+
         const { data, error } = await supabase.functions.invoke('ai-assistant', {
             body: { action, params }
         });

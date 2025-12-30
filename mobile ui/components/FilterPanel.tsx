@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { fetchSearchFilters } from '@/lib/api';
-import { SearchFilters, AppliedFilters } from '@/types';
+import { SearchFilters, AppliedFilters, AttributeValue } from '@/types';
 import { getCurrencySymbol, useCurrencyConverter, convertAmount, getUserCurrency } from '@/lib/currency';
 
 interface FilterPanelProps {
@@ -102,6 +102,23 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
         }));
     };
 
+    // Toggle attribute value
+    const toggleAttribute = (attrName: string, value: string) => {
+        setLocalFilters(prev => {
+            const currentVals = prev.attributes?.[attrName] || [];
+            const newVals = currentVals.includes(value)
+                ? currentVals.filter(v => v !== value)
+                : [...currentVals, value];
+            return {
+                ...prev,
+                attributes: {
+                    ...prev.attributes,
+                    [attrName]: newVals
+                }
+            };
+        });
+    };
+
     const handleApply = async () => {
         // Convert prices back to base currency before applying
         const baseCurrency = filters?.price_range?.currency || 'USD';
@@ -137,8 +154,8 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
             conditions: []
         };
         setLocalFilters(resetFilters);
-        onApplyFilters(resetFilters);
-        onClose();
+        setLocalMin('');
+        setLocalMax('');
     };
 
     const getActiveCount = (id: string) => {
@@ -148,53 +165,63 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
             case 'countries': return localFilters.vendor_countries.length;
             case 'conditions': return (localFilters.conditions?.length || 0);
             case 'price': return (localFilters.price_min || localFilters.price_max) ? 1 : 0;
+            case 'attributes':
+                return Object.values(localFilters.attributes || {}).reduce((acc: number, arr) => acc + (arr as string[]).length, 0);
             default: return 0;
         }
     };
 
     const sections = [
-        { id: 'categories', name: 'Categories', icon: 'category' },
-        { id: 'brands', name: 'Brands', icon: 'loyalty' },
-        { id: 'price', name: 'Price Range', icon: 'payments' },
-        { id: 'countries', name: 'Countries', icon: 'public' },
-        { id: 'conditions', name: 'Condition', icon: 'new_releases' }
+        { id: 'categories', name: 'Category' },
+        { id: 'price', name: 'Price' },
+        { id: 'brands', name: 'Brands' },
+        { id: 'attributes', name: 'Attributes' }
     ];
 
     return (
-        <div className="flex flex-col flex-grow overflow-hidden bg-white dark:bg-black w-full h-full absolute inset-0 z-40 top-[112px] animate-in slide-in-from-bottom duration-300">
+        <div className="flex flex-col flex-grow overflow-hidden bg-white dark:bg-gray-950 w-full h-full absolute inset-0 z-50 animate-in slide-in-from-bottom duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950">
+                <button
+                    onClick={onClose}
+                    className="p-2 -ml-2 text-gray-600 dark:text-gray-300"
+                >
+                    <span className="material-icons-round text-xl">arrow_back</span>
+                </button>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Filters</h2>
+                <button
+                    onClick={handleReset}
+                    className="text-primary font-medium text-sm"
+                >
+                    Clear
+                </button>
+            </div>
             {/* Sidebar & Content Container */}
             <div className="flex flex-1 overflow-hidden">
-                {/* Left Sidebar - Refined Navigation */}
-                <div className="w-[30%] bg-gray-50/50 dark:bg-gray-950/50 overflow-y-auto hide-scrollbar border-r border-gray-100 dark:border-gray-900 pb-20">
+                {/* Left Sidebar - Simple Navigation like reference image */}
+                <div className="w-[40%] max-w-[160px] bg-gray-50 dark:bg-gray-900 overflow-y-auto border-r border-gray-200 dark:border-gray-800">
                     {sections.map((section) => {
-                        const activeCount = getActiveCount(section.id);
                         const isSelected = selectedSection === section.id;
                         return (
                             <button
                                 key={section.id}
                                 onClick={() => setSelectedSection(section.id)}
-                                className={`w-full text-left py-5 px-4 relative transition-all
+                                className={`w-full text-left py-4 px-4 relative flex items-center justify-between transition-all
                                     ${isSelected
-                                        ? 'bg-white dark:bg-gray-900 text-primary'
-                                        : 'text-gray-500 dark:text-gray-400'
+                                        ? 'bg-white dark:bg-gray-950'
+                                        : 'text-gray-600 dark:text-gray-400'
                                     }`}
                             >
+                                {/* Orange left border for selected */}
                                 {isSelected && (
-                                    <div className="absolute left-0 top-3 bottom-3 w-1.5 bg-primary rounded-r-full shadow-[2px_0_8px_rgba(255,107,0,0.3)]"></div>
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
                                 )}
-                                <div className="flex flex-col gap-1">
-                                    <span className={`material-icons-round text-xl ${isSelected ? 'text-primary' : 'text-gray-300 dark:text-gray-700'}`}>
-                                        {section.icon}
-                                    </span>
-                                    <span className={`text-[11px] font-black uppercase tracking-wider ${isSelected ? 'text-gray-900 dark:text-white' : ''}`}>
-                                        {section.name}
-                                    </span>
-                                    {activeCount > 0 && (
-                                        <div className="absolute top-4 right-3 bg-primary text-white text-[9px] font-black rounded-full h-4 min-w-[16px] flex items-center justify-center px-1 border-2 border-white dark:border-black">
-                                            {activeCount}
-                                        </div>
-                                    )}
-                                </div>
+                                <span className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-gray-700 dark:text-gray-300'}`}>
+                                    {section.name}
+                                </span>
+                                <span className={`material-icons-round text-lg ${isSelected ? 'text-primary' : 'text-gray-400'}`}>
+                                    chevron_right
+                                </span>
                             </button>
                         );
                     })}
@@ -372,6 +399,56 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ onClose, searchQuery, 
                                             );
                                         })}
                                     </div>
+                                </div>
+                            )}
+
+                            {selectedSection === 'attributes' && (
+                                <div className="space-y-6">
+                                    {/* Attributes are now Record<string, AttributeValue[]> */}
+                                    {filters?.attributes && Object.keys(filters.attributes).length > 0 && (Object.entries(filters.attributes) as [string, AttributeValue[]][]).map(([attrName, values]) => (
+                                        <div key={attrName} className="space-y-3">
+                                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                                                {attrName}
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {values.map((item) => {
+                                                    const isActive = (localFilters.attributes?.[attrName] || []).includes(item.value);
+                                                    return (
+                                                        <button
+                                                            key={item.value}
+                                                            onClick={() => toggleAttribute(attrName, item.value)}
+                                                            className="w-full flex items-center justify-between py-1.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isActive
+                                                                    ? 'bg-primary border-primary'
+                                                                    : 'border-gray-300 dark:border-gray-600'}`}
+                                                                >
+                                                                    {isActive && (
+                                                                        <span className="material-icons-round text-white" style={{ fontSize: '12px' }}>check</span>
+                                                                    )}
+                                                                </div>
+                                                                <span className={`text-sm ${isActive ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+                                                                    {item.value}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-xs text-gray-400">
+                                                                {item.product_count}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {/* Fallback if no attributes available */}
+                                    {(!filters?.attributes || Object.keys(filters.attributes).length === 0) && (
+                                        <div className="text-center py-8 text-gray-400">
+                                            <span className="material-icons-round text-3xl mb-2">tune</span>
+                                            <p className="text-sm">No attributes available</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

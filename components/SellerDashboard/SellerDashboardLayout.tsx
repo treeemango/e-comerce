@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getSellerUnreadCount } from '@/lib/api';
+import { getSellerUnreadCount, fetchSellerProfile, SellerProfile } from '@/lib/api';
 
 
 interface SellerDashboardLayoutProps {
@@ -9,6 +9,7 @@ interface SellerDashboardLayoutProps {
     onTabChange: (tab: 'overview' | 'products' | 'manage-products' | 'add-products' | 'orders' | 'manage-orders' | 'manage-returns' | 'manage-reviews' | 'promotions' | 'finances' | 'finance-payments' | 'finance-wallet' | 'performance' | 'apps' | 'account' | 'store-branding' | 'settings' | 'messages' | 'create-auto-discount') => void;
     user: any;
     onSignOut: () => void;
+    onSupportClick?: () => void;
 }
 
 interface MenuItem {
@@ -19,14 +20,27 @@ interface MenuItem {
     submenu?: { id: string; label: string }[];
 }
 
-const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children, activeTab, onTabChange, user, onSignOut }) => {
+const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children, activeTab, onTabChange, user, onSignOut, onSupportClick }) => {
     const [expandedMenus, setExpandedMenus] = useState<string[]>(['products']);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null);
+
+    useEffect(() => {
+        const loadSellerProfile = async () => {
+            if (user?.id) {
+                const profile = await fetchSellerProfile(user.id);
+                if (profile) {
+                    setSellerProfile(profile);
+                }
+            }
+        };
+        loadSellerProfile();
+    }, [user?.id]);
 
     const loadUnreadCount = async () => {
         if (user?.id) {
             try {
-                const count = await getSellerUnreadCount(user.id);
+                const count = await getSellerUnreadCount(user.id, true);
                 setUnreadCount(count);
             } catch (error) {
                 console.error('Error loading unread count:', error);
@@ -211,7 +225,7 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
             {/* Main Content */}
             <main className="flex-1 ml-64">
                 {/* Premium Top Header */}
-                <header className="h-16 bg-gradient-to-r from-gray-900 via-gray-900 to-gray-950 text-white sticky top-0 z-10 px-6 flex items-center justify-between border-b border-gray-800/50">
+                <header className="h-16 bg-gradient-to-r from-gray-900 via-gray-900 to-gray-950 text-white sticky top-0 z-50 px-6 flex items-center justify-between border-b border-gray-800/50">
                     <h1 className="text-lg font-black tracking-tight">
                         {activeTab === 'messages' ? 'Messages' :
                             activeTab === 'overview' ? 'Dashboard Overview' :
@@ -226,10 +240,14 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
 
                     <div className="flex items-center gap-3">
                         {/* Support Button */}
-                        <button className="px-4 py-2 bg-gradient-to-r from-primary to-orange-500 hover:from-orange-500 hover:to-primary text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
+                        <button
+                            onClick={onSupportClick}
+                            className="px-4 py-2 bg-gradient-to-r from-primary to-orange-500 hover:from-orange-500 hover:to-primary text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
+                        >
                             <span className="material-icons-round text-sm">support_agent</span>
                             Support
                         </button>
+
 
                         {/* Messages Button */}
                         <button
@@ -253,14 +271,16 @@ const SellerDashboardLayout: React.FC<SellerDashboardLayoutProps> = ({ children,
                         {/* User Info */}
                         <div className="flex items-center gap-3 pl-4 border-l border-gray-700">
                             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center overflow-hidden border border-gray-600">
-                                {user?.avatar ? (
+                                {sellerProfile?.logo_url ? (
+                                    <img src={sellerProfile.logo_url} alt="Seller Logo" className="w-full h-full object-cover" />
+                                ) : user?.avatar ? (
                                     <img src={user.avatar} alt="User" className="w-full h-full object-cover" />
                                 ) : (
                                     <span className="material-icons-round text-gray-400 text-sm">person</span>
                                 )}
                             </div>
                             <div className="hidden lg:block">
-                                <p className="text-sm font-black leading-none">The MegaMerchant</p>
+                                <p className="text-sm font-black leading-none">{sellerProfile?.business_name || sellerProfile?.shop_name || user?.user_metadata?.full_name || 'Seller'}</p>
                                 <p className="text-[10px] text-gray-500 mt-0.5 font-bold">ID: {user?.id?.substring(0, 8) || 'xxxxx'}</p>
                             </div>
                         </div>

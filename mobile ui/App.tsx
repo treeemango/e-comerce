@@ -33,10 +33,11 @@ import { SellerOnboardingView } from './components/SellerOnboardingView';
 import { ProductCard } from './components/ProductCard';
 import { VendorProfileView } from './components/VendorProfileView';
 import { BuyerProfileView } from './components/BuyerProfileView';
-import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute, fetchProductById, fetchPlatformReviewCount } from '@/lib/api';
-import { Product, Review, UserCoupon, BuyerOrder } from '@/types';
+import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute, fetchProductById, fetchPlatformReviewCount, ensureSupportConversation, fetchRelatedProducts } from '@/lib/api';
+import { Product, Review, UserCoupon, BuyerOrder, RelatedProduct } from '@/types';
 import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
 import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
+import type { NotificationAction } from '../components/NotificationContext';
 import { formatPrice, getUserCurrency, setUserCurrency } from '@/lib/currency';
 import { useNotifications } from '@/components/NotificationContext';
 import { playCartAddSound } from '@/lib/sounds';
@@ -98,6 +99,7 @@ const App: React.FC = () => {
     const [visualSearchProduct, setVisualSearchProduct] = useState<Product | null>(null);
     const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
     const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
+    const [activeSellerConversationId, setActiveSellerConversationId] = useState<string | null>(null);
     const [reviewingOrderId, setReviewingOrderId] = useState<string | null>(null);
     const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
     const [showQRCodeOrderId, setShowQRCodeOrderId] = useState<string | null>(null);
@@ -115,6 +117,8 @@ const App: React.FC = () => {
     const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
     const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
     const [hasPlatformReviews, setHasPlatformReviews] = useState(true);
+    const [inspiredProducts, setInspiredProducts] = useState<RelatedProduct[]>([]);
+    const [inspiredLoading, setInspiredLoading] = useState(false);
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -185,6 +189,48 @@ const App: React.FC = () => {
         };
         loadRecentViews();
     }, [userProfile?.id]);
+
+    // Load inspired products when browsing history section is opened - match ALL items
+    useEffect(() => {
+        const loadInspiredProducts = async () => {
+            if (activeAccountSection === 'history' && recentViews.length > 0) {
+                setInspiredLoading(true);
+                try {
+                    // Fetch related products for ALL browsing history items
+                    const allRelated: RelatedProduct[] = [];
+                    const seenIds = new Set<string>();
+
+                    // Add viewed product IDs to exclude them from results
+                    recentViews.forEach(rv => seenIds.add(String(rv.id)));
+
+                    // Fetch similar products for each viewed item (limit to first 5 for performance)
+                    const itemsToCheck = recentViews.slice(0, 5);
+
+                    for (const viewedProduct of itemsToCheck) {
+                        const related = await fetchRelatedProducts(String(viewedProduct.id));
+                        const combined = [...related.same, ...related.similar];
+
+                        for (const product of combined) {
+                            const productId = String(product.id);
+                            if (!seenIds.has(productId)) {
+                                seenIds.add(productId);
+                                allRelated.push(product);
+                            }
+                        }
+                    }
+
+                    // Limit to 12 products
+                    setInspiredProducts(allRelated.slice(0, 12));
+                } catch (error) {
+                    console.error('Error loading inspired products:', error);
+                    setInspiredProducts([]);
+                } finally {
+                    setInspiredLoading(false);
+                }
+            }
+        };
+        loadInspiredProducts();
+    }, [activeAccountSection, recentViews]);
 
     // Load buyer orders - Moved to MobileNotificationWrapper for background sync
 
@@ -327,8 +373,78 @@ const App: React.FC = () => {
             setIsAccountOpen(true);
             setActiveAccountSection('orders');
             // If we supported expanding order details directly, we would do it here.
+        } else if (type === 'chat') {
+            setIsAccountOpen(true);
+            setActiveAccountSection('messages');
         }
     }, []);
+
+    useEffect(() => {
+        const handler = (event: Event) => {
+            const action = (event as CustomEvent<NotificationAction>).detail;
+            if (!action?.target) return;
+
+            if (action.target === 'wishlist') {
+                setIsAccountOpen(true);
+                setActiveAccountSection('wishlist');
+                return;
+            }
+
+            if (action.target === 'coupons') {
+                setIsAccountOpen(true);
+                setActiveAccountSection('coupons');
+                return;
+            }
+
+            if (action.target === 'inventory') {
+                setActiveTab('you');
+                setSellerView('dashboard');
+                setIsAccountOpen(false);
+                return;
+            }
+
+            if (action.target === 'finances') {
+                setActiveTab('you');
+                setSellerView('dashboard');
+                setIsAccountOpen(false);
+                // SellerDashboard might have internal state for tabs, but 'you' + 'dashboard' is the entry point
+                return;
+            }
+
+            if (action.target === 'deals') {
+                setActiveTab('deals');
+                return;
+            }
+
+            if (action.target === 'chat') {
+                setIsAccountOpen(true);
+                setActiveAccountSection('messages');
+                return;
+            }
+
+            if (action.target === 'seller-orders') {
+                // Navigate to seller dashboard 'you' tab which shows SellerDashboard
+                setActiveTab('you');
+                setSellerView('dashboard');
+                setIsAccountOpen(false);
+                return;
+            }
+
+            if (action.target === 'order') {
+                setIsAccountOpen(true);
+                setActiveAccountSection('orders');
+                return;
+            }
+
+
+            if (action.target === 'product' && action.id) {
+                handleInAppDeepLink('product', action.id);
+            }
+        };
+
+        window.addEventListener('juax:notification-action', handler as EventListener);
+        return () => window.removeEventListener('juax:notification-action', handler as EventListener);
+    }, [handleInAppDeepLink]);
 
     const handleConfirmReceipt = async (orderId: string) => {
         if (!window.confirm('Are you sure you have received your parcel? This will release funds to the seller.')) return;
@@ -741,15 +857,49 @@ const App: React.FC = () => {
                 return (
                     <AccountSection title="Browsing history" description="Recently viewed items" onBack={() => setActiveAccountSection(null)}>
                         {recentViews.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2">
-                                {recentViews.map((p, idx) => (
-                                    <ProductCard
-                                        key={p.id ?? idx}
-                                        product={p}
-                                        onProductClick={handleProductClick}
-                                        onVisualSearch={setVisualSearchProduct}
-                                    />
-                                ))}
+                            <div className="space-y-6">
+                                {/* Recently Viewed Grid */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    {recentViews.map((p, idx) => (
+                                        <ProductCard
+                                            key={p.id ?? idx}
+                                            product={p}
+                                            onProductClick={handleProductClick}
+                                            onVisualSearch={setVisualSearchProduct}
+                                        />
+                                    ))}
+                                </div>
+
+                                {/* You might also like - based on browsing */}
+                                <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <span className="material-icons text-primary text-xl">favorite</span>
+                                        <h3 className="font-black text-base tracking-tight">You might also like</h3>
+                                    </div>
+
+                                    {inspiredLoading ? (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {[1, 2, 3, 4].map((i) => (
+                                                <div key={i} className="bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse aspect-[3/4]"></div>
+                                            ))}
+                                        </div>
+                                    ) : inspiredProducts.length > 0 ? (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {inspiredProducts.map((p, idx) => (
+                                                <ProductCard
+                                                    key={p.id ?? idx}
+                                                    product={p as Product}
+                                                    onProductClick={handleProductClick}
+                                                    onVisualSearch={setVisualSearchProduct}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-4 text-xs text-gray-400">
+                                            Check back later for more recommendations
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-gray-800">
@@ -1001,6 +1151,19 @@ const App: React.FC = () => {
         setSelectedProduct(product);
     };
 
+    const handleSellerSupportClick = async () => {
+        if (!userProfile?.id) return;
+        try {
+            const conversationId = await ensureSupportConversation(userProfile.id);
+            if (conversationId) {
+                setActiveSellerConversationId(conversationId);
+            }
+        } catch (error) {
+            console.error('Failed to initiate support chat:', error);
+            alert('Could not start support chat. Please try again later.');
+        }
+    };
+
     const handleNavigateToCategories = (departmentId: string) => {
         setSelectedDepartmentId(departmentId);
         setActiveTab('categories');
@@ -1238,6 +1401,8 @@ const App: React.FC = () => {
                         onOpenOrders={() => setActiveAccountSection('orders')}
                         onOpenPayouts={() => setActiveAccountSection('credit')}
                         onClose={() => setActiveTab('home')}
+                        onSupportClick={handleSellerSupportClick}
+                        initialConversationId={activeSellerConversationId}
                     />
                 ) : (
                     <SellerAccess

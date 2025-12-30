@@ -4,7 +4,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier, RelatedProduct, ProductReviewSummary } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchProductReviewSummary } from '../lib/api';
+import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchProductReviewSummary, fetchRecentViews } from '../lib/api';
+import ProductCardSkeleton from './ProductCardSkeleton';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
 import { playFollowSound, playUnfollowSound, playWishlistAddSound, playWishlistRemoveSound } from '../lib/sounds';
@@ -55,6 +56,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 }) => {
    const [sameItems, setSameItems] = useState<RelatedProduct[]>([]);
    const [similarItems, setSimilarItems] = useState<RelatedProduct[]>([]);
+   const [inspiredItems, setInspiredItems] = useState<RelatedProduct[]>([]);
    const [isLoadingRelated, setIsLoadingRelated] = useState(false);
    const [activeMediaIndex, setActiveMediaIndex] = useState(0);
    const [hoverPreviewMedia, setHoverPreviewMedia] = useState<MediaItem | null>(null);
@@ -400,17 +402,75 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       const loadRelated = async () => {
          if (product?.id) {
             setIsLoadingRelated(true);
-            const { same, similar } = await fetchRelatedProducts(product.id.toString());
-            setSameItems(same);
-            setSimilarItems(similar);
-            setIsLoadingRelated(false);
+            try {
+               // 1. Fetch visually similar products for current item
+               const { same, similar } = await fetchRelatedProducts(product.id.toString());
+               setSameItems(same);
+
+               // 2. Fetch browsing history to get inspired products
+               const history = await fetchRecentViews(product.id.toString());
+               let browsingInspired: RelatedProduct[] = [];
+
+               if (history && history.length > 0) {
+                  // Get related products for the top 3 items in history (to balance speed and relevance)
+                  const historyItemsToFetch = history.slice(0, 3);
+                  const inspiredResults = await Promise.all(
+                     historyItemsToFetch.map(item => fetchRelatedProducts(item.id.toString()))
+                  );
+
+                  // Flatten and deduplicate
+                  const allInspired = inspiredResults.flatMap(r => [...r.same, ...r.similar]);
+                  const seenIds = new Set<string>([product.id.toString()]);
+
+                  browsingInspired = allInspired.filter(p => {
+                     if (seenIds.has(p.id.toString())) return false;
+                     seenIds.add(p.id.toString());
+                     return true;
+                  });
+               }
+
+               setInspiredItems(browsingInspired);
+
+               // 3. Mix similar and inspired for "More to discover"
+               // We take a 50/50 mix, up to 12 items total
+               const mixed: RelatedProduct[] = [];
+               const maxItems = 12;
+               const perSource = maxItems / 2;
+
+               const filteredSimilar = similar.filter(p => p.id.toString() !== product.id.toString());
+
+               // Fill from both sources
+               for (let i = 0; i < perSource; i++) {
+                  if (filteredSimilar[i]) mixed.push(filteredSimilar[i]);
+                  if (browsingInspired[i]) mixed.push(browsingInspired[i]);
+               }
+
+               // If one source is shorter, fill the rest from the other
+               if (mixed.length < maxItems) {
+                  const remainingSimilar = filteredSimilar.slice(perSource);
+                  const remainingInspired = browsingInspired.slice(perSource);
+
+                  let j = 0;
+                  while (mixed.length < maxItems && (remainingSimilar[j] || remainingInspired[j])) {
+                     if (remainingSimilar[j] && !mixed.find(m => m.id === remainingSimilar[j].id)) mixed.push(remainingSimilar[j]);
+                     if (mixed.length < maxItems && remainingInspired[j] && !mixed.find(m => m.id === remainingInspired[j].id)) mixed.push(remainingInspired[j]);
+                     j++;
+                  }
+               }
+
+               setSimilarItems(mixed.slice(0, maxItems));
+
+            } catch (error) {
+               console.error("Error loading related products:", error);
+            } finally {
+               setIsLoadingRelated(false);
+            }
 
             // Fetch Use Case Recommendations
             if (product.use_case_tags && product.use_case_tags.length > 0) {
                const tag = product.use_case_tags[0];
                try {
                   const { fetchFilteredProducts } = await import('../lib/api');
-                  // Pass empty filters as the second argument
                   const results = await fetchFilteredProducts(tag, {
                      category_ids: [],
                      brand_ids: [],
@@ -421,7 +481,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      delivery_locations: [],
                      vendor_countries: []
                   });
-                  // Slice to limit results as fetchFilteredProducts doesn't support limit param directly
                   setUseCaseItems(results.filter(p => p.id.toString() !== product.id?.toString()).slice(0, 6));
                } catch (e) {
                   console.error("Failed to load use case items", e);
@@ -1483,88 +1542,97 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
             {/* Specifications Tab Content */}
             {activeTab === 'specifications' && (
-               <div className="bg-white dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-700">
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-                           <span className="material-icons-round text-white">list_alt</span>
-                        </div>
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white">Product Specifications</h2>
-                     </div>
-                  </div>
-
-                  <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                     {/* Basic Info */}
-                     <div className="grid grid-cols-2 text-sm">
-                        <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Category</div>
-                        <div className="px-6 py-4 text-slate-600 dark:text-slate-400">{product.category || 'N/A'}</div>
-                     </div>
-                     {product.condition && (
-                        <div className="grid grid-cols-2 text-sm">
-                           <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Condition</div>
-                           <div className="px-6 py-4 text-slate-600 dark:text-slate-400 capitalize">{product.condition.replace('_', ' ')}</div>
-                        </div>
-                     )}
-                     {product.brand && (
-                        <div className="grid grid-cols-2 text-sm">
-                           <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Brand</div>
-                           <div className="px-6 py-4 text-slate-600 dark:text-slate-400">{product.brand}</div>
-                        </div>
-                     )}
-                     {product.sku && (
-                        <div className="grid grid-cols-2 text-sm">
-                           <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">SKU</div>
-                           <div className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">{product.sku}</div>
-                        </div>
-                     )}
-                     {productVariants.length > 0 && (
-                        <>
-                           {Object.entries(productVariants[0]?.options || {}).map(([key, value]) => (
-                              <div key={key} className="grid grid-cols-2 text-sm">
-                                 <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 capitalize">{key}</div>
-                                 <div className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                                    {productVariants.map(v => v.options[key]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
-                                 </div>
-                              </div>
-                           ))}
-                        </>
-                     )}
-                     {product.weight && (
-                        <div className="grid grid-cols-2 text-sm">
-                           <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Weight</div>
-                           <div className="px-6 py-4 text-slate-600 dark:text-slate-400">{product.weight}</div>
-                        </div>
-                     )}
-                     {product.dimensions && (
-                        <div className="grid grid-cols-2 text-sm">
-                           <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Dimensions</div>
-                           <div className="px-6 py-4 text-slate-600 dark:text-slate-400">{product.dimensions}</div>
-                        </div>
-                     )}
-                     <div className="grid grid-cols-2 text-sm">
-                        <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Availability</div>
-                        <div className="px-6 py-4">
-                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${product.stock > 10 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                              product.stock > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                                 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                              }`}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                              {product.stock > 10 ? 'In Stock' : product.stock > 0 ? `Only ${product.stock} left` : 'Out of Stock'}
-                           </span>
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-2 text-sm">
-                        <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Delivery</div>
-                        <div className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                           {product.free_delivery ? 'Free Shipping' : `${getPrice('deliveryCost', product.delivery_cost || 0, currencyCode)}`}
-                           {product.deliveryTimeEstimate && ` • ${product.deliveryTimeEstimate}`}
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-2 text-sm">
-                        <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">Return Policy</div>
-                        <div className="px-6 py-4 text-slate-600 dark:text-slate-400">{product.return_policy || '30-day returns'}</div>
-                     </div>
-                  </div>
+               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <table className="w-full text-sm">
+                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {/* Brand */}
+                        {product.brand && (
+                           <tr>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Brand</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.brand}</td>
+                           </tr>
+                        )}
+                        {/* Category */}
+                        <tr>
+                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Category</td>
+                           <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.category || 'N/A'}</td>
+                        </tr>
+                        {/* Availability */}
+                        <tr>
+                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Availability</td>
+                           <td className="px-6 py-4">
+                              <span className={`inline-flex items-center gap-1.5 ${product.stock > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                 <span className={`w-2 h-2 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                 {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                              </span>
+                           </td>
+                        </tr>
+                        {/* Sold By */}
+                        {vendor && (
+                           <tr>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Sold By</td>
+                              <td className="px-6 py-4">
+                                 <a
+                                    href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
+                                    className="text-primary hover:underline font-medium"
+                                 >
+                                    {vendor.business_name}
+                                 </a>
+                              </td>
+                           </tr>
+                        )}
+                        {/* Condition */}
+                        {product.condition && (
+                           <tr>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Condition</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100 capitalize">{product.condition.replace('_', ' ')}</td>
+                           </tr>
+                        )}
+                        {/* SKU */}
+                        {product.sku && (
+                           <tr>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">SKU</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100 font-mono text-xs">{product.sku}</td>
+                           </tr>
+                        )}
+                        {/* Product Variants/Attributes */}
+                        {productVariants.length > 0 && Object.entries(productVariants[0]?.options || {}).map(([key, value]) => (
+                           <tr key={key}>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800 capitalize">{key}</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">
+                                 {productVariants.map(v => v.options[key]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                              </td>
+                           </tr>
+                        ))}
+                        {/* Weight */}
+                        {product.weight && (
+                           <tr>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Weight</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.weight}</td>
+                           </tr>
+                        )}
+                        {/* Dimensions */}
+                        {product.dimensions && (
+                           <tr>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Dimensions</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.dimensions}</td>
+                           </tr>
+                        )}
+                        {/* Delivery */}
+                        <tr>
+                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Delivery</td>
+                           <td className="px-6 py-4 text-slate-900 dark:text-slate-100">
+                              {product.free_delivery ? 'Free Shipping' : `${getPrice('deliveryCost', product.delivery_cost || 0, currencyCode)}`}
+                              {product.deliveryTimeEstimate && ` • ${product.deliveryTimeEstimate}`}
+                           </td>
+                        </tr>
+                        {/* Return Policy */}
+                        <tr>
+                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Return Policy</td>
+                           <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.return_policy || '30-day returns'}</td>
+                        </tr>
+                     </tbody>
+                  </table>
                </div>
             )}
 
@@ -1639,15 +1707,20 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             )
          }
 
-         {/* AI Search Results: Similar Items */}
-         {
-            similarItems.length > 0 && (
-               <div className="mt-12">
-                  <div className="flex items-center mb-6">
-                     <span className="material-icons text-blue-500 text-2xl mr-2">recommend</span>
+         {/* AI Search Results: Similar Items & Mixed Recommendations */}
+         {(similarItems.length > 0 || isLoadingRelated) && (
+            <div className="mt-12">
+               <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center">
+                     <span className="material-icons text-blue-500 text-2xl mr-2">auto_awesome</span>
                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">More to discover</h2>
-                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Picked for your style</span>
+                     <span className="ml-2 text-[10px] font-black uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded">Curated for you</span>
                   </div>
+               </div>
+
+               {isLoadingRelated && similarItems.length === 0 ? (
+                  <ProductCardSkeleton count={12} />
+               ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                      {similarItems.map(p => (
                         <ProductCard
@@ -1658,19 +1731,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         />
                      ))}
                   </div>
-               </div>
-            )
-         }
-
-         {/* Loading State */}
-         {
-            isLoadingRelated && (
-               <div className="mt-16 py-12 text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-primary mb-4"></div>
-                  <p className="text-slate-500 text-sm">Finding similar items...</p>
-               </div>
-            )
-         }
+               )}
+            </div>
+         )}
 
          {/* Modern Variant Quick Add Overlay - Alibaba Style Drawer */}
          {

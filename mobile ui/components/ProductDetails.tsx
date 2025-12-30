@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore, fetchVendorInfo } from '@/lib/api';
+import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore, fetchVendorInfo, fetchRecentViews } from '@/lib/api';
+import Skeleton from './Skeleton';
 import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant, RelatedProduct, VendorInfo } from '@/types';
 import { playWishlistAddSound, playWishlistRemoveSound, playFollowSound, playUnfollowSound, playCartAddSound } from '@/lib/sounds';
 import { ProductCard } from './ProductCard';
@@ -55,6 +56,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [isLoadingVariants, setIsLoadingVariants] = useState(false);
     const [isVariationSheetOpen, setIsVariationSheetOpen] = useState(false);
     const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
+    const [sheetPreviewVariant, setSheetPreviewVariant] = useState<ProductVariant | null>(null);
 
     // Message Sheet State
     const [isMessageSheetOpen, setIsMessageSheetOpen] = useState(false);
@@ -291,9 +293,61 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
             if (product?.id) {
                 setIsLoadingRelated(true);
                 try {
+                    // 1. Fetch visually similar products for current item
                     const { same, similar } = await fetchRelatedProducts(product.id.toString());
                     setSameItems(same);
-                    setSimilarItems(similar);
+
+                    // 2. Fetch browsing history to get inspired products
+                    const history = await fetchRecentViews(product.id.toString());
+                    let browsingInspired: RelatedProduct[] = [];
+
+                    if (history && history.length > 0) {
+                        // Get related products for the top 3 items in history
+                        const historyItemsToFetch = history.slice(0, 3);
+                        const inspiredResults = await Promise.all(
+                            historyItemsToFetch.map(item => fetchRelatedProducts(item.id.toString()))
+                        );
+
+                        // Flatten and deduplicate
+                        const allInspired = inspiredResults.flatMap(r => [...r.same, ...r.similar]);
+                        const seenIds = new Set<string>([product.id.toString()]);
+
+                        browsingInspired = allInspired.filter(p => {
+                            if (seenIds.has(p.id.toString())) return false;
+                            seenIds.add(p.id.toString());
+                            return true;
+                        });
+                    }
+
+                    // 3. Mix similar and inspired for "More to discover"
+                    // We take a mix, up to 10 items total for mobile
+                    const mixed: RelatedProduct[] = [];
+                    const maxItems = 10;
+                    const perSource = maxItems / 2;
+
+                    const filteredSimilar = similar.filter(p => p.id.toString() !== product.id.toString());
+
+                    // Fill from both sources
+                    for (let i = 0; i < perSource; i++) {
+                        if (filteredSimilar[i]) mixed.push(filteredSimilar[i]);
+                        if (browsingInspired[i]) mixed.push(browsingInspired[i]);
+                    }
+
+                    // If one source is shorter, fill the rest from the other
+                    if (mixed.length < maxItems) {
+                        const remainingSimilar = filteredSimilar.slice(perSource);
+                        const remainingInspired = browsingInspired.slice(perSource);
+
+                        let j = 0;
+                        while (mixed.length < maxItems && (remainingSimilar[j] || remainingInspired[j])) {
+                            if (remainingSimilar[j] && !mixed.find(m => m.id === remainingSimilar[j].id)) mixed.push(remainingSimilar[j]);
+                            if (mixed.length < maxItems && remainingInspired[j] && !mixed.find(m => m.id === remainingInspired[j].id)) mixed.push(remainingInspired[j]);
+                            j++;
+                        }
+                    }
+
+                    setSimilarItems(mixed.slice(0, maxItems));
+
                 } catch (error) {
                     console.error('Error loading related products:', error);
                 } finally {
@@ -684,8 +738,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         {product.discountPercent && (
-                            <div className="bg-price-red text-white px-3 py-1.5 rounded-xl font-black text-sm shadow-lg shadow-red-200 dark:shadow-none animate-pulse">
-                                -{product.discountPercent}%
+                            <div className="bg-red-600 dark:bg-red-500 text-white px-3 py-1.5 rounded-xl font-black text-sm shadow-lg shadow-red-200 dark:shadow-none">
+                                -{product.discountPercent}% OFF
                             </div>
                         )}
                         {product.lower_than_similar && (
@@ -765,12 +819,41 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             </div>
                         </div>
 
-                        <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-                            {productVariants.filter(v => v.image).slice(0, 6).map((v, i) => (
-                                <div key={i} className="w-14 h-14 rounded-2xl border-2 border-gray-50 dark:border-white/5 overflow-hidden flex-shrink-0 shadow-sm">
-                                    <img src={v.image!} className="w-full h-full object-cover" alt="" />
-                                </div>
-                            ))}
+                        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+                            {productVariants.filter(v => v.image).slice(0, 6).map((v, i) => {
+                                // Find image index for this variant to allow switching
+                                const variantImageIdx = images.indexOf(v.image!);
+                                const isActive = currentImage === variantImageIdx;
+                                const originalIndex = productVariants.indexOf(v);
+
+                                return (
+                                    <div
+                                        key={i}
+                                        className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (variantImageIdx !== -1) {
+                                                setIsTransitioning(true);
+                                                setCurrentImage(variantImageIdx);
+                                                setTimeout(() => setIsTransitioning(false), 300);
+                                            }
+                                            // Also update selected options to match this variant
+                                            if (v.options) setSelectedOptions(v.options);
+                                        }}
+                                    >
+                                        <div className={`w-14 h-14 rounded-2xl border-2 overflow-hidden flex-shrink-0 shadow-sm transition-all ${isActive
+                                            ? 'border-primary ring-2 ring-primary/20 scale-105'
+                                            : 'border-gray-50 dark:border-white/5 opacity-80 group-hover:opacity-100'
+                                            }`}>
+                                            <img src={v.image!} className="w-full h-full object-cover" alt="" />
+                                        </div>
+                                        <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'
+                                            }`}>
+                                            {getPriceFormatted(`variant-${originalIndex}`, v.price).whole}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -920,49 +1003,87 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
                         {/* Specs Tab */}
                         {activeTab === 'specs' && (
-                            <div className="animate-in fade-in duration-300 space-y-1">
-                                <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                    <span className="font-black text-gray-500 uppercase tracking-widest">Category</span>
-                                    <span className="font-bold text-gray-900 dark:text-white text-right">{product.category || 'N/A'}</span>
-                                </div>
-                                {product.condition && (
-                                    <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                        <span className="font-black text-gray-500 uppercase tracking-widest">Condition</span>
-                                        <span className="font-bold text-gray-900 dark:text-white text-right capitalize">{product.condition.replace('_', ' ')}</span>
-                                    </div>
-                                )}
-                                {product.brand && (
-                                    <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                        <span className="font-black text-gray-500 uppercase tracking-widest">Brand</span>
-                                        <span className="font-bold text-gray-900 dark:text-white text-right">{product.brand}</span>
-                                    </div>
-                                )}
-                                {product.sku && (
-                                    <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                        <span className="font-black text-gray-500 uppercase tracking-widest">SKU</span>
-                                        <span className="font-mono text-[10px] text-gray-900 dark:text-white text-right">{product.sku}</span>
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                    <span className="font-black text-gray-500 uppercase tracking-widest">Stock</span>
-                                    <span className={`font-bold text-right ${product.stock > 10 ? 'text-green-600' : product.stock > 0 ? 'text-amber-600' : 'text-red-600'}`}>
-                                        {product.stock > 0 ? `${product.stock} available` : 'Out of Stock'}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                    <span className="font-black text-gray-500 uppercase tracking-widest">Delivery</span>
-                                    <span className="font-bold text-gray-900 dark:text-white text-right">
-                                        {product.free_delivery ? 'Free' : getPrice('deliveryCost', product.delivery_cost || 0)}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-2 text-xs py-3 border-b border-gray-50 dark:border-gray-800">
-                                    <span className="font-black text-gray-500 uppercase tracking-widest">Est. Arrival</span>
-                                    <span className="font-bold text-gray-900 dark:text-white text-right">{deliveryEstimate.date}</span>
-                                </div>
-                                <div className="grid grid-cols-2 text-xs py-3">
-                                    <span className="font-black text-gray-500 uppercase tracking-widest">Returns</span>
-                                    <span className="font-bold text-gray-900 dark:text-white text-right">{product.return_policy || '30-day returns'}</span>
-                                </div>
+                            <div className="animate-in fade-in duration-300 -mx-5">
+                                <table className="w-full text-xs">
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                        {/* Brand */}
+                                        {product.brand && (
+                                            <tr>
+                                                <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Brand</td>
+                                                <td className="px-4 py-3.5 text-gray-900 dark:text-white">{product.brand}</td>
+                                            </tr>
+                                        )}
+                                        {/* Category */}
+                                        <tr>
+                                            <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Category</td>
+                                            <td className="px-4 py-3.5 text-gray-900 dark:text-white">{product.category || 'N/A'}</td>
+                                        </tr>
+                                        {/* Availability */}
+                                        <tr>
+                                            <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Availability</td>
+                                            <td className="px-4 py-3.5">
+                                                <span className={`inline-flex items-center gap-1.5 ${product.stock > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    <span className={`w-2 h-2 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                                    {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {/* Sold By */}
+                                        {(vendorInfo?.business_name || product.vendor?.business_name) && (
+                                            <tr>
+                                                <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Sold By</td>
+                                                <td className="px-4 py-3.5">
+                                                    <button
+                                                        onClick={() => onVisitStore?.(vendorInfo?.vendor_id || product.vendor?.vendor_id || product.seller_id?.toString() || '')}
+                                                        className="text-primary font-medium hover:underline"
+                                                    >
+                                                        {vendorInfo?.business_name || product.vendor?.business_name}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {/* Condition */}
+                                        {product.condition && (
+                                            <tr>
+                                                <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Condition</td>
+                                                <td className="px-4 py-3.5 text-gray-900 dark:text-white capitalize">{product.condition.replace('_', ' ')}</td>
+                                            </tr>
+                                        )}
+                                        {/* SKU */}
+                                        {product.sku && (
+                                            <tr>
+                                                <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">SKU</td>
+                                                <td className="px-4 py-3.5 text-gray-900 dark:text-white font-mono text-[10px]">{product.sku}</td>
+                                            </tr>
+                                        )}
+                                        {/* Product Variants/Attributes */}
+                                        {productVariants.length > 0 && Object.entries(productVariants[0]?.options || {}).map(([key, value]) => (
+                                            <tr key={key}>
+                                                <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800 capitalize">{key}</td>
+                                                <td className="px-4 py-3.5 text-gray-900 dark:text-white">
+                                                    {productVariants.map(v => v.options[key]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {/* Delivery */}
+                                        <tr>
+                                            <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Delivery</td>
+                                            <td className="px-4 py-3.5 text-gray-900 dark:text-white">
+                                                {product.free_delivery ? 'Free Shipping' : getPrice('deliveryCost', product.delivery_cost || 0)}
+                                            </td>
+                                        </tr>
+                                        {/* Est. Arrival */}
+                                        <tr>
+                                            <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Est. Arrival</td>
+                                            <td className="px-4 py-3.5 text-gray-900 dark:text-white">{deliveryEstimate.date}</td>
+                                        </tr>
+                                        {/* Returns */}
+                                        <tr>
+                                            <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">Returns</td>
+                                            <td className="px-4 py-3.5 text-gray-900 dark:text-white">{product.return_policy || '30-day returns'}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         )}
                     </div>
@@ -1087,10 +1208,16 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
             {/* AI Recommendations */}
             <div className="mt-2 space-y-4 pb-8">
-                {isLoadingRelated && (
-                    <div className="p-8 text-center">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-primary mb-2"></div>
-                        <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Finding matches...</p>
+                {(isLoadingRelated && (sameItems.length === 0 && similarItems.length === 0)) && (
+                    <div className="px-4 space-y-8 py-6">
+                        <div className="space-y-4">
+                            <Skeleton.Text lines={1} className="w-1/2 h-6" />
+                            <Skeleton.ProductGrid count={4} />
+                        </div>
+                        <div className="space-y-4">
+                            <Skeleton.Text lines={1} className="w-1/2 h-6" />
+                            <Skeleton.ProductGrid count={4} />
+                        </div>
                     </div>
                 )}
 
@@ -1145,27 +1272,34 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 )}
 
                 {/* More to Discover SECTION */}
-                {similarItems.length > 0 && !isLoadingRelated && (
+                {(similarItems.length > 0 || (isLoadingRelated && similarItems.length === 0)) && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
                         <div className="p-3 bg-surface-light dark:bg-surface-dark flex items-center justify-between mt-4">
                             <div className="flex flex-col">
                                 <h3 className="font-black text-black dark:text-white text-lg uppercase tracking-tight">More to discover</h3>
                                 <div className="flex items-center gap-1.5 mt-0.5">
-                                    <span className="material-icons text-blue-500 text-sm">style</span>
-                                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">Picked for your style</span>
+                                    <span className="material-icons text-blue-500 text-sm">auto_awesome</span>
+                                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">Curated for you</span>
                                 </div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-1 px-1">
-                            {similarItems.map(item => (
-                                <ProductCard
-                                    key={item.id}
-                                    product={item}
-                                    onProductClick={() => onProductClick(item)}
-                                    onVisualSearch={onVisualSearch}
-                                />
-                            ))}
-                        </div>
+
+                        {isLoadingRelated && similarItems.length === 0 ? (
+                            <div className="px-1 py-4">
+                                <Skeleton.ProductGrid count={4} />
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-1 px-1">
+                                {similarItems.map(item => (
+                                    <ProductCard
+                                        key={item.id}
+                                        product={item}
+                                        onProductClick={() => onProductClick(item)}
+                                        onVisualSearch={onVisualSearch}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1481,16 +1615,23 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 <div className="fixed inset-0 z-[70] flex flex-col justify-end animate-in fade-in duration-300">
                     <div
                         className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
-                        onClick={() => setIsVariationSheetOpen(false)}
+                        onClick={() => { setIsVariationSheetOpen(false); setSheetPreviewVariant(null); }}
                     />
 
-                    <div className="relative bg-white dark:bg-surface-dark rounded-t-2xl w-full max-h-[85vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-400 shadow-2xl">
+                    <div
+                        onPointerDown={() => {
+                            if (!sheetPreviewVariant && currentVariant) {
+                                setSheetPreviewVariant(currentVariant);
+                            }
+                        }}
+                        className="relative bg-white dark:bg-surface-dark rounded-t-2xl w-full max-h-[85vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-400 shadow-2xl"
+                    >
                         {/* Header */}
-                        <div className="px-4 py-4 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-surface-dark">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Variations</h3>
+                        <div className="px-5 py-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-surface-dark">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Variations</h3>
                             <button
-                                onClick={() => setIsVariationSheetOpen(false)}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                                onClick={() => { setIsVariationSheetOpen(false); setSheetPreviewVariant(null); }}
+                                className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                             >
                                 <span className="material-icons text-gray-400">close</span>
                             </button>
@@ -1499,20 +1640,26 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto overflow-x-hidden">
                             {/* Product Info & Pricing Tiers */}
-                            <div className="p-4 flex gap-4">
-                                <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100">
-                                    <img src={currentVariant?.image || product.image} className="w-full h-full object-cover" alt="" />
+                            <div className="p-5 flex gap-5">
+                                <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100 dark:border-gray-800 shadow-sm transition-all duration-300">
+                                    <img src={sheetPreviewVariant?.image || currentVariant?.image || product.image} className="w-full h-full object-cover" alt="" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
+                                <div className="flex-1 min-w-0 py-1">
+                                    <div className="flex gap-6 overflow-x-auto hide-scrollbar pb-2">
                                         <div className="flex-shrink-0">
-                                            <div className="text-lg font-bold text-price-red">{getPrice('displayPrice', product.price)}</div>
-                                            <div className="text-[10px] text-gray-500 font-medium">Min. order: 1 piece</div>
+                                            <div className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter transition-colors">
+                                                {getPriceFormatted('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price).whole}
+                                                <span className="text-sm opacity-40">.{getPriceFormatted('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price).decimal}</span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Min. order: 1 piece</div>
                                         </div>
                                         {quantityDiscounts.map((tier, idx) => (
-                                            <div key={idx} className="flex-shrink-0 opacity-80">
-                                                <div className="text-lg font-bold text-gray-900 dark:text-white">{getPrice(`tier-${idx}`, tier.unit_price)}</div>
-                                                <div className="text-[10px] text-gray-500 font-medium">{tier.min_quantity}+ pieces</div>
+                                            <div key={idx} className="flex-shrink-0 opacity-80 decoration-gray-400">
+                                                <div className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">
+                                                    {getPriceFormatted(`tier-${idx}`, tier.unit_price).whole}
+                                                    <span className="text-sm opacity-40">.{getPriceFormatted(`tier-${idx}`, tier.unit_price).decimal}</span>
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">{tier.min_quantity}+ pieces</div>
                                             </div>
                                         ))}
                                     </div>
@@ -1530,10 +1677,12 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
                                         {/* If it's the last option (usually Color/Style), show as list with quantity selectors */}
                                         {optIdx === productOptions.length - 1 ? (
-                                            <div className="bg-gray-50/50 dark:bg-gray-900/30 rounded-xl overflow-hidden border border-gray-50 dark:border-gray-800">
+                                            <div className="bg-gray-50/30 dark:bg-gray-900/10 rounded-3xl overflow-hidden border border-gray-100/50 dark:border-gray-800/50">
                                                 {option.values.map((val) => {
                                                     const qty = variantQuantities[val] || 0;
-                                                    const repImg = productVariants.find(v => v.options && v.options[option.name] === val && v.image)?.image;
+                                                    const variant = productVariants.find(v => v.options && v.options[option.name] === val);
+                                                    const repImg = variant?.image;
+                                                    const variantPrice = variant?.price || product.price;
 
                                                     const updateQty = (delta: number) => {
                                                         setVariantQuantities(prev => ({
@@ -1543,27 +1692,41 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                     };
 
                                                     return (
-                                                        <div key={val} className="flex items-center justify-between p-3 border-b border-white dark:border-gray-800 last:border-0">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                                                        <div
+                                                            key={val}
+                                                            onClick={() => setSheetPreviewVariant(variant || null)}
+                                                            className={`flex items-center justify-between p-4 border-b border-gray-100/50 dark:border-gray-800/50 last:border-0 transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'bg-orange-50/10 dark:bg-orange-900/5' : ''}`}
+                                                        >
+                                                            <div className="flex items-center gap-4">
+                                                                <div className={`w-14 h-14 rounded-xl overflow-hidden border transition-all ${sheetPreviewVariant?.id === variant?.id ? 'border-orange-500 shadow-orange-100 dark:shadow-none scale-105' : 'border-gray-100 dark:border-gray-800 shadow-sm'}`}>
                                                                     <img src={repImg || product.image} className="w-full h-full object-cover" alt="" />
                                                                 </div>
-                                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{val}</span>
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <span className={`text-sm font-black uppercase tracking-tight transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{val}</span>
+                                                                    <span className="text-xs font-bold text-gray-400">
+                                                                        {getPrice('displayPrice', variantPrice)}
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex items-center gap-4">
+                                                            <div className="flex items-center gap-1">
                                                                 <button
-                                                                    onClick={() => updateQty(-1)}
+                                                                    onClick={(e) => { e.stopPropagation(); updateQty(-1); }}
                                                                     disabled={qty === 0}
-                                                                    className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${qty > 0 ? 'border-gray-300 text-gray-800 active:bg-gray-100' : 'border-gray-200 text-gray-300'}`}
+                                                                    className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${qty > 0 ? 'bg-white dark:bg-gray-800 border-gray-200 text-gray-900 dark:text-white shadow-sm active:scale-90' : 'bg-gray-50/50 dark:bg-gray-900/50 border-gray-100 dark:border-gray-800 text-gray-300'}`}
                                                                 >
-                                                                    <span className="material-icons text-lg">remove</span>
+                                                                    <span className="material-icons text-xl">remove</span>
                                                                 </button>
-                                                                <span className="text-sm font-bold min-w-[20px] text-center">{qty}</span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={qty}
+                                                                    readOnly
+                                                                    className="w-12 text-center bg-transparent text-sm font-black text-gray-900 dark:text-white"
+                                                                />
                                                                 <button
-                                                                    onClick={() => updateQty(1)}
-                                                                    className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-800 active:bg-gray-100 shadow-sm transition-all"
+                                                                    onClick={(e) => { e.stopPropagation(); updateQty(1); }}
+                                                                    className="w-10 h-10 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-900 dark:text-white shadow-sm active:scale-90 transition-all"
                                                                 >
-                                                                    <span className="material-icons text-lg">add</span>
+                                                                    <span className="material-icons text-xl">add</span>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1604,114 +1767,89 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         </div>
 
                         {/* Footer exactly as pictured */}
-                        <div className="bg-white dark:bg-surface-dark border-t border-gray-100 dark:border-gray-800">
-                            <div className="px-4 py-3 flex justify-between items-center text-sm">
-                                <span className="font-bold text-gray-900 dark:text-white">Item subtotal</span>
-                                <div className="flex items-center gap-1">
-                                    <span className="font-black text-gray-900 dark:text-white">
-                                        {currencyFormatPrice((Object.values(variantQuantities) as number[]).reduce((a, b) => a + b, 0) * (currentVariant?.price || product.price), preferredCurrency)}
-                                    </span>
-                                    <span className="text-[10px] text-gray-400 font-medium">({getPrice('displayPrice', currentVariant?.price || product.price)}/piece)</span>
-                                    <span className="material-icons text-gray-400 text-lg">keyboard_arrow_up</span>
+                        <div className="bg-white dark:bg-surface-dark border-t border-gray-100 dark:border-gray-800 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+                            <div className="px-5 py-4 flex justify-between items-center bg-gray-50/30 dark:bg-white/5">
+                                <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Item subtotal</span>
+                                <div className="flex items-center gap-1 bg-white/50 dark:bg-black/20 px-3 py-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                                    <div className="flex flex-col items-end">
+                                        <span className="font-black text-gray-900 dark:text-white tracking-tighter">
+                                            {currencyFormatPrice((Object.values(variantQuantities) as number[]).reduce((a, b) => a + b, 0) * (sheetPreviewVariant?.price || currentVariant?.price || product.price), preferredCurrency)}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400 font-bold">({getPrice('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price)}/piece)</span>
+                                    </div>
+                                    <span className="material-icons text-gray-400 text-lg ml-1">keyboard_arrow_up</span>
                                 </div>
                             </div>
 
-                            <div className="p-4 pt-1 flex gap-3 items-center">
+                            <div className="p-5 pt-3 flex gap-4 items-center">
                                 <button
-                                    className="p-3 border border-gray-200 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+                                    className="w-14 h-14 border-2 border-gray-100 dark:border-gray-800 rounded-2xl flex items-center justify-center active:scale-90 transition-all bg-white dark:bg-surface-dark shadow-sm"
                                     onClick={handleChatClick}
                                 >
-                                    <span className="material-icons-outlined text-gray-600">chat_bubble_outline</span>
+                                    <span className="material-icons text-gray-500">chat_bubble_outline</span>
                                 </button>
-                                {product.listing_type === 'inquiry' ? (
-                                    <button
-                                        className="flex-1 bg-blue-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-blue-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                                        onClick={() => {
-                                            handleChatClick();
-                                            setIsVariationSheetOpen(false);
-                                        }}
-                                    >
-                                        <span className="material-icons text-sm">chat</span>
-                                        SEND INQUIRY
-                                    </button>
-                                ) : product.listing_type === 'reservation' ? (
-                                    <button
-                                        className="flex-1 bg-emerald-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-emerald-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                                        onClick={() => {
-                                            handleChatClick();
-                                            setIsVariationSheetOpen(false);
-                                        }}
-                                    >
-                                        <span className="material-icons text-sm">event_available</span>
-                                        RESERVE NOW
-                                    </button>
-                                ) : (
-                                    <>
-                                        <button
-                                            className="flex-1 bg-white border border-gray-900 dark:border-white text-gray-900 dark:text-white font-black rounded-full py-3.5 text-sm active:scale-[0.98] transition-all"
-                                            onClick={() => {
-                                                const selectedVariants = (Object.entries(variantQuantities) as [string, number][]).filter(([_, qty]) => qty > 0);
 
-                                                if (selectedVariants.length > 0) {
-                                                    selectedVariants.forEach(([val, qty]) => {
-                                                        const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
-                                                        if (variant) {
-                                                            onAddToCart?.({
-                                                                ...product,
-                                                                variant_id: variant.id,
-                                                                price: variant.price,
-                                                                title: `${product.title} - ${val}`,
-                                                                image: variant.image || product.image
-                                                            }, qty);
-                                                        }
-                                                    });
-                                                } else {
-                                                    // Fallback to current variant or main product
-                                                    const productToAdd = currentVariant
-                                                        ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
-                                                        : product;
-                                                    onAddToCart?.(productToAdd, 1);
-                                                    setShowAddedFeedback(true);
-                                                    setTimeout(() => setShowAddedFeedback(false), 2000);
-                                                    playCartAddSound();
-                                                }
-                                                setIsVariationSheetOpen(false);
-                                            }}
-                                        >
-                                            Add to cart
-                                        </button>
-                                        <button
-                                            className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-black rounded-full py-3.5 text-sm shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
-                                            onClick={() => {
-                                                const selectedVariants = (Object.entries(variantQuantities) as [string, number][]).filter(([_, qty]) => qty > 0);
-                                                if (selectedVariants.length > 0) {
-                                                    selectedVariants.forEach(([val, qty]) => {
-                                                        const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
-                                                        if (variant) {
-                                                            onBuyNow?.({
-                                                                ...product,
-                                                                variant_id: variant.id,
-                                                                price: variant.price,
-                                                                title: `${product.title} - ${val}`,
-                                                                image: variant.image || product.image
-                                                            }, qty);
-                                                        }
-                                                    });
-                                                } else {
-                                                    const productToAdd = currentVariant
-                                                        ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
-                                                        : product;
-                                                    onBuyNow?.(productToAdd, 1);
-                                                }
-                                                // Feedback for Buy Now too
+                                <div className="flex-1 flex gap-3">
+                                    <button
+                                        className="flex-1 h-14 bg-white dark:bg-transparent border-2 border-gray-900 dark:border-white text-gray-900 dark:text-white font-black rounded-2xl py-3.5 text-xs uppercase tracking-widest active:scale-95 transition-all"
+                                        onClick={() => {
+                                            const selectedVariants = (Object.entries(variantQuantities) as [string, number][]).filter(([_, qty]) => qty > 0);
+                                            if (selectedVariants.length > 0) {
+                                                selectedVariants.forEach(([val, qty]) => {
+                                                    const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
+                                                    if (variant) {
+                                                        onAddToCart?.({
+                                                            ...product,
+                                                            variant_id: variant.id,
+                                                            price: variant.price,
+                                                            title: `${product.title} - ${val}`,
+                                                            image: variant.image || product.image
+                                                        }, qty);
+                                                    }
+                                                });
+                                            } else {
+                                                const productToAdd = currentVariant
+                                                    ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
+                                                    : product;
+                                                onAddToCart?.(productToAdd, 1);
                                                 playCartAddSound();
-                                                setIsVariationSheetOpen(false);
-                                            }}
-                                        >
-                                            Start order
-                                        </button>
-                                    </>
-                                )}
+                                            }
+                                            setIsVariationSheetOpen(false);
+                                        }}
+                                    >
+                                        Add to cart
+                                    </button>
+
+                                    <button
+                                        className="flex-[1.2] h-14 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-black rounded-2xl py-3.5 text-xs uppercase tracking-widest shadow-lg shadow-orange-500/25 active:scale-95 transition-all"
+                                        onClick={() => {
+                                            const selectedVariants = (Object.entries(variantQuantities) as [string, number][]).filter(([_, qty]) => qty > 0);
+                                            if (selectedVariants.length > 0) {
+                                                selectedVariants.forEach(([val, qty]) => {
+                                                    const variant = productVariants.find(v => v.options && Object.values(v.options).includes(val));
+                                                    if (variant) {
+                                                        onBuyNow?.({
+                                                            ...product,
+                                                            variant_id: variant.id,
+                                                            price: variant.price,
+                                                            title: `${product.title} - ${val}`,
+                                                            image: variant.image || product.image
+                                                        }, qty);
+                                                    }
+                                                });
+                                            } else {
+                                                const productToAdd = currentVariant
+                                                    ? { ...product, variant_id: currentVariant.id, price: currentVariant.price, title: `${product.title} - ${Object.values(currentVariant.options).join('/')}` }
+                                                    : product;
+                                                onBuyNow?.(productToAdd, 1);
+                                            }
+                                            playCartAddSound();
+                                            setIsVariationSheetOpen(false);
+                                        }}
+                                    >
+                                        Start order
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

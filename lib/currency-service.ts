@@ -6,6 +6,109 @@ import { supabase } from './supabase';
 const EXCHANGE_RATE_API_KEY = 'e1a1b0a52fc28db8e20f6b21';
 const CACHE_HOURS = 2; // Cache rates for 2 hours
 
+const EXCHANGE_RATE_MEMORY_TTL_MS = CACHE_HOURS * 60 * 60 * 1000;
+const EXCHANGE_RATE_LOCALSTORAGE_PREFIX = 'exchange_rate_cache:';
+const EXCHANGE_RATE_REQUEST_TIMEOUT_MS = 10_000;
+const EXCHANGE_RATE_RATE_LIMIT_DEFAULT_COOLDOWN_MS = 10 * 60 * 1000;
+
+type CachedRateEntry = {
+    rate: number;
+    expiresAt: number;
+};
+
+const memoryRateCache = new Map<string, CachedRateEntry>();
+const inFlightRateRequests = new Map<string, Promise<number | null>>();
+const rateLimitCooldownUntil = new Map<string, number>();
+const lastLogAt = new Map<string, number>();
+
+function getNowMs(): number {
+    return Date.now();
+}
+
+function makePairKey(from: string, to: string): string {
+    return `${from}->${to}`;
+}
+
+function isDevEnv(): boolean {
+    try {
+        // Vite exposes import.meta.env; guard for non-Vite contexts.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return Boolean((import.meta as any)?.env?.DEV);
+    } catch {
+        return false;
+    }
+}
+
+function debugLog(...args: unknown[]) {
+    if (!isDevEnv()) return;
+    console.log(...args);
+}
+
+function debugWarnOnce(key: string, ...args: unknown[]) {
+    if (!isDevEnv()) return;
+    const now = getNowMs();
+    const last = lastLogAt.get(key) ?? 0;
+    // Prevent log spam for the same key
+    if (now - last < 60_000) return;
+    lastLogAt.set(key, now);
+    console.warn(...args);
+}
+
+function getMemoryCachedRate(key: string): number | null {
+    const entry = memoryRateCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= getNowMs()) {
+        memoryRateCache.delete(key);
+        return null;
+    }
+    return entry.rate;
+}
+
+function setMemoryCachedRate(key: string, rate: number, ttlMs: number = EXCHANGE_RATE_MEMORY_TTL_MS) {
+    memoryRateCache.set(key, {
+        rate,
+        expiresAt: getNowMs() + ttlMs
+    });
+}
+
+function getLocalStorageCachedRate(key: string): number | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = window.localStorage.getItem(`${EXCHANGE_RATE_LOCALSTORAGE_PREFIX}${key}`);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as CachedRateEntry;
+        if (!parsed || typeof parsed.rate !== 'number' || typeof parsed.expiresAt !== 'number') return null;
+        if (parsed.expiresAt <= getNowMs()) {
+            window.localStorage.removeItem(`${EXCHANGE_RATE_LOCALSTORAGE_PREFIX}${key}`);
+            return null;
+        }
+        return parsed.rate;
+    } catch {
+        return null;
+    }
+}
+
+function setLocalStorageCachedRate(key: string, rate: number, ttlMs: number = EXCHANGE_RATE_MEMORY_TTL_MS) {
+    if (typeof window === 'undefined') return;
+    try {
+        const payload: CachedRateEntry = {
+            rate,
+            expiresAt: getNowMs() + ttlMs
+        };
+        window.localStorage.setItem(`${EXCHANGE_RATE_LOCALSTORAGE_PREFIX}${key}`, JSON.stringify(payload));
+    } catch {
+        // Ignore storage failures (e.g., quota, privacy mode)
+    }
+}
+
+function getCooldownUntil(key: string): number {
+    return rateLimitCooldownUntil.get(key) ?? 0;
+}
+
+function setCooldownUntil(key: string, untilMs: number) {
+    rateLimitCooldownUntil.set(key, untilMs);
+}
+
 export interface CurrencyConversion {
     from: string;
     to: string;
@@ -66,34 +169,83 @@ export async function getExchangeRate(fromCurrency: string, toCurrency: string):
 
     if (from === to) return 1;
 
-    // Check cache first
-    const { data: cachedRate } = await supabase
-        .rpc('get_cached_exchange_rate', {
-            p_from_currency: from,
-            p_to_currency: to
-        });
+    const key = makePairKey(from, to);
 
-    if (cachedRate !== null && cachedRate !== undefined) {
-        console.log(`Using cached rate: ${from} -> ${to} = ${cachedRate}`);
-        return Number(cachedRate);
+    // Fast-path: memory cache
+    const memoryCached = getMemoryCachedRate(key);
+    if (memoryCached !== null) return memoryCached;
+
+    // Fast-path: localStorage cache (browser only)
+    const localCached = getLocalStorageCachedRate(key);
+    if (localCached !== null) {
+        setMemoryCachedRate(key, localCached);
+        return localCached;
     }
 
-    // Fetch from API
-    console.log(`Fetching fresh rate: ${from} -> ${to}`);
-    const rate = await fetchExchangeRate(from, to);
-
-    if (rate) {
-        // Cache the rate
-        await supabase.rpc('update_cached_exchange_rate', {
-            p_from_currency: from,
-            p_to_currency: to,
-            p_rate: rate,
-            p_cache_hours: CACHE_HOURS
-        });
-        console.log(`Cached new rate: ${from} -> ${to} = ${rate}`);
+    // If we got rate-limited recently, avoid hammering the API.
+    const cooldownUntil = getCooldownUntil(key);
+    if (cooldownUntil > getNowMs()) {
+        debugWarnOnce(`rate-limit:${key}`, `[currency] Rate limit cooldown active for ${key}. Using cached fallback if available.`);
+        return null;
     }
 
-    return rate;
+    // De-dupe concurrent requests for the same pair.
+    const existing = inFlightRateRequests.get(key);
+    if (existing) return existing;
+
+    const requestPromise = (async (): Promise<number | null> => {
+        // Check DB cache first
+        try {
+            const { data: cachedRate, error } = await supabase
+                .rpc('get_cached_exchange_rate', {
+                    p_from_currency: from,
+                    p_to_currency: to
+                });
+
+            if (!error && cachedRate !== null && cachedRate !== undefined) {
+                const rateNum = Number(cachedRate);
+                if (!Number.isNaN(rateNum) && Number.isFinite(rateNum)) {
+                    setMemoryCachedRate(key, rateNum);
+                    setLocalStorageCachedRate(key, rateNum);
+                    debugLog(`[currency] Using DB cached rate: ${key} = ${rateNum}`);
+                    return rateNum;
+                }
+            }
+        } catch {
+            // Ignore DB cache failures; we'll try API below.
+        }
+
+        // Fetch from API
+        const rate = await fetchExchangeRate(from, to);
+
+        if (rate) {
+            setMemoryCachedRate(key, rate);
+            setLocalStorageCachedRate(key, rate);
+
+            // Cache the rate in DB (best-effort)
+            try {
+                await supabase.rpc('update_cached_exchange_rate', {
+                    p_from_currency: from,
+                    p_to_currency: to,
+                    p_rate: rate,
+                    p_cache_hours: CACHE_HOURS
+                });
+            } catch {
+                // Ignore DB update errors
+            }
+
+            debugLog(`[currency] Cached new rate: ${key} = ${rate}`);
+        }
+
+        return rate;
+    })();
+
+    inFlightRateRequests.set(key, requestPromise);
+    try {
+        return await requestPromise;
+    } finally {
+        inFlightRateRequests.delete(key);
+    }
 }
 
 /**
@@ -103,11 +255,29 @@ async function fetchExchangeRate(fromCurrency: string, toCurrency: string): Prom
     try {
         const from = normalizeCurrencyCode(fromCurrency);
         const to = normalizeCurrencyCode(toCurrency);
+        const key = makePairKey(from, to);
         const url = `https://v6.exchangerate-api.com/v6/${EXCHANGE_RATE_API_KEY}/pair/${from}/${to}`;
 
-        const response = await fetch(url);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), EXCHANGE_RATE_REQUEST_TIMEOUT_MS);
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+
         if (!response.ok) {
-            console.error('ExchangeRate API error:', response.status, response.statusText);
+            if (response.status === 429) {
+                const retryAfterHeader = response.headers.get('retry-after');
+                const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+                const cooldownMs = Number.isFinite(retryAfterSeconds)
+                    ? Math.max(5_000, retryAfterSeconds * 1000)
+                    : EXCHANGE_RATE_RATE_LIMIT_DEFAULT_COOLDOWN_MS;
+
+                setCooldownUntil(key, getNowMs() + cooldownMs);
+                debugWarnOnce(`429:${key}`, `[currency] ExchangeRate-API 429 for ${key}. Cooling down for ${Math.round(cooldownMs / 1000)}s.`);
+                return null;
+            }
+
+            debugWarnOnce(`api-error:${key}:${response.status}`, '[currency] ExchangeRate-API error:', response.status, response.statusText);
             return null;
         }
 
@@ -116,11 +286,11 @@ async function fetchExchangeRate(fromCurrency: string, toCurrency: string): Prom
         if (data.result === 'success') {
             return data.conversion_rate;
         } else {
-            console.error('ExchangeRate API returned error:', data);
+            debugWarnOnce(`api-result:${from}->${to}`, '[currency] ExchangeRate-API returned error:', data);
             return null;
         }
     } catch (error) {
-        console.error('Error fetching exchange rate:', error);
+        debugWarnOnce(`api-exception:${fromCurrency}->${toCurrency}`, '[currency] Error fetching exchange rate:', error);
         return null;
     }
 }
@@ -167,9 +337,14 @@ export async function getExchangeRates(baseCurrency: string = 'USD'): Promise<Ex
     try {
         const url = `https://v6.exchangerate-api.com/v6/${EXCHANGE_RATE_API_KEY}/latest/${baseCurrency}`;
 
-        const response = await fetch(url);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), EXCHANGE_RATE_REQUEST_TIMEOUT_MS);
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+
         if (!response.ok) {
-            console.error('ExchangeRate API error:', response.status, response.statusText);
+            debugWarnOnce(`latest:${baseCurrency}:${response.status}`, '[currency] ExchangeRate-API error:', response.status, response.statusText);
             return null;
         }
 
@@ -188,15 +363,15 @@ export async function getExchangeRates(baseCurrency: string = 'USD'): Promise<Ex
             );
 
             await Promise.all(cachePromises);
-            console.log(`Cached ${Object.keys(rates).length} rates from ${baseCurrency}`);
+            debugLog(`[currency] Cached ${Object.keys(rates).length} rates from ${baseCurrency}`);
 
             return rates;
         } else {
-            console.error('ExchangeRate API returned error:', data);
+            debugWarnOnce(`latest-result:${baseCurrency}`, '[currency] ExchangeRate-API returned error:', data);
             return null;
         }
     } catch (error) {
-        console.error('Error fetching exchange rates:', error);
+        debugWarnOnce(`latest-exception:${baseCurrency}`, '[currency] Error fetching exchange rates:', error);
         return null;
     }
 }
@@ -209,22 +384,22 @@ export async function detectUserCurrency(): Promise<string> {
     if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('preferred_currency');
         if (saved) {
-            console.log(`Using saved currency preference: ${saved}`);
+            debugLog(`[currency] Using saved currency preference: ${saved}`);
             return saved;
         }
     }
 
     const isMobile = isMobileDevice();
-    console.log(`Detecting currency for ${isMobile ? 'mobile' : 'desktop'} device`);
+    debugLog(`[currency] Detecting currency for ${isMobile ? 'mobile' : 'desktop'} device`);
 
     // For mobile devices, try GPS first (more accurate for location-based apps)
     if (isMobile) {
         try {
-            console.log('Trying GPS detection for mobile device...');
+            debugLog('[currency] Trying GPS detection for mobile device...');
             const gpsCurrency = await detectCurrencyByGPS();
             if (gpsCurrency) return gpsCurrency;
         } catch (error) {
-            console.log('GPS detection failed or denied, trying IP...');
+            debugLog('[currency] GPS detection failed or denied, trying IP...');
         }
     }
 
@@ -233,19 +408,19 @@ export async function detectUserCurrency(): Promise<string> {
         const ipCurrency = await detectCurrencyByIP();
         if (ipCurrency) return ipCurrency;
     } catch (error) {
-        console.log('IP geolocation failed, falling back to locale');
+        debugLog('[currency] IP geolocation failed, falling back to locale');
     }
 
     // Fallback to browser locale
     if (typeof navigator !== 'undefined') {
         const locale = navigator.language || 'en-US';
         const currency = localeToCurrency(locale);
-        console.log(`Using browser locale currency: ${currency} from ${locale}`);
+        debugLog(`[currency] Using browser locale currency: ${currency} from ${locale}`);
         return currency;
     }
 
     // Default to USD
-    console.log('All detection methods failed, defaulting to USD');
+    debugLog('[currency] All detection methods failed, defaulting to USD');
     return 'USD';
 }
 
@@ -283,7 +458,7 @@ async function detectCurrencyByIP(): Promise<string | null> {
 
     for (const apiUrl of GEOLOCATION_APIS) {
         try {
-            console.log(`Trying IP geolocation API: ${apiUrl}`);
+            debugLog(`[currency] Trying IP geolocation API: ${apiUrl}`);
             const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: {
@@ -305,16 +480,16 @@ async function detectCurrencyByIP(): Promise<string | null> {
 
             if (countryCode) {
                 const currency = countryCodeToCurrency(countryCode);
-                console.log(`✅ Detected currency ${currency} from ${apiUrl}: ${countryCode}`);
+                debugLog(`[currency] ✅ Detected currency ${currency} from ${apiUrl}: ${countryCode}`);
                 return currency;
             }
         } catch (error) {
-            console.warn(`❌ IP geolocation API ${apiUrl} failed:`, error);
+            debugWarnOnce(`ip-geo:${apiUrl}`, `[currency] ❌ IP geolocation API ${apiUrl} failed:`, error);
             continue;
         }
     }
 
-    console.log('❌ All IP geolocation APIs failed');
+    debugLog('[currency] ❌ All IP geolocation APIs failed');
     return null;
 }
 
@@ -323,7 +498,7 @@ async function detectCurrencyByIP(): Promise<string | null> {
  */
 async function detectCurrencyByGPS(): Promise<string | null> {
     if (!navigator.geolocation) {
-        console.log('GPS not available');
+        debugLog('[currency] GPS not available');
         return null;
     }
 
@@ -332,22 +507,22 @@ async function detectCurrencyByGPS(): Promise<string | null> {
             async (position) => {
                 try {
                     const { latitude, longitude } = position.coords;
-                    console.log(`GPS coordinates: ${latitude}, ${longitude}`);
+                    debugLog(`[currency] GPS coordinates: ${latitude}, ${longitude}`);
 
                     // Use reverse geocoding to get country
                     const countryCode = await getCountryFromCoordinates(latitude, longitude);
                     if (countryCode) {
                         const currency = countryCodeToCurrency(countryCode);
-                        console.log(`✅ Detected currency ${currency} from GPS: ${countryCode}`);
+                        debugLog(`[currency] ✅ Detected currency ${currency} from GPS: ${countryCode}`);
                         return resolve(currency);
                     }
                 } catch (error) {
-                    console.error('GPS geocoding error:', error);
+                    debugWarnOnce('gps-geocoding', '[currency] GPS geocoding error:', error);
                 }
                 resolve(null);
             },
             (error) => {
-                console.log('GPS access denied or error:', error.message);
+                debugLog(`[currency] GPS access denied or error: ${error.message}`);
                 resolve(null);
             },
             {
@@ -374,7 +549,7 @@ async function getCountryFromCoordinates(lat: number, lon: number): Promise<stri
         const data = await response.json();
         return data.countryCode || null;
     } catch (error) {
-        console.error('Reverse geocoding error:', error);
+        debugWarnOnce('reverse-geocode', '[currency] Reverse geocoding error:', error);
         return null;
     }
 }

@@ -9,13 +9,15 @@ import {
 import { SellerConversation, SellerMessage } from '../../types';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+import { isAIFeatureEnabled } from '../../lib/ai-feature-flags';
 
 interface SellerMessagesViewProps {
     sellerId: string;
     onBack?: () => void;
+    initialConversationId?: string;
 }
 
-export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onBack }) => {
+export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onBack, initialConversationId }) => {
     const [conversations, setConversations] = useState<any[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<any | null>(null);
     const [messages, setMessages] = useState<any[]>([]);
@@ -25,8 +27,30 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
     // Message Input
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
+    const [aiReplyEnabled, setAiReplyEnabled] = useState(true);
+    const [aiNotice, setAiNotice] = useState<string | null>(null);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        isAIFeatureEnabled('seller_chat_reply')
+            .then((enabled) => {
+                if (mounted) setAiReplyEnabled(enabled);
+            })
+            .catch(() => {
+                if (mounted) setAiReplyEnabled(true);
+            });
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!aiNotice) return;
+        const t = setTimeout(() => setAiNotice(null), 4500);
+        return () => clearTimeout(t);
+    }, [aiNotice]);
 
     // Initial Load & Real-time Global Updates (Conversations)
     useEffect(() => {
@@ -53,6 +77,16 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
             supabase.removeChannel(channel);
         };
     }, [sellerId]);
+
+    // Handle initial selection
+    useEffect(() => {
+        if (initialConversationId && conversations.length > 0) {
+            const found = conversations.find(c => c.id === initialConversationId);
+            if (found) {
+                setSelectedConversation(found);
+            }
+        }
+    }, [initialConversationId, conversations]);
 
     // Thread Subscription (Messages)
     useEffect(() => {
@@ -181,10 +215,12 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
     };
 
     const getOtherUserName = (conv: any) => {
+        if (conv.subject === 'Support Request') return 'Admin Support';
         return conv.buyer_display_name || conv.other_user_name || 'Guest User';
     };
 
     const getOtherUserAvatar = (conv: any) => {
+        if (conv.subject === 'Support Request') return null;
         return conv.buyer_avatar_url || conv.other_user_avatar;
     };
 
@@ -407,9 +443,29 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
             </div>
 
             <div className="p-4 bg-white/90 backdrop-blur-lg border-t border-gray-100 safe-area-bottom sticky bottom-0 z-20">
+                {aiNotice && (
+                    <div className="mb-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-4 py-3 flex items-start gap-3">
+                        <span className="material-icons text-amber-700 text-base">info</span>
+                        <div className="flex-1">
+                            <p className="text-xs font-black">AI is unavailable</p>
+                            <p className="text-xs font-medium text-amber-800 mt-0.5">{aiNotice}</p>
+                        </div>
+                        <button
+                            onClick={() => setAiNotice(null)}
+                            className="text-amber-700 hover:text-amber-900"
+                            aria-label="Dismiss"
+                        >
+                            <span className="material-icons text-base">close</span>
+                        </button>
+                    </div>
+                )}
                 <div className="flex items-end gap-3 rounded-2xl p-1">
                     <button
                         onClick={async () => {
+                            if (!aiReplyEnabled) {
+                                setAiNotice('AI Smart Reply is currently turned off by the platform admin.');
+                                return;
+                            }
                             if (!messages.length) return;
                             const lastMessage = messages[messages.length - 1];
                             if (lastMessage.sender_id === sellerId) {
@@ -437,7 +493,13 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
                                 setSending(false);
                             }
                         }}
-                        className="w-10 h-10 flex items-center justify-center text-indigo-500 bg-indigo-50 rounded-xl active:scale-95 transition-all relative group"
+                        disabled={!aiReplyEnabled || sending}
+                        className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-xl active:scale-95 transition-all relative group",
+                            !aiReplyEnabled || sending
+                                ? "text-gray-300 bg-gray-100 cursor-not-allowed"
+                                : "text-indigo-500 bg-indigo-50"
+                        )}
                         title="AI Smart Reply"
                     >
                         <span className="material-icons text-xl">auto_awesome</span>

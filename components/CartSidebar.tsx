@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Product } from '../types';
 import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 
 interface CartSidebarProps {
     isOpen: boolean;
@@ -22,6 +23,7 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
     onRemoveItem,
     onUpdateQuantity
 }) => {
+    const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
     const sidebarRef = useRef<HTMLDivElement>(null);
 
     // Close on escape key
@@ -32,12 +34,22 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
         if (isOpen) {
             document.addEventListener('keydown', handleEscape);
             document.body.style.overflow = 'hidden';
+
+            // Apply promotions when sidebar opens or items change
+            const fetchPromos = async () => {
+                const result = await applyPromotionsToCart(cartItems.map(item => ({
+                    product: item,
+                    quantity: item.quantity || 1
+                })));
+                setPromoResult(result);
+            };
+            fetchPromos();
         }
         return () => {
             document.removeEventListener('keydown', handleEscape);
             document.body.style.overflow = '';
         };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, cartItems]);
 
     const priceValues = useMemo(() => {
         const vals: { id: string; amount: number; currency: string }[] = [];
@@ -58,13 +70,12 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
         return convertedValues[id]?.convertedAmount ?? fallback;
     };
 
-    const subtotal = cartItems.reduce((sum, item) => {
+    const finalSubtotal = promoResult?.finalTotal ?? cartItems.reduce((sum, item) => {
         const price = getConvertedAmount(`item-${item.id}`, item.price);
         return sum + (price * (item.quantity || 1));
     }, 0);
 
-    const freeShippingThreshold = getConvertedAmount('free-shipping-threshold', 50);
-    const shippingProgress = Math.min(100, (subtotal / freeShippingThreshold) * 100);
+    const totalSavings = promoResult?.totalSavings ?? 0;
     const symbol = getCurrencySymbol(preferredCurrency);
 
     return (
@@ -99,25 +110,36 @@ const CartSidebar: React.FC<CartSidebarProps> = ({
 
                     <div className="text-center mb-8 relative z-10">
                         <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {formatPrice(subtotal, preferredCurrency)}
+                            {formatPrice(finalSubtotal, preferredCurrency)}
                         </span>
                     </div>
 
-                    {/* Shipping Bar - Enhanced */}
-                    <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/10 dark:to-teal-500/10 border border-emerald-100 dark:border-emerald-500/20 relative z-10">
+                    {/* Modern Savings Indicator */}
+                    <div className={`p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 relative z-10 overflow-hidden transition-all duration-500 ${totalSavings > 0 ? 'opacity-100 scale-100' : 'opacity-50 grayscale'}`}>
+                        <div className="absolute top-0 right-0 p-2 opacity-10">
+                            <span className="material-icons-round text-4xl">savings</span>
+                        </div>
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                                <span className="material-icons-round text-sm">local_shipping</span>
-                                Free shipping
+                                <span className="material-icons-round text-sm">redeem</span>
+                                Total Savings
                             </div>
-                            <span className="text-[10px] font-bold text-slate-400">Goal: {formatPrice(freeShippingThreshold, preferredCurrency)}</span>
+                            <span className="text-[13px] font-black text-emerald-600 bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 rounded-lg shadow-sm">
+                                {totalSavings > 0 ? `-${formatPrice(totalSavings, preferredCurrency)}` : 'No Savings Yet'}
+                            </span>
                         </div>
-                        <div className="h-2.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-700 shadow-md shadow-emerald-500/30"
-                                style={{ width: `${shippingProgress}%` }}
+                                className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-1000 shadow-lg shadow-emerald-500/30"
+                                style={{ width: totalSavings > 0 ? '100%' : '5%' }}
                             />
                         </div>
+                        {totalSavings > 0 && (
+                            <p className="mt-2 text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest flex items-center gap-1">
+                                <span className="material-icons-round text-[10px]">auto_awesome</span>
+                                Smart discount applied to your bag
+                            </p>
+                        )}
                     </div>
 
                     <div className="mt-8 space-y-3 relative z-10">

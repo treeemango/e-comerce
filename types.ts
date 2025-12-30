@@ -1160,6 +1160,8 @@ export const ADMIN_TABS: AdminTabConfig[] = [
     { id: 'content', label: 'Content Management', icon: 'fas fa-folder', requiredLevel: 'content_manager' },
     { id: 'activity', label: 'Activity Log', icon: 'fas fa-history', requiredLevel: 'senior_admin' },
     { id: 'team', label: 'Team Management', icon: 'fas fa-user-shield', requiredLevel: 'super_admin' },
+    { id: 'ai', label: 'AI Controls', icon: 'fas fa-robot', requiredLevel: 'super_admin' },
+    { id: 'messages', label: 'Messages', icon: 'fas fa-comments', requiredLevel: 'junior_admin' },
     { id: 'feedback', label: 'Feedback & Support', icon: 'fas fa-bug', requiredLevel: 'content_manager' },
 ];
 

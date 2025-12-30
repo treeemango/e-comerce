@@ -9,7 +9,7 @@ import ProductSection from './components/ProductSection';
 import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
-import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById } from '@/lib/api';
+import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, ensureSupportConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById } from '@/lib/api';
 import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
@@ -79,6 +79,7 @@ const ContentManagementView = lazy(() => import('./components/AdminDashboard/Con
 const ActivityLogView = lazy(() => import('./components/AdminDashboard/ActivityLog/ActivityLogView'));
 const FeedbackSupportView = lazy(() => import('./components/AdminDashboard/FeedbackSupportView'));
 const ModerationQueueView = lazy(() => import('./components/AdminDashboard/ModerationQueueView'));
+const AdminAIControlsView = lazy(() => import('./components/AdminDashboard/AdminAIControlsView'));
 
 // Driver Dashboard (lazy)
 const DriverDashboardLayout = lazy(() => import('./components/DriverDashboard/DriverDashboardLayout'));
@@ -89,12 +90,13 @@ const WebDriverProfileView = lazy(() => import('./components/DriverDashboard/Web
 const DriverLoginView = lazy(() => import('./components/DriverDashboard/DriverLoginView'));
 const DriverOnboardingView = lazy(() => import('./components/DriverDashboard/DriverOnboardingView'));
 const AdminLoginView = lazy(() => import('./components/AdminDashboard/AdminLoginView'));
+const AdminMessagesView = lazy(() => import('./components/AdminDashboard/AdminMessagesView'));
 
 import NotificationSystem from './components/NotificationSystem';
 import { WebNotificationWrapper } from './components/WebNotificationWrapper';
 import { WriteReviewModal } from './components/WriteReviewModal';
 import { useA2HS } from './hooks/useA2HS';
-import { useNotifications } from './components/NotificationContext';
+import { useNotifications, NotificationAction } from './components/NotificationContext';
 
 // Loading fallback for Suspense
 const LoadingFallback = () => (
@@ -113,7 +115,7 @@ const App: React.FC = () => {
   });
   const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'vendor-store' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page' | 'platform-reviews'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
-  const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'content' | 'activity' | 'feedback'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'ai' | 'messages' | 'content' | 'activity' | 'feedback'>('overview');
   const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissions | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,6 +169,21 @@ const App: React.FC = () => {
       showNotification('Unable to open install prompt.', 'error');
     }
   }, [a2hs, showNotification]);
+
+  const handleSupportClick = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const convId = await ensureSupportConversation(user.id);
+      if (convId) {
+        setActiveConversationId(convId);
+        setDashboardTab('messages');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (error) {
+      console.error('Error initiating support:', error);
+    }
+  }, [user?.id]);
 
   // Background Sync'd State
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
@@ -319,6 +336,8 @@ const App: React.FC = () => {
       setCurrentView('seller-login');
     } else if (viewParam === 'seller-onboarding') {
       setCurrentView('seller-onboarding');
+    } else if (viewParam === 'wishlist') {
+      setCurrentView('wishlist');
     } else if (viewParam === 'vendor-store') {
       const vendorId = params.get('vendorId');
       if (vendorId) {
@@ -348,6 +367,8 @@ const App: React.FC = () => {
     const onPopState = () => {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
+      const productId = params.get('product_id');
+      const orderId = params.get('order_id');
 
       if (view === 'vendor-store') {
         const vendorId = params.get('vendorId');
@@ -356,6 +377,33 @@ const App: React.FC = () => {
           setCurrentView('vendor-store');
           return;
         }
+      }
+
+      if (view === 'wishlist') {
+        setCurrentView('wishlist');
+        return;
+      }
+
+      if (productId) {
+        (async () => {
+          try {
+            const product = await fetchProductById(productId);
+            if (product) {
+              setSelectedProduct(product);
+              setCurrentView('product-detail');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          } catch (err) {
+            console.error('Error loading popstate product:', err);
+          }
+        })();
+        return;
+      }
+
+      if (orderId) {
+        setAccountPageTitle('Orders');
+        setCurrentView('account-page');
+        return;
       }
 
       if (view === 'platform-reviews') {
@@ -389,8 +437,84 @@ const App: React.FC = () => {
       setAccountPageTitle('Orders');
       setCurrentView('account-page');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (type === 'chat') {
+      setAccountPageTitle('Messages');
+      setCurrentView('account-page');
+      setActiveConversationId(id && id !== 'inbox' ? id : null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, []);
+
+  useEffect(() => {
+    console.log('[App.tsx] Registering juax:notification-action listener');
+    const handler = (event: Event) => {
+      const action = (event as CustomEvent<NotificationAction>).detail;
+      console.log('[App.tsx] Received juax:notification-action event:', action);
+      if (!action?.target) {
+        console.warn('[App.tsx] Action has no target, ignoring');
+        return;
+      }
+
+      if (action.target === 'wishlist') {
+        setCurrentView('wishlist');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (action.target === 'coupons') {
+        setAccountPageTitle('Coupons');
+        setCurrentView('account-page');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (action.target === 'inventory') {
+        setCurrentView('seller-dashboard');
+        setDashboardTab('manage-products');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (action.target === 'finances') {
+        setCurrentView('seller-dashboard');
+        setDashboardTab('finances');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (action.target === 'deals') {
+        setCurrentView('deals');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (action.target === 'chat') {
+        handleInAppDeepLink('chat', action.id || 'inbox');
+        return;
+      }
+
+      if (action.target === 'seller-orders') {
+        console.log('[App.tsx] Navigating to Seller Dashboard Orders tab');
+        setCurrentView('seller-dashboard');
+        setDashboardTab('orders');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (action.target === 'order') {
+        handleInAppDeepLink('order', action.id || '');
+        return;
+      }
+
+
+      if (action.target === 'product' && action.id) {
+        handleInAppDeepLink('product', action.id);
+      }
+    };
+
+    window.addEventListener('juax:notification-action', handler as EventListener);
+    return () => window.removeEventListener('juax:notification-action', handler as EventListener);
+  }, [handleInAppDeepLink]);
 
   useEffect(() => {
     // Check current session on mount
@@ -1275,6 +1399,7 @@ const App: React.FC = () => {
             onTabChange={setDashboardTab}
             user={user}
             onSignOut={handleSignOutClick}
+            onSupportClick={handleSupportClick}
           >
             {dashboardTab === 'overview' && <DashboardOverview sellerId={user?.id} />}
             {dashboardTab === 'manage-products' && (
@@ -1330,7 +1455,7 @@ const App: React.FC = () => {
             {dashboardTab === 'account-notifications' && <SellerProfileView sellerId={user?.id || ''} />} {/* Notifications in profile */}
             {dashboardTab === 'account-permissions' && <div className="p-8 text-gray-500">User permissions feature coming soon</div>}
             {dashboardTab === 'store-branding' && <StoreMediaManager sellerId={user?.id} userId={user?.id} />}
-            {dashboardTab === 'messages' && <SellerMessagesView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} />}
+            {dashboardTab === 'messages' && <SellerMessagesView sellerId={user?.id || ''} onNavigate={setDashboardTab as any} initialConversationId={activeConversationId} />}
           </SellerDashboardLayout>
         )}
         {currentView === 'admin-login' && (
@@ -1367,7 +1492,9 @@ const App: React.FC = () => {
             {adminTab === 'orders' && <OrderManagementView />}
             {adminTab === 'disputes' && <DisputeManagementView />}
             {adminTab === 'moderation' && <ModerationQueueView />}
-            {adminTab === 'finances' && <PayoutApprovalsView />}
+            {adminTab === 'finances' && <PayoutApprovalsView permissions={adminPermissions!} />}
+            {adminTab === 'ai' && <AdminAIControlsView permissions={adminPermissions!} />}
+            {adminTab === 'messages' && <AdminMessagesView adminId={user?.id || ''} permissions={adminPermissions!} />}
             {adminTab === 'content' && <ContentManagementView permissions={adminPermissions!} />}
             {adminTab === 'activity' && <ActivityLogView permissions={adminPermissions!} />}
             {adminTab === 'feedback' && <FeedbackSupportView />}

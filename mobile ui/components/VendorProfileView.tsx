@@ -239,18 +239,12 @@ export const VendorProfileView: React.FC<VendorProfileViewProps> = ({ vendorId, 
                             <span>Since {new Date(vendor.seller_since || Date.now()).getFullYear()}</span>
                         </div>
 
-                        {vendor.is_verified && (
-                            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30">
-                                <span className="material-icons text-sm text-blue-600 dark:text-blue-400">verified_user</span>
-                                <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Verified Seller</span>
-                            </div>
-                        )}
-
                         {/* Vendor Badges Section */}
                         {vendor.badges && vendor.badges.length > 0 && (
                             <div className="mt-4 flex flex-wrap gap-2">
                                 {vendor.badges.map((badge, idx) => {
                                     const badgeKey = badge.badge_type || badge.badge_name || '';
+                                    if (badgeKey === 'verified_seller') return null;
                                     const badgeConfig: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {
                                         speed_dove: { icon: 'flight', label: 'Speed Dove', bg: 'bg-sky-50 dark:bg-sky-900/30', text: 'text-sky-600 dark:text-sky-400', border: 'border-sky-200 dark:border-sky-800' },
                                         new_seller: { icon: 'fiber_new', label: 'New Seller', bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800' },

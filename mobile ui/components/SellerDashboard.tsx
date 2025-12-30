@@ -44,6 +44,8 @@ interface SellerDashboardProps {
   onOpenOrders: () => void;
   onOpenPayouts: () => void;
   onClose?: () => void;
+  onSupportClick?: () => void;
+  initialConversationId?: string | null;
 }
 
 export const SellerDashboard: React.FC<SellerDashboardProps> = ({
@@ -57,6 +59,8 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   onOpenOrders,
   onOpenPayouts,
   onClose,
+  onSupportClick,
+  initialConversationId,
 }) => {
   const [stats, setStats] = useState<SellerStats | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -73,6 +77,13 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
     setReturnTab(from);
     setActiveTab(tab);
   };
+
+  // Support Redirection
+  useEffect(() => {
+    if (initialConversationId) {
+      setActiveTab('messages');
+    }
+  }, [initialConversationId]);
 
   // Modal State (Overlays)
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -239,6 +250,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
           <SellerMessagesView
             sellerId={sellerId}
             onBack={() => setActiveTab('overview')}
+            initialConversationId={initialConversationId || undefined}
           />
         );
       case 'wallet':
@@ -274,6 +286,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
           <SellerProfileSettingsView
             sellerId={sellerId}
             onBack={() => setActiveTab(returnTab || 'menu')}
+            onSupportClick={onSupportClick}
           />
         );
       case 'menu':
@@ -317,10 +330,14 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
                 { icon: 'assignment_return', label: 'Manage Returns', tab: 'returns' },
                 { icon: 'insights', label: 'Analytics', tab: 'analytics' },
                 { icon: 'settings', label: 'Settings', tab: 'settings' },
+                { icon: 'admin_panel_settings', label: 'Support & Help', action: onSupportClick },
               ].map((item, idx) => (
                 <button
                   key={idx}
-                  onClick={() => item.tab && navigateTo(item.tab as any, 'menu')}
+                  onClick={() => {
+                    if (item.action) item.action();
+                    else if (item.tab) navigateTo(item.tab as any, 'menu');
+                  }}
                   className="w-full text-left px-5 py-4 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-50 dark:border-gray-800 last:border-0 flex items-center gap-4 transition-colors"
                 >
                   <div className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center">

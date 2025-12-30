@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchPendingSellerVerifications, approveSeller, rejectSeller, hasResourcePermission } from '@/lib/api';
+import { createConversation, fetchPendingSellerVerifications, approveSeller, rejectSeller, hasResourcePermission, sendMessage, findConversationId } from '@/lib/api';
 import type { SellerVerificationRequest, AdminPermissions, MediaItem } from '@/types';
 
 // ==========================================
@@ -104,7 +104,12 @@ const VerificationDetailsModal: React.FC<VerificationDetailsModalProps> = ({
                             </span>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                    <button
+                        onClick={onClose}
+                        className="h-10 w-10 inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-100 hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        aria-label="Close"
+                        type="button"
+                    >
                         <i className="material-icons">close</i>
                     </button>
                 </div>
@@ -270,9 +275,11 @@ const VerificationDetailsModal: React.FC<VerificationDetailsModalProps> = ({
 interface VerificationCardProps {
     request: SellerVerificationRequest;
     onClick: () => void;
+    onMessageSeller?: (request: SellerVerificationRequest) => void;
+    canMessageSeller?: boolean;
 }
 
-const VerificationCard: React.FC<VerificationCardProps> = ({ request, onClick }) => {
+const VerificationCard: React.FC<VerificationCardProps> = ({ request, onClick, onMessageSeller, canMessageSeller }) => {
     return (
         <div
             onClick={onClick}
@@ -288,7 +295,23 @@ const VerificationCard: React.FC<VerificationCardProps> = ({ request, onClick })
                         <p className="text-xs text-gray-500">{new Date(request.submitted_at).toLocaleDateString()}</p>
                     </div>
                 </div>
-                <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+                <div className="flex items-center gap-2">
+                    {canMessageSeller && onMessageSeller && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onMessageSeller(request);
+                            }}
+                            className="inline-flex items-center justify-center h-10 w-10 rounded-xl border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-100 hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            title="Message seller"
+                            aria-label={`Message ${request.business_name}`}
+                            type="button"
+                        >
+                            <i className="fas fa-comment-dots text-sm" />
+                        </button>
+                    )}
+                    <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+                </div>
             </div>
 
             <div className="space-y-2 mt-auto">
@@ -323,6 +346,11 @@ const SellerVerificationView: React.FC<SellerVerificationViewProps> = ({ permiss
     const [selectedRequest, setSelectedRequest] = useState<SellerVerificationRequest | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    const [messageModalOpen, setMessageModalOpen] = useState(false);
+    const [messageTarget, setMessageTarget] = useState<SellerVerificationRequest | null>(null);
+    const [messageText, setMessageText] = useState('');
+    const [messageSending, setMessageSending] = useState(false);
+
     useEffect(() => {
         loadRequests();
     }, []);
@@ -344,7 +372,11 @@ const SellerVerificationView: React.FC<SellerVerificationViewProps> = ({ permiss
     const handleApprove = async (sellerId: string) => {
         try {
             setIsProcessing(true);
-            const adminId = 'current-admin-id'; // In a real app, this comes from context
+            const adminId = permissions?.user_id;
+            if (!adminId) {
+                alert('Admin ID not found. Please re-login.');
+                return;
+            }
             const success = await approveSeller(sellerId, adminId);
 
             if (success) {
@@ -364,10 +396,35 @@ const SellerVerificationView: React.FC<SellerVerificationViewProps> = ({ permiss
     const handleReject = async (sellerId: string, reason: string) => {
         try {
             setIsProcessing(true);
-            const adminId = 'current-admin-id';
+            const adminId = permissions?.user_id;
+            if (!adminId) {
+                alert('Admin ID not found. Please re-login.');
+                return;
+            }
             const success = await rejectSeller(sellerId, adminId, reason);
 
             if (success) {
+                // Automate rejection message
+                try {
+                    const existingConversationId = await findConversationId({
+                        sellerId,
+                        buyerId: adminId,
+                        productId: null,
+                        subject: 'Seller Verification'
+                    });
+
+                    const msg = `Your seller application has been rejected.\n\nReason: ${reason}`;
+                    if (existingConversationId) {
+                        await sendMessage(existingConversationId, adminId, sellerId, msg, {
+                            context: 'seller_verification'
+                        });
+                    } else {
+                        await createConversation(sellerId, adminId, undefined, 'Seller Verification', msg);
+                    }
+                } catch (msgErr) {
+                    console.error('Failed to send rejection message:', msgErr);
+                }
+
                 setRequests(prev => prev.filter(r => r.user_id !== sellerId));
                 setSelectedRequest(null); // Close modal
             } else {
@@ -378,6 +435,66 @@ const SellerVerificationView: React.FC<SellerVerificationViewProps> = ({ permiss
             alert('An error occurred while rejecting.');
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const openMessageSeller = (request: SellerVerificationRequest) => {
+        setMessageTarget(request);
+        setMessageText('');
+        setMessageModalOpen(true);
+    };
+
+    const handleSendQuickMessage = async () => {
+        if (!messageTarget) return;
+        const adminId = permissions?.user_id;
+        const sellerId = messageTarget.user_id;
+        const content = messageText.trim();
+
+        if (!adminId) {
+            setError('Admin ID not found');
+            return;
+        }
+        if (!sellerId) {
+            setError('Seller ID not found');
+            return;
+        }
+        if (!content) return;
+
+        setMessageSending(true);
+        try {
+            const existingConversationId = await findConversationId({
+                sellerId,
+                buyerId: adminId,
+                productId: null,
+                subject: 'Seller Verification'
+            });
+
+            let ok = false;
+            if (existingConversationId) {
+                ok = await sendMessage(existingConversationId, adminId, sellerId, content, {
+                    context: 'seller_verification'
+                });
+            } else {
+                const conversationId = await createConversation(
+                    sellerId,
+                    adminId,
+                    undefined,
+                    'Seller Verification',
+                    content
+                );
+                ok = Boolean(conversationId);
+            }
+
+            if (!ok) throw new Error('Failed to send message');
+
+            setMessageModalOpen(false);
+            setMessageTarget(null);
+            setMessageText('');
+        } catch (err) {
+            console.error('Error sending quick message:', err);
+            alert('Failed to send message. Please try again.');
+        } finally {
+            setMessageSending(false);
         }
     };
 
@@ -432,8 +549,82 @@ const SellerVerificationView: React.FC<SellerVerificationViewProps> = ({ permiss
                             key={request.id}
                             request={request}
                             onClick={() => setSelectedRequest(request)}
+                            onMessageSeller={openMessageSeller}
+                            canMessageSeller={Boolean(permissions?.user_id)}
                         />
                     ))}
+                </div>
+            )}
+
+            {/* Quick Message Modal */}
+            {messageModalOpen && messageTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-2xl rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+                        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-gray-100 bg-gray-50/60">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.25em] text-blue-600 font-bold">Quick Message</p>
+                                <h3 className="text-xl font-bold text-gray-900 mt-1">Message {messageTarget.business_name}</h3>
+                                <p className="text-sm text-gray-600 mt-1">Seller verification application</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (messageSending) return;
+                                    setMessageModalOpen(false);
+                                    setMessageTarget(null);
+                                    setMessageText('');
+                                }}
+                                className="h-11 w-11 rounded-xl border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-100 hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                type="button"
+                                aria-label="Close"
+                            >
+                                <i className="material-icons">close</i>
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <textarea
+                                value={messageText}
+                                onChange={(e) => setMessageText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (!messageSending) handleSendQuickMessage();
+                                    }
+                                }}
+                                className="w-full min-h-[140px] rounded-xl border border-gray-200 bg-white p-4 text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Write a message to the seller…"
+                            />
+
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-gray-500">
+                                    <span className="font-semibold">Tip:</span> Press <span className="font-mono">Ctrl</span>+<span className="font-mono">Enter</span> to send
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            if (messageSending) return;
+                                            setMessageModalOpen(false);
+                                            setMessageTarget(null);
+                                            setMessageText('');
+                                        }}
+                                        className="px-4 py-2.5 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50"
+                                        type="button"
+                                        disabled={messageSending}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSendQuickMessage}
+                                        className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-semibold shadow-sm hover:bg-blue-700 disabled:opacity-60"
+                                        type="button"
+                                        disabled={messageSending || !messageText.trim()}
+                                    >
+                                        {messageSending ? 'Sending…' : 'Send'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 

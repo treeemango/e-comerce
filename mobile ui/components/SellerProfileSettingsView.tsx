@@ -5,9 +5,10 @@ import { cn } from '../../lib/utils';
 interface SellerProfileSettingsViewProps {
     sellerId: string;
     onBack: () => void;
+    onSupportClick?: () => void;
 }
 
-export const SellerProfileSettingsView: React.FC<SellerProfileSettingsViewProps> = ({ sellerId, onBack }) => {
+export const SellerProfileSettingsView: React.FC<SellerProfileSettingsViewProps> = ({ sellerId, onBack, onSupportClick }) => {
     const [profile, setProfile] = useState<SellerProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -379,6 +380,23 @@ export const SellerProfileSettingsView: React.FC<SellerProfileSettingsViewProps>
                                 onChange={(e) => handleChange('shipping_policy', e.target.value)}
                                 placeholder="Shipping methods and timelines..."
                             />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Support Section */}
+                <div className="space-y-4">
+                    <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">Need Assistance?</h3>
+                    <div className="bg-gradient-to-br from-indigo-500/10 to-primary/10 rounded-3xl p-6 border border-primary/20 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all" onClick={onSupportClick}>
+                        <div className="flex items-center gap-4 relative z-10">
+                            <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-900 flex items-center justify-center shadow-lg shadow-primary/20">
+                                <span className="material-icons-round text-primary text-2xl">support_agent</span>
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Contact Admin Support</div>
+                                <div className="text-[10px] text-gray-500 font-bold mt-0.5 uppercase tracking-widest">Get help with your seller account</div>
+                            </div>
+                            <span className="material-icons-round text-gray-300">chevron_right</span>
                         </div>
                     </div>
                 </div>

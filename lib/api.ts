@@ -4890,7 +4890,50 @@ export const sendMessage = async (
     }
 };
 
-export const getConversations = async (userId: string): Promise<Conversation[]> => {
+export const findConversationId = async (params: {
+    sellerId: string;
+    buyerId: string;
+    productId?: string | null;
+    subject?: string | null;
+}): Promise<string | null> => {
+    const { sellerId, buyerId, productId, subject } = params;
+
+    if (!sellerId || !buyerId) {
+        console.warn('[findConversationId] Missing sellerId or buyerId');
+        return null;
+    }
+
+    try {
+        let query = supabase
+            .from('conversations')
+            .select('id, created_at')
+            .eq('seller_id', sellerId)
+            .eq('buyer_id', buyerId);
+
+        if (typeof productId === 'string' && productId.trim()) {
+            query = query.eq('product_id', productId);
+        } else if (productId === null) {
+            query = query.is('product_id', null);
+        }
+
+        if (typeof subject === 'string' && subject.trim()) {
+            query = query.eq('subject', subject.trim());
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false }).limit(1);
+        if (error) {
+            console.error('[findConversationId] Error querying conversations:', error);
+            return null;
+        }
+
+        return data?.[0]?.id || null;
+    } catch (error) {
+        console.error('[findConversationId] Unexpected error:', error);
+        return null;
+    }
+};
+
+export const getConversations = async (userId: string, includeSupport: boolean = false): Promise<Conversation[]> => {
     try {
         const { data, error } = await supabase.rpc('get_user_conversations', {
             p_user_id: userId
@@ -4902,7 +4945,12 @@ export const getConversations = async (userId: string): Promise<Conversation[]> 
             console.log('getConversations raw first item:', data[0]);
         }
 
-        return (data || []).map((c: any) => {
+        const filteredData = (data || []).filter((c: any) => {
+            if (!includeSupport && c.subject === 'Support Request') return false;
+            return true;
+        });
+
+        return filteredData.map((c: any) => {
             const isSeller = c.seller_id === userId;
             // Handle field mismatches from different backend versions
             const id = c.id || c.conversation_id;
@@ -4979,6 +5027,52 @@ export const markMessagesRead = async (
 
     return true;
 };
+
+/**
+ * Ensures a support conversation exists between a seller and an admin.
+ * If one doesn't exist, it creates it.
+ */
+export const ensureSupportConversation = async (sellerId: string): Promise<string | null> => {
+    try {
+        // 1. Find an available admin
+        const admins = await fetchAllUsers({ role: 'admin' });
+        if (admins.length === 0) {
+            console.error('No admin found for support');
+            return null;
+        }
+
+        // Use the first admin found
+        const adminId = admins[0].id;
+
+        // 2. Check if a support conversation already exists
+        const { data: existingConversations, error: fetchError } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('seller_id', sellerId)
+            .eq('buyer_id', adminId)
+            .eq('subject', 'Support Request')
+            .limit(1);
+
+        if (!fetchError && existingConversations && existingConversations.length > 0) {
+            return existingConversations[0].id;
+        }
+
+        // 3. Create a new support conversation if none exists
+        const conversationId = await createConversation(
+            sellerId,
+            adminId,
+            undefined,
+            'Support Request',
+            'Hello! I need assistance with my seller account.'
+        );
+
+        return conversationId;
+    } catch (error) {
+        console.error('Error in ensureSupportConversation:', error);
+        return null;
+    }
+};
+
 
 export const getConversationParticipants = async (conversationId: string): Promise<{ seller_id: string, buyer_id: string } | null> => {
     const { data, error } = await supabase
@@ -6114,33 +6208,15 @@ export async function reorderHeroSlides(orderedIds: string[]): Promise<boolean> 
 /**
  * Get unread message count for a seller
  */
-export const getSellerUnreadCount = async (userId: string): Promise<number> => {
+export const getSellerUnreadCount = async (userId: string, includeSupport: boolean = false): Promise<number> => {
     try {
-        // Try RPC first for efficiency
-        const { data, error } = await supabase
-            .rpc('get_unread_message_count', { p_user_id: userId });
+        // Use getConversations which already has filtering logic
+        const conversations = await getConversations(userId, includeSupport);
 
-        if (!error && typeof data === 'number') {
-            return data;
-        }
+        // Sum up all unread counts from the (filtered) conversations
+        const totalUnread = conversations.reduce((total, conv) => total + (conv.unread_count || 0), 0);
 
-        // Fallback: Check conversations where user is participant and has unread count
-        // Note: This is an approximation if the standard RPC is missing
-        const { data: conversations, error: convError } = await supabase
-            .from('conversations')
-            .select('unread_count, last_message_sender_id')
-            .or(`seller_id.eq.${userId}, buyer_id.eq.${userId} `);
-
-        if (convError || !conversations) {
-            return 0;
-        }
-
-        // Sum up unread counts for conversations where the last message was NOT sent by the user
-        // But the schema might just have 'unread_count' for the conversation overall?
-        // Usually unread_count is per user-view in sophisticated apps, but here we might rely on the conversation view.
-        // Let's assume the RPC is the primary way and return 0 if it fails, or try a simple message count.
-
-        return 0;
+        return totalUnread;
     } catch (error) {
         console.error('Error getting specific unread count:', error);
         return 0;
@@ -6692,7 +6768,8 @@ export const fetchSellerOrders = async (sellerId: string) => {
 
 export const fetchSellerConversations = async (sellerId: string) => {
     // This overlaps with getConversations but specifically for seller dashboard view
-    return getConversations(sellerId);
+    // We include support conversations here so sellers can see their admin chats
+    return getConversations(sellerId, true);
 };
 
 export const fetchSellerConversationMessages = async (conversationId: string, sellerId?: string) => {

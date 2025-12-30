@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Product } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Product, RelatedProduct } from '../types';
 import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
-import { useMemo } from 'react';
-import { applyCoupon, fetchUserCoupons } from '@/lib/api';
+import { applyCoupon, fetchUserCoupons, fetchRelatedProducts } from '@/lib/api';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
+import ProductCard from './ProductCard';
 
 interface CartViewProps {
     cartItems: Product[];
@@ -12,14 +12,54 @@ interface CartViewProps {
     onCheckoutClick: () => void;
     onHomeClick: () => void;
     userId?: string;
+    onProductClick?: (product: Product) => void;
 }
 
-const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpdateQuantity, onCheckoutClick, onHomeClick, userId }) => {
+const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpdateQuantity, onCheckoutClick, onHomeClick, userId, onProductClick }) => {
     const [discount, setDiscount] = useState(0);
     const [isApplying, setIsApplying] = useState(false);
     const [promoResult, setPromoResult] = useState<PromotionsResult | null>(null);
     const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
     const [hasAttemptedAutoApply, setHasAttemptedAutoApply] = useState(false);
+    const [curatedProducts, setCuratedProducts] = useState<RelatedProduct[]>([]);
+    const [curatedLoading, setCuratedLoading] = useState(false);
+
+    // Load AI-curated products based on cart items
+    useEffect(() => {
+        const loadCuratedProducts = async () => {
+            if (cartItems.length > 0) {
+                setCuratedLoading(true);
+                try {
+                    const allRelated: RelatedProduct[] = [];
+                    const seenIds = new Set<string>();
+
+                    cartItems.forEach(ci => seenIds.add(String(ci.id)));
+
+                    const itemsToCheck = cartItems.slice(0, 3);
+
+                    for (const item of itemsToCheck) {
+                        const related = await fetchRelatedProducts(String(item.id));
+                        const combined = [...related.same, ...related.similar];
+
+                        for (const product of combined) {
+                            const productId = String(product.id);
+                            if (!seenIds.has(productId)) {
+                                seenIds.add(productId);
+                                allRelated.push(product);
+                            }
+                        }
+                    }
+
+                    setCuratedProducts(allRelated.slice(0, 8));
+                } catch (error) {
+                    console.error('Error loading curated products:', error);
+                } finally {
+                    setCuratedLoading(false);
+                }
+            }
+        };
+        loadCuratedProducts();
+    }, [cartItems]);
 
     // Group items to track quantities
     const groupedItems = cartItems.reduce((acc, item) => {
@@ -390,16 +430,59 @@ const CartView: React.FC<CartViewProps> = ({ cartItems, onRemoveFromCart, onUpda
                             </div>
                         </div>
 
-                        <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl p-4 shadow-sm">
-                            <div className="flex items-start gap-3">
-                                <span className="material-icons text-2xl">local_shipping</span>
-                                <div className="space-y-1">
-                                    <p className="font-semibold text-sm">Free express shipping over {formatPrice(shippingThreshold, preferredCurrency)}</p>
-                                    <p className="text-xs opacity-90">You're {formatPrice(Math.max(0, shippingThreshold - subtotal), preferredCurrency)} away from free delivery.</p>
+                        {totalSavings > 0 && (
+                            <div className="bg-gradient-to-tr from-emerald-600 to-teal-600 text-white rounded-xl p-5 shadow-xl shadow-emerald-500/20 relative overflow-hidden group">
+                                <div className="absolute -right-4 -top-4 opacity-10 group-hover:scale-110 transition-transform duration-700">
+                                    <span className="material-icons text-7xl">auto_awesome</span>
+                                </div>
+                                <div className="flex items-start gap-4 relative z-10">
+                                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
+                                        <span className="material-icons text-xl">redeem</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="font-black text-xs uppercase tracking-widest opacity-80">Shopping Reward</p>
+                                        <p className="font-bold text-lg leading-tight">You've saved {formatPrice(totalSavings, preferredCurrency)} today!</p>
+                                        <p className="text-xs opacity-90 flex items-center gap-1">
+                                            <span className="material-icons text-[10px]">verified</span>
+                                            Smart deals applied to your bag
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
+                        )}
+                    </div>
+                </div>
+                {/* Curated for You - AI-powered */}
+                <div className="mt-16 pt-10 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-3 mb-8">
+                        <span className="material-icons text-primary text-3xl">auto_awesome</span>
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Curated for you</h2>
+                            <p className="text-gray-500 text-sm">Based on items in your bag</p>
                         </div>
                     </div>
+
+                    {curatedLoading ? (
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                            {[1, 2, 3, 4].map((i) => (
+                                <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-2xl animate-pulse aspect-[3/4]"></div>
+                            ))}
+                        </div>
+                    ) : curatedProducts.length > 0 ? (
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                            {curatedProducts.map((p, idx) => (
+                                <ProductCard
+                                    key={p.id ?? idx}
+                                    product={p as Product}
+                                    onProductClick={onProductClick}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-3xl">
+                            <p className="text-gray-500 font-medium">Add more items to see personal recommendations</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

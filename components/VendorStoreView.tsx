@@ -3,7 +3,6 @@ import { Product, User, MediaItem } from '@/types';
 import ProductCard from './ProductCard';
 import { fetchFilteredProducts, fetchVendorFullProfile, getFollowStatus, toggleFollowStore, type VendorFullProfile } from '@/lib/api';
 import { getCurrentUser } from '@/lib/auth';
-import { VerificationBadge } from './VerificationBadge';
 
 interface VendorStoreViewProps {
   vendorId: string;
@@ -173,6 +172,11 @@ const VendorStoreView: React.FC<VendorStoreViewProps> = ({ vendorId, onBack, onP
                   <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white leading-tight truncate">
                     {vendor.business_name}
                   </h1>
+                  {vendor.is_verified ? (
+                    <span className="material-icons text-blue-500" style={{ fontSize: '22px' }}>
+                      verified
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-widest">
@@ -227,6 +231,9 @@ const VendorStoreView: React.FC<VendorStoreViewProps> = ({ vendorId, onBack, onP
               {vendor.badges.map((badge, idx) => {
                 // Get badge identifier (badge_type or badge_name)
                 const badgeKey = badge.badge_type || badge.badge_name || '';
+
+                // Hide the "Verified Seller" pill badge (use icon next to name instead)
+                if (badgeKey === 'verified_seller') return null;
 
                 // Official badge configuration based on badge_type slugs
                 const badgeConfig: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {

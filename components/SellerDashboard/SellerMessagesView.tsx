@@ -11,9 +11,10 @@ import { SellerConversation, SellerMessage } from '@/types';
 interface SellerMessagesViewProps {
     sellerId: string;
     onNavigate?: (tab: string) => void;
+    initialConversationId?: string | null;
 }
 
-const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNavigate }) => {
+const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNavigate, initialConversationId }) => {
     const [conversations, setConversations] = useState<SellerConversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<SellerConversation | null>(null);
     const [messages, setMessages] = useState<SellerMessage[]>([]);
@@ -26,6 +27,16 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
     useEffect(() => {
         loadConversations();
     }, [sellerId]);
+
+    // Handle initial conversation selection
+    useEffect(() => {
+        if (!loading && initialConversationId && conversations.length > 0) {
+            const conversation = conversations.find(c => c.id === initialConversationId);
+            if (conversation) {
+                setSelectedConversation(conversation);
+            }
+        }
+    }, [loading, initialConversationId, conversations]);
 
     // Load messages when conversation is selected
     useEffect(() => {
@@ -46,6 +57,7 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
             setLoading(false);
         }
     };
+
 
     const loadMessages = async (conversationId: string) => {
         try {
@@ -143,6 +155,9 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
     );
 
     const getBuyerDisplayName = (conv: any) => {
+        if (conv?.subject === 'Support Request') {
+            return 'Admin';
+        }
         return (
             conv?.buyer_display_name ||
             conv?.buyer_full_name ||
@@ -154,6 +169,9 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
     };
 
     const getBuyerAvatarUrl = (conv: any) => {
+        if (conv?.subject === 'Support Request') {
+            return null;
+        }
         return conv?.buyer_avatar_url || conv?.buyer_avatar || conv?.other_user_avatar || null;
     };
 
@@ -263,7 +281,9 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="font-semibold text-gray-900">{getBuyerDisplayName(selectedConversation)}</h3>
-                                    <p className="text-sm text-gray-600">{(selectedConversation as any).buyer_email || ''}</p>
+                                    {selectedConversation.subject !== 'Support Request' && (
+                                        <p className="text-sm text-gray-600">{(selectedConversation as any).buyer_email || ''}</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -319,8 +339,8 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                         <div key={message.id} className={`flex ${isSeller ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[70%] ${isSeller ? 'order-2' : 'order-1'}`}>
                                                 <div className={`rounded-lg px-4 py-2 ${isSeller
-                                                        ? 'bg-orange-500 text-white'
-                                                        : 'bg-gray-100 text-gray-900'
+                                                    ? 'bg-orange-500 text-white'
+                                                    : 'bg-gray-100 text-gray-900'
                                                     }`}>
                                                     <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
 

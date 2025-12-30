@@ -36,53 +36,23 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
     }, [onDataUpdate, showNotification]);
 
     useEffect(() => {
-        let interval: NodeJS.Timeout;
+        let highFreqInterval: NodeJS.Timeout;
+        let lowFreqInterval: NodeJS.Timeout;
 
-        const loadData = async () => {
+        const loadHighFrequencyData = async () => {
             if (!user?.id) return;
-
             try {
-                const [coupons, orders, prefs, unreadCount, wishlist, deals] = await Promise.all([
-                    fetchUserCoupons(user.id),
+                const isSeller = user.role === 'seller' || user.role === 'vendor' || user.role === 'admin';
+                const [orders, unreadCount, sellerOrders, sellerStats] = await Promise.all([
                     fetchBuyerOrders(user.id),
-                    fetchBuyerNotificationPreferences(user.id),
                     getSellerUnreadCount(user.id),
-                    getWishlist(user.id),
-                    fetchLightningDeals(user.id, 20)
+                    isSeller ? fetchSellerOrdersSummary(user.id) : Promise.resolve([] as SellerOrderSummary[]),
+                    isSeller ? fetchSellerStats(user.id) : Promise.resolve(null as SellerStats | null)
                 ]);
 
-                // Seller Data Fetch (Conditional)
-                const isSeller = user.role === 'seller' || user.role === 'vendor' || user.role === 'admin';
-                let sellerOrders: SellerOrderSummary[] = [];
-                let sellerStats: SellerStats | null = null;
-
-                if (isSeller) {
-                    const [sOrders, sStats] = await Promise.all([
-                        fetchSellerOrdersSummary(user.id),
-                        fetchSellerStats(user.id)
-                    ]);
-                    sellerOrders = sOrders;
-                    sellerStats = sStats;
-                }
-
-                prefsRef.current = prefs;
-                const activeCoupons = coupons.filter(c => c.status === 'active' && !c.used_at);
-
-                // Notifications logic
                 if (hasInitialLoaded.current) {
-                    // --- BUYER NOTIFICATIONS ---
-                    // New coupons notification...
-                    const dealsEnabled = prefs?.deals !== false;
-                    if (dealsEnabled && activeCoupons.length > prevCouponsCount.current) {
-                        const newCount = activeCoupons.length - prevCouponsCount.current;
-                        showNotificationRef.current(
-                            `${newCount} new offer${newCount > 1 ? 's' : ''} available! Check your promotions.`,
-                            'success'
-                        );
-                    }
-
                     // Order status change notification...
-                    const ordersEnabled = prefs?.orders !== false;
+                    const ordersEnabled = prefsRef.current?.orders !== false;
                     if (ordersEnabled) {
                         orders.slice(0, 5).forEach(order => {
                             const prevStatus = prevOrdersStatus.current[order.id];
@@ -94,31 +64,35 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
                                     `📦 Parcel Ready! Order #${order.id.slice(0, 8)} - Collection Code: ${order.delivery_otp}`,
                                     'success',
                                     8000,
-                                    () => onDeepLink?.('order', order.id)
+                                    () => onDeepLink?.('order', order.id),
+                                    { target: 'order', id: order.id }
                                 );
                             } else if (prevStatus && order.status && prevStatus !== order.status) {
                                 showNotificationRef.current(
                                     `Order #${order.id.slice(0, 8)} status updated to ${order.status}!`,
                                     'info',
                                     5000,
-                                    () => onDeepLink?.('order', order.id)
+                                    () => onDeepLink?.('order', order.id),
+                                    { target: 'order', id: order.id }
                                 );
                             }
                         });
                     }
 
-                    // --- SELLER NOTIFICATIONS ---
                     if (isSeller) {
                         // New Orders
                         if (sellerOrders.length > prevSellerOrdersCount.current) {
                             const newCount = sellerOrders.length - prevSellerOrdersCount.current;
                             showNotificationRef.current(
                                 `🚀 You have ${newCount} new order${newCount > 1 ? 's' : ''}!`,
-                                'success'
+                                'success',
+                                5000,
+                                undefined,
+                                { target: 'seller-orders' }
+
                             );
                         }
 
-                        // Order Status Changes (e.g. Paid)
                         sellerOrders.forEach(order => {
                             const prevStatus = prevSellerOrdersStatus.current[order.order_id];
                             const prevReturnStatus = prevSellerReturnsStatus.current[order.order_id];
@@ -129,25 +103,27 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
                                         `💰 Order #${order.order_id.slice(0, 8)} has been paid! Time to pack.`,
                                         'success',
                                         5000,
-                                        () => onDeepLink?.('order', order.order_id)
+                                        () => onDeepLink?.('order', order.order_id),
+                                        { target: 'order', id: order.order_id }
                                     );
                                 } else {
                                     showNotificationRef.current(
                                         `Order #${order.order_id.slice(0, 8)} status updated to ${order.order_status}.`,
                                         'info',
                                         5000,
-                                        () => onDeepLink?.('order', order.order_id)
+                                        () => onDeepLink?.('order', order.order_id),
+                                        { target: 'order', id: order.order_id }
                                     );
                                 }
                             }
 
-                            // Return Status Changes
                             if (prevReturnStatus !== undefined && order.return_status && prevReturnStatus !== order.return_status) {
                                 showNotificationRef.current(
                                     `🔄 Return request for Order #${order.order_id.slice(0, 8)} is now ${order.return_status}.`,
                                     'warning',
                                     5000,
-                                    () => onDeepLink?.('order', order.order_id)
+                                    () => onDeepLink?.('order', order.order_id),
+                                    { target: 'order', id: order.order_id }
                                 );
                             }
                         });
@@ -156,84 +132,43 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
                         if (sellerStats && sellerStats.low_stock_count > prevLowStockCount.current) {
                             showNotificationRef.current(
                                 `⚠️ Some items are running low on stock! Check your inventory.`,
-                                'warning'
+                                'warning',
+                                5000,
+                                undefined,
+                                { target: 'inventory' }
                             );
                         }
 
-                        // Funds available (Balance increase)
+                        // Funds available
                         if (sellerStats && sellerStats.balance > prevBalance.current && prevBalance.current > 0) {
                             showNotificationRef.current(
                                 `💸 New funds are now available for withdrawal!`,
-                                'success'
+                                'success',
+                                5000,
+                                undefined,
+                                { target: 'finances' }
                             );
                         }
                     }
 
-                    // --- GENERIC NOTIFICATIONS ---
-                    // New messages notification (Subject to "messages" preference)
-                    const messagesEnabled = prefs?.messages !== false;
+                    // New messages
+                    const messagesEnabled = prefsRef.current?.messages !== false;
                     if (messagesEnabled && unreadCount > prevUnreadCount.current) {
                         showNotificationRef.current(
                             `You have new unread messages!`,
-                            'info'
+                            'info',
+                            5000,
+                            () => onDeepLink?.('chat', 'inbox'),
+                            { target: 'chat', id: 'inbox' }
                         );
                     }
-
-                    // Price drops notification (Subject to "price_drops" preference)
-                    const priceDropsEnabled = prefs?.price_drops !== false;
-                    if (priceDropsEnabled) {
-                        const newPriceDrops = wishlist.filter(item =>
-                            (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) &&
-                            !prevPriceDropIds.current.has(item.id.toString())
-                        );
-                        if (newPriceDrops.length > 0) {
-                            showNotificationRef.current(
-                                `${newPriceDrops.length} item${newPriceDrops.length > 1 ? 's' : ''} in your wishlist had a price drop!`,
-                                'success'
-                            );
-                            newPriceDrops.forEach(item => prevPriceDropIds.current.add(item.id.toString()));
-                        }
-                    }
-
-                    // Recommendations notification (Subject to "recommendations" preference)
-                    const recommendationsEnabled = prefs?.recommendations !== false;
-                    if (recommendationsEnabled) {
-                        const newRecommendations = deals.filter(deal =>
-                            (deal.personalization_score && deal.personalization_score >= 0.7) &&
-                            !prevRecommendedIds.current.has(deal.id)
-                        );
-                        if (newRecommendations.length > 0) {
-                            showNotificationRef.current(
-                                `We found some new items you might love!`,
-                                'success'
-                            );
-                            newRecommendations.forEach(deal => prevRecommendedIds.current.add(deal.id));
-                        }
-                    }
-                } else {
-                    // Initial load: populate refs without showing notifications
-                    wishlist.forEach(item => {
-                        if (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) {
-                            prevPriceDropIds.current.add(item.id.toString());
-                        }
-                    });
-                    deals.forEach(deal => {
-                        if (deal.personalization_score && deal.personalization_score >= 0.7) {
-                            prevRecommendedIds.current.add(deal.id);
-                        }
-                    });
                 }
 
-                // Update parent state via ref to avoid re-triggering this effect
-                onDataUpdateRef.current(activeCoupons, orders);
-
-                // Update refs for next comparison
-                prevCouponsCount.current = activeCoupons.length;
-                prevUnreadCount.current = unreadCount;
-
+                // Update refs
                 const statusMap: Record<string, string> = {};
                 orders.slice(0, 5).forEach(o => { if (o.status) statusMap[o.id] = o.status; });
                 prevOrdersStatus.current = statusMap;
+                prevUnreadCount.current = unreadCount;
 
                 if (isSeller) {
                     prevSellerOrdersCount.current = sellerOrders.length;
@@ -251,20 +186,120 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
                     }
                 }
 
-                hasInitialLoaded.current = true;
+                // Pass critical updates up
+                onDataUpdateRef.current([], orders); // Coupons updated separately
             } catch (err) {
-                console.error('Error loading web notification data:', err);
+                console.error('Error loading high frequency data:', err);
+            }
+        };
+
+        const loadLowFrequencyData = async () => {
+            if (!user?.id) return;
+            try {
+                const [coupons, prefs, wishlist, deals] = await Promise.all([
+                    fetchUserCoupons(user.id),
+                    fetchBuyerNotificationPreferences(user.id),
+                    getWishlist(user.id),
+                    fetchLightningDeals(user.id, 20)
+                ]);
+
+                prefsRef.current = prefs;
+                const activeCoupons = coupons.filter(c => c.status === 'active' && !c.used_at);
+
+                if (hasInitialLoaded.current) {
+                    // New coupons
+                    const dealsEnabled = prefs?.deals !== false;
+                    if (dealsEnabled && activeCoupons.length > prevCouponsCount.current) {
+                        const newCount = activeCoupons.length - prevCouponsCount.current;
+                        showNotificationRef.current(
+                            `${newCount} new offer${newCount > 1 ? 's' : ''} available! Check your rewards.`,
+                            'success',
+                            5000,
+                            undefined,
+                            { target: 'coupons' }
+                        );
+
+                    }
+
+                    // Price drops
+                    const priceDropsEnabled = prefs?.price_drops !== false;
+                    if (priceDropsEnabled) {
+                        const newPriceDrops = wishlist.filter(item =>
+                            (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) &&
+                            !prevPriceDropIds.current.has(item.id.toString())
+                        );
+                        if (newPriceDrops.length > 0) {
+                            const first = newPriceDrops[0];
+                            showNotificationRef.current(
+                                `${newPriceDrops.length} item${newPriceDrops.length > 1 ? 's' : ''} in your wishlist had a price drop!`,
+                                'success',
+                                6000,
+                                newPriceDrops.length > 1
+                                    ? undefined
+                                    : (first?.id ? () => onDeepLink?.('product', first.id.toString()) : undefined),
+                                newPriceDrops.length > 1
+                                    ? { target: 'wishlist' }
+                                    : (first?.id ? { target: 'product', id: first.id.toString() } : undefined)
+                            );
+                            newPriceDrops.forEach(item => prevPriceDropIds.current.add(item.id.toString()));
+                        }
+                    }
+
+                    // Recommendations
+                    const recommendationsEnabled = prefs?.recommendations !== false;
+                    if (recommendationsEnabled) {
+                        const newRecommendations = deals.filter(deal =>
+                            (deal.personalization_score && deal.personalization_score >= 0.7) &&
+                            !prevRecommendedIds.current.has(deal.id)
+                        );
+                        if (newRecommendations.length > 0) {
+                            const first = newRecommendations[0];
+                            showNotificationRef.current(
+                                `New personalized deals found for you!`,
+                                'success',
+                                6000,
+                                undefined,
+                                { target: 'deals' }
+                            );
+
+                            newRecommendations.forEach(deal => prevRecommendedIds.current.add(deal.id));
+                        }
+                    }
+                } else {
+                    // Initial load: populate refs
+                    wishlist.forEach(item => {
+                        if (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) {
+                            prevPriceDropIds.current.add(item.id.toString());
+                        }
+                    });
+                    deals.forEach(deal => {
+                        if (deal.personalization_score && deal.personalization_score >= 0.7) {
+                            prevRecommendedIds.current.add(deal.id);
+                        }
+                    });
+                    hasInitialLoaded.current = true;
+                }
+
+                prevCouponsCount.current = activeCoupons.length;
+                onDataUpdateRef.current(activeCoupons, []); // Orders updated separately
+            } catch (err) {
+                console.error('Error loading low frequency data:', err);
             }
         };
 
         if (user?.id) {
-            loadData();
-            // Poll every 120 seconds for updates
-            interval = setInterval(loadData, 120000);
+            loadHighFrequencyData();
+            loadLowFrequencyData();
+
+            // Poll high frequency every 30 seconds
+            highFreqInterval = setInterval(loadHighFrequencyData, 30000);
+            // Poll low frequency every 5 minutes
+            lowFreqInterval = setInterval(loadLowFrequencyData, 300000);
         }
 
         return () => {
-            if (interval) clearInterval(interval);
+            if (highFreqInterval) clearInterval(highFreqInterval);
+            if (lowFreqInterval) clearInterval(lowFreqInterval);
         };
     }, [user?.id]);
 
@@ -289,14 +324,31 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
 
                     const isReviewPrompt = payload.new.notification_type === 'review_prompt';
                     const orderId = payload.new.metadata?.order_id || payload.new.order_id;
+                    const productId = payload.new.metadata?.product_id || payload.new.product_id;
+                    const conversationId = payload.new.metadata?.conversation_id || payload.new.conversation_id;
+
+                    const onClick = isReviewPrompt && orderId
+                        ? () => onReviewPrompt?.(orderId)
+                        : (productId
+                            ? () => onDeepLink?.('product', productId)
+                            : (conversationId
+                                ? () => onDeepLink?.('chat', conversationId)
+                                : (orderId ? () => onDeepLink?.('order', orderId) : undefined)));
+
+                    const action = isReviewPrompt && orderId
+                        ? { target: 'order' as const, id: orderId }
+                        : (productId
+                            ? { target: 'product' as const, id: String(productId) }
+                            : (conversationId
+                                ? { target: 'chat' as const, id: String(conversationId) }
+                                : (orderId ? { target: 'order' as const, id: String(orderId) } : undefined)));
 
                     showNotificationRef.current(
                         payload.new.message_body || payload.new.message,
                         isReviewPrompt ? 'success' : ((payload.new.type || 'info') as any),
                         isReviewPrompt ? 15000 : 5000,
-                        isReviewPrompt && orderId
-                            ? () => onReviewPrompt?.(orderId)
-                            : (orderId ? () => onDeepLink?.('order', orderId) : undefined)
+                        onClick,
+                        action
                     );
 
                     // Mark as sent in the queue (optional, but good for tracking)

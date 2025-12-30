@@ -66,7 +66,23 @@ self.addEventListener('push', (event: PushEvent) => {
 
   const title = data.title || 'JuaExpress';
   const body = data.body || data.message || 'You have an update.';
-  const url = data.url || '/';
+  const buildUrlFromData = (payload: any) => {
+    const params = new URLSearchParams();
+    const productId = payload.product_id || payload.productId || payload?.metadata?.product_id;
+    const orderId = payload.order_id || payload.orderId || payload?.metadata?.order_id;
+    const vendorId = payload.vendorId || payload.vendor_id || payload?.metadata?.vendorId;
+    const view = payload.view || payload?.metadata?.view;
+
+    if (typeof view === 'string' && view.length > 0) params.set('view', view);
+    if (productId) params.set('product_id', String(productId));
+    if (orderId) params.set('order_id', String(orderId));
+    if (vendorId) params.set('vendorId', String(vendorId));
+
+    const query = params.toString();
+    return query ? `/?${query}` : '/';
+  };
+
+  const url = data.url || buildUrlFromData(data);
 
   event.waitUntil(
     self.registration.showNotification(title, {

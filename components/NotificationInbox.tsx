@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useNotifications } from './NotificationContext';
+import { useNotifications, dispatchNotificationAction, Notification } from './NotificationContext';
 
 interface NotificationInboxProps {
     onClose?: () => void;
@@ -41,6 +41,48 @@ const NotificationInbox: React.FC<NotificationInboxProps> = ({ onClose, compact 
         return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     };
 
+    // Fallback: Infer action from notification message for legacy notifications
+    const inferActionFromMessage = (message: string): { target: string; id?: string } | null => {
+        const lowerMessage = message.toLowerCase();
+
+        // Seller notifications
+        if (lowerMessage.includes('new order') || lowerMessage.includes('new orders')) {
+            return { target: 'seller-orders' };
+        }
+        if (lowerMessage.includes('low on stock') || lowerMessage.includes('inventory')) {
+            return { target: 'inventory' };
+        }
+        if (lowerMessage.includes('funds') || lowerMessage.includes('withdrawal') || lowerMessage.includes('payout')) {
+            return { target: 'finances' };
+        }
+        if (lowerMessage.includes('order') && lowerMessage.includes('paid')) {
+            return { target: 'seller-orders' };
+        }
+        if (lowerMessage.includes('return request')) {
+            return { target: 'seller-orders' };
+        }
+
+        // Buyer notifications
+        if (lowerMessage.includes('offer') || lowerMessage.includes('coupon') || lowerMessage.includes('reward')) {
+            return { target: 'coupons' };
+        }
+        if (lowerMessage.includes('personalized deal') || lowerMessage.includes('items you might love')) {
+            return { target: 'deals' };
+        }
+        if (lowerMessage.includes('wishlist') || lowerMessage.includes('price drop')) {
+            return { target: 'wishlist' };
+        }
+        if (lowerMessage.includes('message') || lowerMessage.includes('unread')) {
+            return { target: 'chat', id: 'inbox' };
+        }
+        if (lowerMessage.includes('order') && (lowerMessage.includes('shipped') || lowerMessage.includes('status') || lowerMessage.includes('parcel'))) {
+            return { target: 'order' };
+        }
+
+        return null;
+    };
+
+
     return (
         <div className={`flex flex-col h-full bg-white dark:bg-gray-900 ${compact ? '' : 'rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-white/50 dark:bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
@@ -79,10 +121,33 @@ const NotificationInbox: React.FC<NotificationInboxProps> = ({ onClose, compact 
                     </div>
                 ) : (
                     <div className="space-y-1">
-                        {history.map((item: any) => (
+                        {history.map((item: Notification) => (
                             <div
                                 key={item.id}
                                 className="group flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all cursor-pointer border border-transparent hover:border-gray-100 dark:hover:border-gray-700"
+                                onClick={() => {
+                                    console.log('[NotificationInbox] Click on item:', item.id, item.message);
+
+                                    // Get action - either from item or inferred from message
+                                    const action = item.action || inferActionFromMessage(item.message);
+                                    console.log('[NotificationInbox] action:', action, '(original:', item.action, ')');
+
+                                    if (action) {
+                                        console.log('[NotificationInbox] Dispatching action:', action);
+                                        dispatchNotificationAction(action as any);
+                                    } else if (typeof item.onClick === 'function') {
+                                        console.log('[NotificationInbox] Calling onClick');
+                                        item.onClick();
+                                    } else {
+                                        console.warn('[NotificationInbox] Could not determine action for notification:', item.id);
+                                    }
+
+                                    if (onClose) {
+                                        onClose();
+                                    }
+                                }}
+
+
                             >
                                 <div className={`mt-0.5 p-2 rounded-lg shrink-0 ${getColorClass(item.type)}`}>
                                     <span className="material-icons text-base">{getIcon(item.type)}</span>
@@ -93,7 +158,7 @@ const NotificationInbox: React.FC<NotificationInboxProps> = ({ onClose, compact 
                                     </p>
                                     <p className="text-[10px] font-medium text-gray-400 mt-1 flex items-center gap-1">
                                         <span className="material-icons text-[10px]">schedule</span>
-                                        {formatTimestamp(item.timestamp)}
+                                        {formatTimestamp(item.timestamp || new Date().toISOString())}
                                     </p>
                                 </div>
                             </div>

@@ -4,18 +4,27 @@ import { playNotificationSound } from '../lib/sounds';
 
 export type NotificationType = 'success' | 'info' | 'warning' | 'error';
 
+export type NotificationActionTarget = 'product' | 'order' | 'chat' | 'wishlist' | 'coupons' | 'inventory' | 'finances' | 'deals' | 'seller-orders';
+
+export interface NotificationAction {
+    target: NotificationActionTarget;
+    id?: string;
+}
+
 export interface Notification {
     id: string;
     message: string;
     type: NotificationType;
     duration?: number;
     onClick?: () => void;
+    action?: NotificationAction;
+    timestamp?: string;
 }
 
 interface NotificationContextType {
     notifications: Notification[];
     history: Notification[];
-    showNotification: (message: string, type: NotificationType, duration?: number, onClick?: () => void) => void;
+    showNotification: (message: string, type: NotificationType, duration?: number, onClick?: () => void, action?: NotificationAction) => void;
     dismissNotification: (id: string) => void;
     markAllAsRead: () => void;
     clearHistory: () => void;
@@ -38,10 +47,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         setNotifications((prev) => prev.filter((n) => n.id !== id));
     }, []);
 
-    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void) => {
+    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void, action?: NotificationAction) => {
         const id = Math.random().toString(36).substring(2, 9);
         const timestamp = new Date().toISOString();
-        const newNotification: Notification & { timestamp: string } = { id, message, type, duration, timestamp, onClick };
+        const newNotification: Notification = { id, message, type, duration, timestamp, onClick, action };
 
         setNotifications((prev) => [...prev, newNotification]);
         setHistory((prev) => {
@@ -74,6 +83,13 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
             {children}
         </NotificationContext.Provider>
     );
+};
+
+export const dispatchNotificationAction = (action: NotificationAction) => {
+    console.log('[dispatchNotificationAction] Dispatching:', action);
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('juax:notification-action', { detail: action }));
+    console.log('[dispatchNotificationAction] Event dispatched successfully');
 };
 
 export const useNotifications = () => {

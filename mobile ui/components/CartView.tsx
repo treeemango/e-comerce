@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
-import { Product } from '../../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Product, RelatedProduct } from '../../types';
 import { ProductCard } from './ProductCard';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
+import { fetchRelatedProducts } from '@/lib/api';
 
 interface CartItem {
     product: Product;
@@ -24,10 +25,49 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
     const [promoResult, setPromoResult] = React.useState<PromotionsResult | null>(null);
     const [selectedItems, setSelectedItems] = React.useState<Set<string | number | undefined>>(new Set());
     const [activeRecTab, setActiveRecTab] = React.useState<string>('Recommended');
+    const [curatedProducts, setCuratedProducts] = useState<RelatedProduct[]>([]);
+    const [curatedLoading, setCuratedLoading] = useState(false);
 
     // Initialize all items as selected
     React.useEffect(() => {
         setSelectedItems(new Set(cartItems.map(item => item.product.id)));
+    }, [cartItems]);
+
+    // Load AI-curated products based on cart items
+    useEffect(() => {
+        const loadCuratedProducts = async () => {
+            if (cartItems.length > 0) {
+                setCuratedLoading(true);
+                try {
+                    const allRelated: RelatedProduct[] = [];
+                    const seenIds = new Set<string>();
+
+                    cartItems.forEach(ci => seenIds.add(String(ci.product.id)));
+
+                    const itemsToCheck = cartItems.slice(0, 3);
+
+                    for (const item of itemsToCheck) {
+                        const related = await fetchRelatedProducts(String(item.product.id));
+                        const combined = [...related.same, ...related.similar];
+
+                        for (const product of combined) {
+                            const productId = String(product.id);
+                            if (!seenIds.has(productId)) {
+                                seenIds.add(productId);
+                                allRelated.push(product);
+                            }
+                        }
+                    }
+
+                    setCuratedProducts(allRelated.slice(0, 8));
+                } catch (error) {
+                    console.error('Error loading curated products:', error);
+                } finally {
+                    setCuratedLoading(false);
+                }
+            }
+        };
+        loadCuratedProducts();
     }, [cartItems]);
 
     React.useEffect(() => {
@@ -303,16 +343,34 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                 )}
             </div>
 
-            {/* Curated Recommendations */}
-            {recommendations.length > 0 && (
-                <div className="mt-8 px-4 pb-12">
-                    <div className="flex items-center gap-3 mb-6 px-1">
-                        <div className="h-[1px] flex-grow bg-gradient-to-r from-transparent to-gray-200 dark:to-gray-800"></div>
-                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400">Curated for You</span>
-                        <div className="h-[1px] flex-grow bg-gradient-to-l from-transparent to-gray-200 dark:to-gray-800"></div>
-                    </div>
+            {/* Curated for You - AI-powered */}
+            <div className="mt-8 px-4 pb-12">
+                <div className="flex items-center gap-3 mb-6 px-1">
+                    <div className="h-[1px] flex-grow bg-gradient-to-r from-transparent to-gray-200 dark:to-gray-800"></div>
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400">Curated for You</span>
+                    <div className="h-[1px] flex-grow bg-gradient-to-l from-transparent to-gray-200 dark:to-gray-800"></div>
+                </div>
+
+                {curatedLoading ? (
                     <div className="grid grid-cols-2 gap-3">
-                        {filteredRecommendations.slice(0, 4).map(product => (
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse aspect-[3/4]"></div>
+                        ))}
+                    </div>
+                ) : curatedProducts.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                        {curatedProducts.slice(0, 6).map(product => (
+                            <ProductCard
+                                key={product.id}
+                                product={product as Product}
+                                onProductClick={onProductClick}
+                                onVisualSearch={onVisualSearch}
+                            />
+                        ))}
+                    </div>
+                ) : recommendations.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                        {recommendations.slice(0, 4).map(product => (
                             <ProductCard
                                 key={product.id}
                                 product={product}
@@ -321,8 +379,12 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                             />
                         ))}
                     </div>
-                </div>
-            )}
+                ) : (
+                    <div className="text-center py-4 text-xs text-gray-400">
+                        Check back later for recommendations
+                    </div>
+                )}
+            </div>
 
             {/* Detached Floating Checkout Action */}
             {totalItems > 0 && (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Product, User } from '../types';
-import { getWishlist, removeFromWishlist, WishlistProduct } from '../lib/api';
+import { Product, User, RelatedProduct } from '../types';
+import { getWishlist, removeFromWishlist, WishlistProduct, fetchRelatedProducts } from '../lib/api';
 import ProductCard from './ProductCard';
 
 interface WishlistViewProps {
@@ -19,10 +19,49 @@ const WishlistView: React.FC<WishlistViewProps> = ({
     const [wishlistItems, setWishlistItems] = useState<WishlistProduct[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+    const [inspiredProducts, setInspiredProducts] = useState<RelatedProduct[]>([]);
+    const [inspiredLoading, setInspiredLoading] = useState(false);
 
     useEffect(() => {
         loadWishlist();
     }, [user.id]);
+
+    // Load inspired products based on wishlist items
+    useEffect(() => {
+        const loadInspiredProducts = async () => {
+            if (wishlistItems.length > 0) {
+                setInspiredLoading(true);
+                try {
+                    const allRelated: RelatedProduct[] = [];
+                    const seenIds = new Set<string>();
+
+                    wishlistItems.forEach(wi => seenIds.add(String(wi.id)));
+
+                    const itemsToCheck = wishlistItems.slice(0, 5);
+
+                    for (const item of itemsToCheck) {
+                        const related = await fetchRelatedProducts(String(item.id));
+                        const combined = [...related.same, ...related.similar];
+
+                        for (const product of combined) {
+                            const productId = String(product.id);
+                            if (!seenIds.has(productId)) {
+                                seenIds.add(productId);
+                                allRelated.push(product);
+                            }
+                        }
+                    }
+
+                    setInspiredProducts(allRelated.slice(0, 12));
+                } catch (error) {
+                    console.error('Error loading inspired products:', error);
+                } finally {
+                    setInspiredLoading(false);
+                }
+            }
+        };
+        loadInspiredProducts();
+    }, [wishlistItems]);
 
     const loadWishlist = async () => {
         setIsLoading(true);
@@ -105,36 +144,70 @@ const WishlistView: React.FC<WishlistViewProps> = ({
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 mb-12">
-                    {wishlistItems.map((product) => (
-                        <div key={product.id} className="relative group">
-                            <ProductCard
-                                product={product}
-                                onProductClick={() => onProductClick(product)}
-                                showVendorMeta={false}
-                            />
-                            {/* Remove from wishlist button */}
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemove(product.id.toString());
-                                }}
-                                disabled={removingIds.has(product.id.toString())}
-                                className="absolute top-2 right-2 z-20 w-8 h-8 bg-white/95 dark:bg-slate-800/95 rounded-full shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 dark:hover:bg-red-900/40 hover:scale-110 active:scale-95"
-                                title="Remove from wishlist"
-                            >
-                                <span className={`material-icons text-red-500 text-lg ${removingIds.has(product.id.toString()) ? 'animate-pulse' : ''}`}>
-                                    close
-                                </span>
-                            </button>
-                            {/* Added date badge */}
-                            <div className="absolute top-2 left-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                <span className="bg-black/60 backdrop-blur-sm text-[8px] text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-bold shadow-sm">
-                                    Saved {new Date(product.added_at).toLocaleDateString()}
-                                </span>
+                <div className="space-y-10">
+                    {/* Wishlist Items Grid */}
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
+                        {wishlistItems.map((product) => (
+                            <div key={product.id} className="relative group">
+                                <ProductCard
+                                    product={product}
+                                    onProductClick={() => onProductClick(product)}
+                                    showVendorMeta={false}
+                                />
+                                {/* Remove from wishlist button */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemove(product.id.toString());
+                                    }}
+                                    disabled={removingIds.has(product.id.toString())}
+                                    className="absolute top-2 right-2 z-20 w-8 h-8 bg-white/95 dark:bg-slate-800/95 rounded-full shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 dark:hover:bg-red-900/40 hover:scale-110 active:scale-95"
+                                    title="Remove from wishlist"
+                                >
+                                    <span className={`material-icons text-red-500 text-lg ${removingIds.has(product.id.toString()) ? 'animate-pulse' : ''}`}>
+                                        close
+                                    </span>
+                                </button>
+                                {/* Added date badge */}
+                                <div className="absolute top-2 left-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                    <span className="bg-black/60 backdrop-blur-sm text-[8px] text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-bold shadow-sm">
+                                        Saved {new Date(product.added_at).toLocaleDateString()}
+                                    </span>
+                                </div>
                             </div>
+                        ))}
+                    </div>
+
+                    {/* You might also like section */}
+                    <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-3 mb-6">
+                            <span className="material-icons text-primary text-2xl">favorite</span>
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white">You might also like</h2>
                         </div>
-                    ))}
+
+                        {inspiredLoading ? (
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
+                                {[1, 2, 3, 4, 5, 6].map((i) => (
+                                    <div key={i} className="bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse aspect-[3/4]"></div>
+                                ))}
+                            </div>
+                        ) : inspiredProducts.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
+                                {inspiredProducts.map((product, idx) => (
+                                    <ProductCard
+                                        key={product.id ?? idx}
+                                        product={product as Product}
+                                        onProductClick={onProductClick}
+                                        onAddToCart={onAddToCart}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                                Check back later for more recommendations
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

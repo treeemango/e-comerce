@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { fetchPendingProducts, approveProduct, rejectProduct, hasResourcePermission, saveProductImageEmbedding } from '@/lib/api';
+import { createConversation, fetchPendingProducts, approveProduct, rejectProduct, hasResourcePermission, saveProductImageEmbedding, ensureSupportConversation, sendMessage, findConversationId } from '@/lib/api';
 import { EmbeddingService } from '@/lib/embedding';
 import { getCurrencySymbol } from '@/lib/currency';
 import type { PendingProduct, AdminPermissions } from '@/types';
@@ -8,6 +8,8 @@ interface ProductApprovalCardProps {
     product: PendingProduct;
     onApprove: (productId: string) => void;
     onReject: (productId: string, reason: string) => void;
+    onMessageSeller: (product: PendingProduct) => void;
+    canMessageSeller: boolean;
     canApprove: boolean;
     canReject: boolean;
     isProcessing: boolean;
@@ -18,6 +20,8 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
     product,
     onApprove,
     onReject,
+    onMessageSeller,
+    canMessageSeller,
     canApprove,
     canReject,
     isProcessing,
@@ -94,6 +98,17 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                             <div className="text-sm text-slate-600 flex items-center gap-2">
                                 <i className="fas fa-store text-slate-400" />
                                 <span className="font-medium text-slate-800">{product.seller_name}</span>
+                                {canMessageSeller && (
+                                    <button
+                                        onClick={() => onMessageSeller(product)}
+                                        className="ml-1 inline-flex items-center justify-center h-9 w-9 rounded-full border border-slate-300 bg-white/90 text-slate-700 shadow-sm hover:bg-slate-100 hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                                        title="Message seller"
+                                        aria-label={`Message ${product.seller_name}`}
+                                        type="button"
+                                    >
+                                        <i className="fas fa-comment-dots text-sm" />
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <button
@@ -246,7 +261,7 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                             </div>
                             <button
                                 onClick={() => setShowDetails(false)}
-                                className="h-11 w-11 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-all shadow-sm"
+                                className="h-11 w-11 rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                             >
                                 <i className="fas fa-times" />
                             </button>
@@ -329,6 +344,20 @@ const ProductApprovalCard: React.FC<ProductApprovalCardProps> = ({
                                             Quick actions
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
+                                            {canMessageSeller && (
+                                                <button
+                                                    onClick={() => {
+                                                        setShowDetails(false);
+                                                        onMessageSeller(product);
+                                                    }}
+                                                    disabled={isProcessing}
+                                                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-slate-200 text-slate-800 font-semibold hover:bg-slate-50 disabled:opacity-50"
+                                                    type="button"
+                                                >
+                                                    <i className="fas fa-comment-dots" />
+                                                    Message seller
+                                                </button>
+                                            )}
                                             {canReject && (
                                                 <button
                                                     onClick={() => {
@@ -553,6 +582,11 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
     const [embeddingsCompleted, setEmbeddingsCompleted] = useState<Set<string>>(new Set());
     const modelTimerRef = useRef<number | null>(null);
 
+    const [messageModalOpen, setMessageModalOpen] = useState(false);
+    const [messageTarget, setMessageTarget] = useState<PendingProduct | null>(null);
+    const [messageText, setMessageText] = useState('');
+    const [messageSending, setMessageSending] = useState(false);
+
     useEffect(() => {
         const bootstrap = async () => {
             await startModelWarmup();
@@ -753,9 +787,28 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                 setError('Admin ID not found');
                 return;
             }
+
+            const product = products.find(p => p.id === productId);
             const success = await rejectProduct(productId, adminId, reason);
 
             if (success) {
+                // Automate rejection message
+                if (product && product.seller_id) {
+                    try {
+                        const conversationId = await ensureSupportConversation(product.seller_id);
+                        if (conversationId) {
+                            await sendMessage(
+                                conversationId,
+                                adminId,
+                                product.seller_id,
+                                `Your product "${product.title}" has been rejected.\n\nReason: ${reason}`
+                            );
+                        }
+                    } catch (msgErr) {
+                        console.error('Failed to send rejection message:', msgErr);
+                    }
+                }
+
                 setProducts(products.filter(p => p.id !== productId));
                 // Show success notification
             } else {
@@ -766,6 +819,66 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
             setError('Failed to reject product');
         } finally {
             setProcessingId(null);
+        }
+    };
+
+    const openMessageSeller = (product: PendingProduct) => {
+        setMessageTarget(product);
+        setMessageText('');
+        setMessageModalOpen(true);
+    };
+
+    const handleSendQuickMessage = async () => {
+        if (!messageTarget) return;
+        const adminId = permissions?.user_id;
+        const sellerId = messageTarget.seller_id;
+        const content = messageText.trim();
+
+        if (!adminId) {
+            setError('Admin ID not found');
+            return;
+        }
+        if (!sellerId) {
+            setError('Seller ID not found');
+            return;
+        }
+        if (!content) return;
+
+        setMessageSending(true);
+        try {
+            const existingConversationId = await findConversationId({
+                sellerId,
+                buyerId: adminId,
+                productId: messageTarget.id
+            });
+
+            let ok = false;
+            if (existingConversationId) {
+                ok = await sendMessage(existingConversationId, adminId, sellerId, content, {
+                    context: 'product_approval',
+                    product_id: messageTarget.id
+                });
+            } else {
+                const conversationId = await createConversation(
+                    sellerId,
+                    adminId,
+                    messageTarget.id,
+                    'Product Submission',
+                    content
+                );
+                ok = Boolean(conversationId);
+            }
+
+            if (!ok) throw new Error('Failed to send message');
+
+            setMessageModalOpen(false);
+            setMessageTarget(null);
+            setMessageText('');
+        } catch (err) {
+            console.error('Error sending quick message:', err);
+            alert('Failed to send message. Please try again.');
+        } finally {
+            setMessageSending(false);
         }
     };
 
@@ -905,6 +1018,7 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                         const isSuperAdmin = permissions?.permission_level === 'super_admin';
                         const canApprove = isSuperAdmin || hasResourcePermission(permissions?.permissions, 'products', 'approve');
                         const canReject = isSuperAdmin || hasResourcePermission(permissions?.permissions, 'products', 'reject');
+                        const canMessageSeller = Boolean(permissions?.user_id);
 
                         return (
                             <ProductApprovalCard
@@ -912,6 +1026,8 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                                 product={product}
                                 onApprove={handleApprove}
                                 onReject={handleReject}
+                                onMessageSeller={openMessageSeller}
+                                canMessageSeller={canMessageSeller}
                                 canApprove={canApprove}
                                 canReject={canReject}
                                 isProcessing={processingId === product.id}
@@ -919,6 +1035,82 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                             />
                         );
                     })}
+                </div>
+            )}
+
+            {/* Quick Message Modal */}
+            {messageModalOpen && messageTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-2xl rounded-3xl bg-gradient-to-br from-white to-slate-50 border border-slate-200 shadow-2xl overflow-hidden">
+                        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 bg-white/80 backdrop-blur">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.25em] text-indigo-600 font-bold">Quick Message</p>
+                                <h3 className="text-xl font-bold text-slate-900 mt-1">Message {messageTarget.seller_name}</h3>
+                                <p className="text-sm text-slate-600 mt-1 line-clamp-2">Regarding: <span className="font-semibold text-slate-800">{messageTarget.title}</span></p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (messageSending) return;
+                                    setMessageModalOpen(false);
+                                    setMessageTarget(null);
+                                    setMessageText('');
+                                }}
+                                className="h-11 w-11 rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                type="button"
+                                aria-label="Close"
+                            >
+                                <i className="fas fa-times" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <textarea
+                                value={messageText}
+                                onChange={(e) => setMessageText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (!messageSending) handleSendQuickMessage();
+                                    }
+                                }}
+                                className="w-full min-h-[140px] rounded-2xl border border-slate-200 bg-white p-4 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Write a message to the seller…"
+                            />
+
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-slate-500">
+                                    <span className="font-semibold">Tip:</span> Press <span className="font-mono">Ctrl</span>+<span className="font-mono">Enter</span> to send
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            if (messageSending) return;
+                                            setMessageModalOpen(false);
+                                            setMessageTarget(null);
+                                            setMessageText('');
+                                        }}
+                                        className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50"
+                                        type="button"
+                                        disabled={messageSending}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSendQuickMessage}
+                                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold shadow-lg shadow-indigo-600/20 hover:shadow-xl disabled:opacity-60"
+                                        type="button"
+                                        disabled={messageSending || !messageText.trim()}
+                                    >
+                                        {messageSending ? (
+                                            <span className="inline-flex items-center gap-2"><i className="fas fa-spinner fa-spin" /> Sending…</span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-2"><i className="fas fa-paper-plane" /> Send</span>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

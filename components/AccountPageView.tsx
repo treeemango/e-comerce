@@ -88,9 +88,30 @@ const AccountPageView: React.FC<AccountPageViewProps> = ({ pageTitle, onProductC
          setRecentViews(data);
 
          if (data.length > 0) {
-            const related = await fetchRelatedProducts(String(data[0].id));
-            const combined = [...related.same, ...related.similar].slice(0, 8);
-            setInspiredProducts(combined);
+            // Fetch related products for ALL browsing history items (up to 5)
+            const allRelated: RelatedProduct[] = [];
+            const seenIds = new Set<string>();
+
+            // Add viewed product IDs to exclude them from results
+            data.forEach(rv => seenIds.add(String(rv.id)));
+
+            // Fetch similar products for each viewed item
+            const itemsToCheck = data.slice(0, 5);
+
+            for (const viewedProduct of itemsToCheck) {
+               const related = await fetchRelatedProducts(String(viewedProduct.id));
+               const combined = [...related.same, ...related.similar];
+
+               for (const product of combined) {
+                  const productId = String(product.id);
+                  if (!seenIds.has(productId)) {
+                     seenIds.add(productId);
+                     allRelated.push(product);
+                  }
+               }
+            }
+
+            setInspiredProducts(allRelated.slice(0, 12));
          } else {
             setInspiredProducts([]);
          }
