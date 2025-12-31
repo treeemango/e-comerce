@@ -1340,110 +1340,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                             </div>
                         </div>
 
-                        <div className="space-y-1">
-                            <div className="flex justify-between items-center mb-1">
-                                <label className="text-xs font-bold uppercase text-gray-500">Tags</label>
-                                <button
-                                    onClick={handleGenerateTags}
-                                    disabled={isGeneratingTags || !title.trim()}
-                                    className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
-                                >
-                                    <span className={`material-icons text-[12px] ${isGeneratingTags ? 'animate-spin' : ''}`}>
-                                        {isGeneratingTags ? 'sync' : 'auto_awesome'}
-                                    </span>
-                                    {isGeneratingTags ? 'GENERATING...' : 'AI GENERATE TAGS'}
-                                </button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {tags.map(t => (
-                                    <span key={t} className="bg-gray-100 px-2 py-1 rounded text-xs flex items-center gap-1">
-                                        {t} <button onClick={() => setTags(prev => prev.filter(x => x !== t))}>×</button>
-                                    </span>
-                                ))}
-                            </div>
-                            <input
-                                value={tagInput}
-                                onChange={e => setTagInput(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        if (tagInput.trim()) { setTags(prev => [...prev, tagInput.trim()]); setTagInput(''); }
-                                    }
-                                }}
-                                placeholder="Add keyword + Enter"
-                                className="w-full border p-3 rounded-lg text-sm"
-                            />
-                        </div>
 
-                        <div className="space-y-1">
-                            <div className="flex justify-between items-center mb-1">
-                                <label className="text-xs font-bold uppercase text-gray-500">Use Case (e.g. Hiking, Office)</label>
-                                <button
-                                    onClick={handleGenerateUseCaseTags}
-                                    disabled={isGeneratingUseCaseTags || !title.trim()}
-                                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
-                                >
-                                    <span className={`material-icons text-[12px] ${isGeneratingUseCaseTags ? 'animate-spin' : ''}`}>
-                                        {isGeneratingUseCaseTags ? 'sync' : 'auto_awesome'}
-                                    </span>
-                                    {isGeneratingUseCaseTags ? 'GENERATING...' : 'AI GENERATE'}
-                                </button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {useCaseTags.map(t => (
-                                    <span key={t} className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1">
-                                        {t} <button onClick={() => setUseCaseTags(prev => prev.filter(x => x !== t))}>×</button>
-                                    </span>
-                                ))}
-                            </div>
-                            <input
-                                value={useCaseInput}
-                                onChange={e => setUseCaseInput(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        if (useCaseInput.trim()) { setUseCaseTags(prev => [...prev, useCaseInput.trim()]); setUseCaseInput(''); }
-                                    }
-                                }}
-                                placeholder="Add use case + Enter"
-                                className="w-full border p-3 rounded-lg text-sm"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="flex justify-between items-center mb-1">
-                                <label className="text-xs font-bold uppercase text-gray-500">Occasion (e.g. Wedding, Summer)</label>
-                                <button
-                                    onClick={handleGenerateOccasionTags}
-                                    disabled={isGeneratingOccasionTags || !title.trim()}
-                                    className="flex items-center gap-1 text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full"
-                                >
-                                    <span className={`material-icons text-[12px] ${isGeneratingOccasionTags ? 'animate-spin' : ''}`}>
-                                        {isGeneratingOccasionTags ? 'sync' : 'auto_awesome'}
-                                    </span>
-                                    {isGeneratingOccasionTags ? 'GENERATING...' : 'AI GENERATE'}
-                                </button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {occasionTags.map(t => (
-                                    <span key={t} className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs flex items-center gap-1">
-                                        {t} <button onClick={() => setOccasionTags(prev => prev.filter(x => x !== t))}>×</button>
-                                    </span>
-                                ))}
-                            </div>
-                            <input
-                                value={occasionInput}
-                                onChange={e => setOccasionInput(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        if (occasionInput.trim()) { setOccasionTags(prev => [...prev, occasionInput.trim()]); setOccasionInput(''); }
-                                    }
-                                }}
-                                placeholder="Add occasion + Enter"
-                                className="w-full border p-3 rounded-lg text-sm"
-                            />
-                        </div>
 
                         {/* Purchase Mode / Listing Type */}
                         <div className="pt-6 border-t border-gray-100">
@@ -2498,7 +2395,121 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     />
                                 </div>
                             </div>
+                        </div>
 
+                        {/* Discovery Tags Section */}
+                        <div className="pt-4 border-t border-gray-100">
+                            <h3 className="text-sm font-bold uppercase text-gray-500 mb-4">Discovery Tags</h3>
+
+                            {/* Magic Tags */}
+                            <div className="space-y-1 mb-4">
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-bold uppercase text-gray-500">Tags</label>
+                                    <button
+                                        onClick={handleGenerateTags}
+                                        disabled={isGeneratingTags || !title.trim()}
+                                        className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
+                                    >
+                                        <span className={`material-icons text-[12px] ${isGeneratingTags ? 'animate-spin' : ''}`}>
+                                            {isGeneratingTags ? 'sync' : 'auto_awesome'}
+                                        </span>
+                                        {isGeneratingTags ? 'GENERATING...' : 'AI GENERATE'}
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {tags.map(t => (
+                                        <span key={t} className="bg-gray-100 px-2 py-1 rounded text-xs flex items-center gap-1">
+                                            {t} <button onClick={() => setTags(prev => prev.filter(x => x !== t))}>×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <input
+                                    value={tagInput}
+                                    onChange={e => setTagInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (tagInput.trim()) { setTags(prev => [...prev, tagInput.trim()]); setTagInput(''); }
+                                        }
+                                    }}
+                                    placeholder="Add keyword + Enter"
+                                    className="w-full border p-3 rounded-lg text-sm"
+                                />
+                            </div>
+
+                            {/* Use Case Tags */}
+                            <div className="space-y-1 mb-4">
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-bold uppercase text-gray-500">Use Case Tags</label>
+                                    <button
+                                        onClick={handleGenerateUseCaseTags}
+                                        disabled={isGeneratingUseCaseTags || !title.trim()}
+                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
+                                    >
+                                        <span className={`material-icons text-[12px] ${isGeneratingUseCaseTags ? 'animate-spin' : ''}`}>
+                                            {isGeneratingUseCaseTags ? 'sync' : 'auto_awesome'}
+                                        </span>
+                                        {isGeneratingUseCaseTags ? 'GENERATING...' : 'AI SUGGEST'}
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mb-1">e.g. Office, Hiking</p>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {useCaseTags.map(t => (
+                                        <span key={t} className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1">
+                                            {t} <button onClick={() => setUseCaseTags(prev => prev.filter(x => x !== t))}>×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <input
+                                    value={useCaseInput}
+                                    onChange={e => setUseCaseInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (useCaseInput.trim()) { setUseCaseTags(prev => [...prev, useCaseInput.trim()]); setUseCaseInput(''); }
+                                        }
+                                    }}
+                                    placeholder="Add use case + Enter"
+                                    className="w-full border p-3 rounded-lg text-sm"
+                                />
+                            </div>
+
+                            {/* Occasion Tags */}
+                            <div className="space-y-1">
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-bold uppercase text-gray-500">Occasion Tags</label>
+                                    <button
+                                        onClick={handleGenerateOccasionTags}
+                                        disabled={isGeneratingOccasionTags || !title.trim()}
+                                        className="flex items-center gap-1 text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full"
+                                    >
+                                        <span className={`material-icons text-[12px] ${isGeneratingOccasionTags ? 'animate-spin' : ''}`}>
+                                            {isGeneratingOccasionTags ? 'sync' : 'auto_awesome'}
+                                        </span>
+                                        {isGeneratingOccasionTags ? 'GENERATING...' : 'AI SUGGEST'}
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mb-1">e.g. Wedding, Birthday</p>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {occasionTags.map(t => (
+                                        <span key={t} className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs flex items-center gap-1">
+                                            {t} <button onClick={() => setOccasionTags(prev => prev.filter(x => x !== t))}>×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <input
+                                    value={occasionInput}
+                                    onChange={e => setOccasionInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (occasionInput.trim()) { setOccasionTags(prev => [...prev, occasionInput.trim()]); setOccasionInput(''); }
+                                        }
+                                    }}
+                                    placeholder="Add occasion + Enter"
+                                    className="w-full border p-3 rounded-lg text-sm"
+                                />
+                            </div>
                         </div>
                     </div>
                 )}

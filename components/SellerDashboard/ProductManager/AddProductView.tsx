@@ -1521,315 +1521,81 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                 </div>
                             </div>
 
-                            {/* Sections removed (Promotions & Shipping) - moved to Pricing & Delivery step */}
-
+                            {/* Product Type Selection - Moved from Step 3 */}
                             <div className="pt-6 border-t border-gray-100 animate-fade-in">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-sm font-semibold text-gray-900">SEO Settings (Optional)</h3>
-                                    <button
-                                        type="button"
-                                        onClick={handleGenerateSEO}
-                                        disabled={isGeneratingSEO || !title.trim()}
-                                        className="flex items-center gap-1.5 text-xs font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-full transition-colors"
-                                    >
-                                        <span className={`material-icons text-sm ${isGeneratingSEO ? 'animate-spin' : ''}`}>
-                                            {isGeneratingSEO ? 'refresh' : 'auto_awesome'}
-                                        </span>
-                                        {isGeneratingSEO ? 'Generating...' : 'AI Generate SEO'}
-                                    </button>
-                                </div>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">SEO Title</label>
-                                        <input
-                                            type="text"
-                                            value={seoTitle}
-                                            onChange={(e) => setSeoTitle(e.target.value)}
-                                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                            placeholder={title || "Product Title"}
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">Leave blank to use product title.</p>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">URL Slug</label>
-                                            <input
-                                                type="text"
-                                                value={slug}
-                                                onChange={(e) => setSlug(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                placeholder="e.g. mens-slim-fit-jeans"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
-                                            <input
-                                                type="text"
-                                                value={metaDescription}
-                                                onChange={(e) => setMetaDescription(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                placeholder="Brief description for search results"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 gap-6">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">SEO Keywords</label>
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                                    <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                        <span className="material-icons text-lg">inventory_2</span>
+                                        Product Type
+                                    </h4>
+                                    <p className="text-sm text-blue-700 mb-4">Choose how you'll sell this product. You can change this later if needed.</p>
 
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={seoKeywordInput}
-                                                    onChange={(e) => setSeoKeywordInput(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            addToken(seoKeywordInput, setSeoKeywords, () => setSeoKeywordInput(''));
-                                                        }
-                                                    }}
-                                                    className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                    placeholder="Add keyword and press Enter"
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setHasVariants(!hasVariants)}
+                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${hasVariants ? 'bg-orange-600' : 'bg-gray-200'}`}
+                                            >
+                                                <span
+                                                    className={`${hasVariants ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
                                                 />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => addToken(seoKeywordInput, setSeoKeywords, () => setSeoKeywordInput(''))}
-                                                    className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
-                                                >
-                                                    Add
-                                                </button>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                {seoKeywords.map(keyword => (
-                                                    <span key={keyword} className="bg-orange-100 text-orange-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                                                        {keyword}
-                                                        <button type="button" onClick={() => removeToken(keyword, setSeoKeywords)} className="hover:text-red-500">×</button>
-                                                    </span>
-                                                ))}
-                                            </div>
+                                            </button>
+                                            <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
                                         </div>
+                                    </div>
+
+                                    <div className="mt-3 p-3 bg-white rounded border">
+                                        {!hasVariants ? (
+                                            <div className="text-sm text-gray-600">
+                                                <strong>Simple Product:</strong> Single price and stock level. Best for products without variations (e.g., a single book, toy, or accessory).
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-gray-600">
+                                                <strong>Multiple Variants:</strong> Different prices and stock for variations (e.g., different sizes, colors). Each combination becomes a separate purchasable item.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="pt-6 border-t border-gray-100 animate-fade-in">
-                                <h3 className="text-sm font-semibold text-gray-900 mb-4">Discovery Tags</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-1">
-                                            <label className="block text-sm font-medium text-gray-700">Tags</label>
-                                            <button
-                                                type="button"
-                                                onClick={handleGenerateTags}
-                                                disabled={isGeneratingTags || !title.trim()}
-                                                className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-full transition-colors"
-                                            >
-                                                <span className={`material-icons text-sm ${isGeneratingTags ? 'animate-spin' : ''}`}>
-                                                    {isGeneratingTags ? 'refresh' : 'auto_awesome'}
-                                                </span>
-                                                {isGeneratingTags ? 'Generating...' : 'AI Generate Tags'}
-                                            </button>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={tagInput}
-                                                onChange={(e) => setTagInput(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        addToken(tagInput, setTags, () => setTagInput(''));
-                                                    }
-                                                }}
-                                                className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                placeholder="Add tag and press Enter"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => addToken(tagInput, setTags, () => setTagInput(''))}
-                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
-                                            >
-                                                Add
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {tags.map(tag => (
-                                                <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                                                    {tag}
-                                                    <button type="button" onClick={() => removeToken(tag, setTags)} className="hover:text-red-500">×</button>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center justify-between mb-1">
-                                            <label className="block text-sm font-medium text-gray-700">Use Case Tags</label>
-                                            <button
-                                                type="button"
-                                                onClick={handleGenerateUseCaseTags}
-                                                disabled={isGeneratingUseCaseTags || !title.trim()}
-                                                className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                                            >
-                                                <span className={`material-icons text-sm ${isGeneratingUseCaseTags ? 'animate-spin' : ''}`}>
-                                                    {isGeneratingUseCaseTags ? 'refresh' : 'auto_awesome'}
-                                                </span>
-                                                {isGeneratingUseCaseTags ? 'Generating...' : 'AI Suggest'}
-                                            </button>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={useCaseInput}
-                                                onChange={(e) => setUseCaseInput(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        addToken(useCaseInput, setUseCaseTags, () => setUseCaseInput(''));
-                                                    }
-                                                }}
-                                                className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                placeholder="e.g. Remote work, Travel"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => addToken(useCaseInput, setUseCaseTags, () => setUseCaseInput(''))}
-                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
-                                            >
-                                                Add
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {useCaseTags.map(tag => (
-                                                <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                                                    {tag}
-                                                    <button type="button" onClick={() => removeToken(tag, setUseCaseTags)} className="hover:text-red-500">×</button>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center justify-between mb-1">
-                                            <label className="block text-sm font-medium text-gray-700">Occasion Tags</label>
-                                            <button
-                                                type="button"
-                                                onClick={handleGenerateOccasionTags}
-                                                disabled={isGeneratingOccasionTags || !title.trim()}
-                                                className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                                            >
-                                                <span className={`material-icons text-sm ${isGeneratingOccasionTags ? 'animate-spin' : ''}`}>
-                                                    {isGeneratingOccasionTags ? 'refresh' : 'auto_awesome'}
-                                                </span>
-                                                {isGeneratingOccasionTags ? 'Generating...' : 'AI Suggest'}
-                                            </button>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={occasionInput}
-                                                onChange={(e) => setOccasionInput(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        addToken(occasionInput, setOccasionTags, () => setOccasionInput(''));
-                                                    }
-                                                }}
-                                                className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                placeholder="e.g. Birthday, Wedding"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => addToken(occasionInput, setOccasionTags, () => setOccasionInput(''))}
-                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
-                                            >
-                                                Add
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {occasionTags.map(tag => (
-                                                <span key={tag} className="bg-gray-100 text-gray-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                                                    {tag}
-                                                    <button type="button" onClick={() => removeToken(tag, setOccasionTags)} className="hover:text-red-500">×</button>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
+                            {/* Purchase Mode / Listing Type */}
+                            <div className="pt-8 border-t border-gray-100">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
+                                    <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
                                 </div>
-
-                                {/* Product Type Selection - Moved from Step 3 */}
-                                <div className="pt-6 border-t border-gray-100 animate-fade-in">
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                                        <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-                                            <span className="material-icons text-lg">inventory_2</span>
-                                            Product Type
-                                        </h4>
-                                        <p className="text-sm text-blue-700 mb-4">Choose how you'll sell this product. You can change this later if needed.</p>
-
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex items-center gap-3">
-                                                <span className={`text-sm font-medium ${!hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Simple Product</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setHasVariants(!hasVariants)}
-                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${hasVariants ? 'bg-orange-600' : 'bg-gray-200'}`}
-                                                >
-                                                    <span
-                                                        className={`${hasVariants ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
-                                                    />
-                                                </button>
-                                                <span className={`text-sm font-medium ${hasVariants ? 'text-orange-600' : 'text-gray-500'}`}>Multiple Variants</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-3 p-3 bg-white rounded border">
-                                            {!hasVariants ? (
-                                                <div className="text-sm text-gray-600">
-                                                    <strong>Simple Product:</strong> Single price and stock level. Best for products without variations (e.g., a single book, toy, or accessory).
-                                                </div>
-                                            ) : (
-                                                <div className="text-sm text-gray-600">
-                                                    <strong>Multiple Variants:</strong> Different prices and stock for variations (e.g., different sizes, colors). Each combination becomes a separate purchasable item.
-                                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {[
+                                        { id: 'direct_purchase', icon: 'shopping_cart', title: 'Add to Cart', desc: 'Standard checkout', color: 'orange' },
+                                        { id: 'inquiry', icon: 'chat', title: 'Inquiry Only', desc: 'Cars, Land, Services', color: 'blue' },
+                                        { id: 'reservation', icon: 'event_available', title: 'Reservation', desc: 'Book now, pay later', color: 'green' }
+                                    ].map((mode) => (
+                                        <button
+                                            key={mode.id}
+                                            type="button"
+                                            onClick={() => setListingType(mode.id as any)}
+                                            className={cn(
+                                                "relative flex flex-col p-4 rounded-xl border-2 transition-all text-left group overflow-hidden",
+                                                listingType === mode.id
+                                                    ? `border-${mode.color}-300 bg-${mode.color}-50/50 shadow-sm`
+                                                    : "border-gray-100 bg-white hover:border-gray-200"
                                             )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Purchase Mode / Listing Type */}
-                                <div className="pt-8 border-t border-gray-100">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Purchase Mode</h3>
-                                        <div className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black uppercase rounded tracking-tighter">Required</div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {[
-                                            { id: 'direct_purchase', icon: 'shopping_cart', title: 'Add to Cart', desc: 'Standard checkout', color: 'orange' },
-                                            { id: 'inquiry', icon: 'chat', title: 'Inquiry Only', desc: 'Cars, Land, Services', color: 'blue' },
-                                            { id: 'reservation', icon: 'event_available', title: 'Reservation', desc: 'Book now, pay later', color: 'green' }
-                                        ].map((mode) => (
-                                            <button
-                                                key={mode.id}
-                                                type="button"
-                                                onClick={() => setListingType(mode.id as any)}
-                                                className={cn(
-                                                    "relative flex flex-col p-4 rounded-xl border-2 transition-all text-left group overflow-hidden",
-                                                    listingType === mode.id
-                                                        ? `border-${mode.color}-300 bg-${mode.color}-50/50 shadow-sm`
-                                                        : "border-gray-100 bg-white hover:border-gray-200"
-                                                )}
-                                            >
-                                                {listingType === mode.id && (
-                                                    <div className={`absolute top-2 right-2 w-2 h-2 rounded-full bg-${mode.color}-500 animate-pulse`} />
-                                                )}
-                                                <div className={cn(
-                                                    "w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-colors",
-                                                    listingType === mode.id ? `bg-${mode.color}-500 text-white` : "bg-gray-100 text-gray-400 group-hover:bg-gray-200"
-                                                )}>
-                                                    <span className="material-icons text-xl">{mode.icon}</span>
-                                                </div>
-                                                <div className={cn("font-bold text-sm", listingType === mode.id ? `text-${mode.color}-900` : "text-gray-900")}>{mode.title}</div>
-                                                <div className="text-[10px] text-gray-500 uppercase font-black mt-1 leading-tight">{mode.desc}</div>
-                                            </button>
-                                        ))}
-                                    </div>
+                                        >
+                                            {listingType === mode.id && (
+                                                <div className={`absolute top-2 right-2 w-2 h-2 rounded-full bg-${mode.color}-500 animate-pulse`} />
+                                            )}
+                                            <div className={cn(
+                                                "w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-colors",
+                                                listingType === mode.id ? `bg-${mode.color}-500 text-white` : "bg-gray-100 text-gray-400 group-hover:bg-gray-200"
+                                            )}>
+                                                <span className="material-icons text-xl">{mode.icon}</span>
+                                            </div>
+                                            <div className={cn("font-bold text-sm", listingType === mode.id ? `text-${mode.color}-900` : "text-gray-900")}>{mode.title}</div>
+                                            <div className="text-[10px] text-gray-500 uppercase font-black mt-1 leading-tight">{mode.desc}</div>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                         </div>
@@ -3098,7 +2864,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 
