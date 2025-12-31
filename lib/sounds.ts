@@ -1,4 +1,100 @@
-// Modern UI sound effects using Web Audio API
+// Modern UI sound effects using Web Audio API + Haptic Feedback
+// Combines audio and vibration for a premium mobile experience
+
+/**
+ * Modern Haptic Engine for vibration patterns
+ * Uses the Vibration API (supported on most mobile browsers)
+ */
+class HapticEngine {
+    private isSupported: boolean;
+
+    constructor() {
+        this.isSupported = 'vibrate' in navigator;
+    }
+
+    /**
+     * Check if haptics are supported and enabled
+     */
+    canVibrate(): boolean {
+        return this.isSupported;
+    }
+
+    /**
+     * Light tap - for subtle interactions like clicks
+     */
+    lightTap() {
+        if (this.canVibrate()) {
+            navigator.vibrate(10);
+        }
+    }
+
+    /**
+     * Medium tap - for confirmations and selections
+     */
+    mediumTap() {
+        if (this.canVibrate()) {
+            navigator.vibrate(25);
+        }
+    }
+
+    /**
+     * Success haptic - double pulse for positive actions
+     */
+    success() {
+        if (this.canVibrate()) {
+            navigator.vibrate([15, 50, 15]); // tap-pause-tap
+        }
+    }
+
+    /**
+     * Soft bump - for removal actions
+     */
+    softBump() {
+        if (this.canVibrate()) {
+            navigator.vibrate(20);
+        }
+    }
+
+    /**
+     * Notification haptic - attention-grabbing pattern
+     */
+    notification() {
+        if (this.canVibrate()) {
+            navigator.vibrate([10, 30, 10, 30, 20]); // ping-ping-longer
+        }
+    }
+
+    /**
+     * Error haptic - distinct error pattern
+     */
+    error() {
+        if (this.canVibrate()) {
+            navigator.vibrate([50, 30, 50]); // strong buzz pattern
+        }
+    }
+
+    /**
+     * Custom pattern - for special effects
+     * @param pattern Array of vibration/pause durations in ms
+     */
+    custom(pattern: number[]) {
+        if (this.canVibrate()) {
+            navigator.vibrate(pattern);
+        }
+    }
+
+    /**
+     * Stop any ongoing vibration
+     */
+    stop() {
+        if (this.canVibrate()) {
+            navigator.vibrate(0);
+        }
+    }
+}
+
+// Export haptic engine singleton
+export const hapticEngine = new HapticEngine();
 
 class SoundPlayer {
     private audioContext: AudioContext | null = null;
@@ -11,10 +107,13 @@ class SoundPlayer {
     }
 
     /**
-     * Play a pleasant "follow" sound - rising tone
+     * Play a pleasant "follow" sound - rising tone with haptic feedback
      */
     playFollowSound() {
         try {
+            // Trigger haptic feedback for mobile devices
+            hapticEngine.success();
+
             const ctx = this.getContext();
             const now = ctx.currentTime;
 
@@ -43,10 +142,13 @@ class SoundPlayer {
     }
 
     /**
-     * Play a pleasant "unfollow" sound - falling tone
+     * Play a pleasant "unfollow" sound - falling tone with haptic feedback
      */
     playUnfollowSound() {
         try {
+            // Trigger haptic feedback for mobile devices
+            hapticEngine.softBump();
+
             const ctx = this.getContext();
             const now = ctx.currentTime;
 
@@ -75,10 +177,13 @@ class SoundPlayer {
     }
 
     /**
-     * Play a subtle click sound for general UI interactions
+     * Play a subtle click sound for general UI interactions with light haptic
      */
     playClickSound() {
         try {
+            // Trigger light haptic feedback for mobile devices
+            hapticEngine.lightTap();
+
             const ctx = this.getContext();
             const now = ctx.currentTime;
 
@@ -102,10 +207,13 @@ class SoundPlayer {
     }
 
     /**
-     * Play a modern wishlist add sound - upward chirp with harmony
+     * Play a modern wishlist add sound - upward chirp with harmony + haptic
      */
     playWishlistAddSound() {
         try {
+            // Trigger success haptic for positive action
+            hapticEngine.success();
+
             const ctx = this.getContext();
 
             // Resume audio context if suspended
@@ -168,10 +276,13 @@ class SoundPlayer {
     }
 
     /**
-     * Play a modern wishlist remove sound - downward chirp
+     * Play a modern wishlist remove sound - downward chirp with haptic
      */
     playWishlistRemoveSound() {
         try {
+            // Trigger soft bump haptic for removal action
+            hapticEngine.softBump();
+
             const ctx = this.getContext();
 
             // Resume audio context if suspended
@@ -210,10 +321,13 @@ class SoundPlayer {
     }
 
     /**
-     * Play a modern notification sound - soft double-ping
+     * Play a modern notification sound - soft double-ping with haptic
      */
     playNotificationSound() {
         try {
+            // Trigger notification haptic pattern
+            hapticEngine.notification();
+
             const ctx = this.getContext();
             if (ctx.state === 'suspended') ctx.resume();
 
@@ -258,10 +372,13 @@ class SoundPlayer {
         }
     }
     /**
-     * Play a pleasant "add to cart" sound - snappy positive chirp
+     * Play a pleasant "add to cart" sound - snappy positive chirp with haptic
      */
     playCartAddSound() {
         try {
+            // Trigger medium tap haptic for cart action
+            hapticEngine.mediumTap();
+
             const ctx = this.getContext();
             if (ctx.state === 'suspended') ctx.resume();
 
@@ -292,7 +409,7 @@ class SoundPlayer {
 // Export a singleton instance
 export const soundPlayer = new SoundPlayer();
 
-// Convenience exports
+// Convenience exports - Combined Sound + Haptic (default)
 export const playFollowSound = () => soundPlayer.playFollowSound();
 export const playUnfollowSound = () => soundPlayer.playUnfollowSound();
 export const playClickSound = () => soundPlayer.playClickSound();
@@ -300,3 +417,15 @@ export const playWishlistAddSound = () => soundPlayer.playWishlistAddSound();
 export const playWishlistRemoveSound = () => soundPlayer.playWishlistRemoveSound();
 export const playNotificationSound = () => soundPlayer.playNotificationSound();
 export const playCartAddSound = () => soundPlayer.playCartAddSound();
+
+// Haptic-only exports (for subtle feedback or when sound is disabled)
+export const triggerLightTap = () => hapticEngine.lightTap();
+export const triggerMediumTap = () => hapticEngine.mediumTap();
+export const triggerSuccessHaptic = () => hapticEngine.success();
+export const triggerSoftBump = () => hapticEngine.softBump();
+export const triggerNotificationHaptic = () => hapticEngine.notification();
+export const triggerErrorHaptic = () => hapticEngine.error();
+export const triggerCustomHaptic = (pattern: number[]) => hapticEngine.custom(pattern);
+
+// Utility to check if haptics are supported
+export const isHapticsSupported = () => hapticEngine.canVibrate();

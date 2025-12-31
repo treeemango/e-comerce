@@ -903,25 +903,74 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     // --- Handlers ---
 
     const handleNext = () => {
+        // Step 0: Basic Info validation
         if (currentStep === 0) {
-            if (!title || !categoryId) { alert("Title and Category are required."); return; }
-        } else if (currentStep === 2) {
-            // For products with variants, validate that at least one variant has a price
-            if (hasVariants) {
-                const hasValidPrice = variants.some(v => v.price > 0);
-                if (!hasValidPrice) {
-                    alert("At least one variant must have a price set.");
-                    return;
-                }
+            if (!title?.trim()) {
+                alert('Product title is required.');
+                return;
             }
-            // For simple products, pricing is on step 3, so no validation needed here
-        } else if (currentStep === 3) {
-            // For simple products (without variants), validate base price on this step
-            if (!hasVariants && !price) {
-                alert("Selling Price is required.");
+            if (!categoryId?.trim()) {
+                alert('Please select a category for your product.');
+                return;
+            }
+            if (!listingType) {
+                alert('Please select a purchase mode (Add to Cart, Inquiry, or Reservation).');
                 return;
             }
         }
+
+        // Step 2: Pricing & Variants validation
+        if (currentStep === 2) {
+            if (hasVariants) {
+                // Validate all variants have valid prices
+                const variantsWithoutPrice = variants.filter(v => typeof v.price !== 'number' || v.price <= 0);
+                if (variantsWithoutPrice.length > 0) {
+                    const variantNames = variantsWithoutPrice.map(v => Object.values(v.options || {}).join(' / ') || 'Unnamed').join(', ');
+                    alert(`Please set a valid price for all variants:\n${variantNames}`);
+                    return;
+                }
+                // Validate each variant's compare_at_price
+                for (const variant of variants) {
+                    if (typeof variant.compare_at_price === 'number' && variant.compare_at_price > 0) {
+                        if (variant.price > variant.compare_at_price) {
+                            const variantName = Object.values(variant.options || {}).join(' / ') || 'Unnamed';
+                            alert(`Selling price for "${variantName}" cannot be greater than the original price.\n\nSelling: ${getCurrencySymbol(currency)}${variant.price}\nOriginal: ${getCurrencySymbol(currency)}${variant.compare_at_price}`);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 3: Pricing & Delivery validation for simple products
+        if (currentStep === 3) {
+            if (!hasVariants) {
+                const numPrice = parseFloat(price);
+                const numCompare = compareAtPrice ? parseFloat(compareAtPrice) : undefined;
+
+                if (isNaN(numPrice) || numPrice <= 0) {
+                    alert('Please enter a valid selling price greater than 0.');
+                    return;
+                }
+
+                if (typeof numCompare === 'number' && !isNaN(numCompare) && numCompare > 0) {
+                    if (numPrice > numCompare) {
+                        alert(`Selling price (${getCurrencySymbol(currency)}${numPrice}) cannot be greater than the original price (${getCurrencySymbol(currency)}${numCompare}).\n\nThe original price should be higher to show a valid discount.`);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Step 4: Media - warn but don't block
+        if (currentStep === 4) {
+            if (uploadedMedia.length === 0 && youtubeUrls.length === 0) {
+                const proceed = confirm('You haven\'t added any images. Products with images sell better. Continue anyway?');
+                if (!proceed) return;
+            }
+        }
+
+        // If all validations pass, move to next step
         if (currentStep < STEPS.length - 1) setCurrentStep(prev => prev + 1);
     };
 

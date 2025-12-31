@@ -570,6 +570,27 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [optionValueInputs, setOptionValueInputs] = useState<Record<string, string>>({});
     const currencySymbol = useMemo(() => getCurrencySymbol(currency) || '$', [currency]);
 
+    // Auto-detect seller currency from location (GPS, IP, or browser locale)
+    const didAutoSetCurrency = useRef(false);
+    useEffect(() => {
+        if (didAutoSetCurrency.current) return;
+        didAutoSetCurrency.current = true;
+
+        autoDetectCurrency()
+            .then((detected) => {
+                if (!detected) return;
+                // Check if detected currency is in our supported list
+                const supported = SUPPORTED_CURRENCIES.some(c => c.code === detected);
+                if (!supported) return;
+
+                // Only auto-set if user hasn't changed from default
+                setCurrency(prev => (prev === 'USD' ? detected : prev));
+            })
+            .catch(() => {
+                // ignore detection failures, keep default USD
+            });
+    }, []);
+
     // Live conversion preview for seller inputs (to USD)
     const conversionTargetCurrency = 'USD';
     const sellerInputConversionValues = useMemo(() => {
@@ -776,6 +797,67 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     }, [categoryId]);
 
     const handleNext = () => {
+        // Step 0: Basic Info validation
+        if (currentStep === 0) {
+            if (!title?.trim()) {
+                alert('Product title is required.');
+                return;
+            }
+            if (!categoryId?.trim()) {
+                alert('Please select a category for your product.');
+                return;
+            }
+            if (!listingType) {
+                alert('Please select a purchase mode (Add to Cart, Inquiry, or Reservation).');
+                return;
+            }
+        }
+
+        // Step 1: Media - warn but don't block
+        if (currentStep === 1) {
+            if (uploadedMedia.length === 0 && youtubeUrls.length === 0) {
+                const proceed = confirm('You haven\'t added any images. Products with images sell better. Continue anyway?');
+                if (!proceed) return;
+            }
+        }
+
+        // Step 3: Pricing & Delivery validation
+        if (currentStep === 3) {
+            if (hasVariants) {
+                // Validate all variants have valid prices
+                const variantsWithoutPrice = variants.filter(v => typeof v.price !== 'number' || v.price <= 0);
+                if (variantsWithoutPrice.length > 0) {
+                    const variantNames = variantsWithoutPrice.map(v => Object.values(v.options || {}).join(' / ') || 'Unnamed').join(', ');
+                    alert(`Please set a valid price for all variants:\n${variantNames}`);
+                    return;
+                }
+                // Validate each variant's compare_at_price
+                for (const variant of variants) {
+                    if (typeof variant.compare_at_price === 'number' && variant.compare_at_price > 0) {
+                        if (variant.price > variant.compare_at_price) {
+                            const variantName = Object.values(variant.options || {}).join(' / ') || 'Unnamed';
+                            alert(`Selling price for "${variantName}" (${currencySymbol}${variant.price}) cannot be greater than the original price (${currencySymbol}${variant.compare_at_price}).`);
+                            return;
+                        }
+                    }
+                }
+            } else {
+                // Simple product validation
+                if (typeof basePrice !== 'number' || basePrice <= 0) {
+                    alert('Please enter a valid selling price greater than 0.');
+                    return;
+                }
+                // Check compare_at_price
+                if (typeof baseCompareAtPrice === 'number' && baseCompareAtPrice > 0) {
+                    if (basePrice > baseCompareAtPrice) {
+                        alert(`Selling price (${currencySymbol}${basePrice}) cannot be greater than the original/compare-at price (${currencySymbol}${baseCompareAtPrice}).\n\nThe original price should be higher to show a valid discount.`);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // If all validations pass, move to next step
         if (currentStep < steps.length - 1) {
             setCurrentStep(currentStep + 1);
         }
@@ -784,6 +866,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const handleBack = () => {
         if (currentStep > 0) {
             setCurrentStep(currentStep - 1);
+        } else {
+            onCancel();
         }
     };
 
@@ -2831,7 +2915,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 <div className="fixed bottom-0 right-0 ml-64 bg-white border-t border-gray-200 p-4 z-50 left-0">
                     <div className="max-w-4xl mx-auto flex justify-between items-center px-6">
                         <button
-                            onClick={currentStep === 0 ? onCancel : () => setCurrentStep(prev => prev - 1)}
+                            onClick={handleBack}
                             disabled={isSubmitting}
                             className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                         >
@@ -2855,7 +2939,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                             </button>
                         ) : (
                             <button
-                                onClick={() => setCurrentStep(prev => prev + 1)}
+                                onClick={handleNext}
                                 className="px-8 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors shadow-lg shadow-orange-500/20"
                             >
                                 Next

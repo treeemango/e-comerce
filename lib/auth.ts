@@ -1,6 +1,107 @@
 import { supabase } from './supabase';
 import type { User, Session, AuthError as SupabaseAuthError } from '@supabase/supabase-js';
 
+// ============================================================================
+// RATE LIMITING - Brute Force Protection
+// ============================================================================
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_KEY = 'login_rate_limit';
+
+interface RateLimitData {
+    attempts: number;
+    lastAttempt: number;
+    lockedUntil: number | null;
+}
+
+const getRateLimitData = (): RateLimitData => {
+    if (typeof window === 'undefined') {
+        return { attempts: 0, lastAttempt: 0, lockedUntil: null };
+    }
+    try {
+        const data = localStorage.getItem(RATE_LIMIT_KEY);
+        if (data) {
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        // Ignore parse errors
+    }
+    return { attempts: 0, lastAttempt: 0, lockedUntil: null };
+};
+
+const setRateLimitData = (data: RateLimitData): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(RATE_LIMIT_KEY, JSON.stringify(data));
+};
+
+const clearRateLimitData = (): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(RATE_LIMIT_KEY);
+};
+
+export const checkLoginRateLimit = (): { allowed: boolean; remainingAttempts: number; lockoutEndTime: number | null } => {
+    const data = getRateLimitData();
+    const now = Date.now();
+
+    // Check if currently locked out
+    if (data.lockedUntil && now < data.lockedUntil) {
+        return {
+            allowed: false,
+            remainingAttempts: 0,
+            lockoutEndTime: data.lockedUntil
+        };
+    }
+
+    // Reset if lockout has expired
+    if (data.lockedUntil && now >= data.lockedUntil) {
+        clearRateLimitData();
+        return { allowed: true, remainingAttempts: MAX_LOGIN_ATTEMPTS, lockoutEndTime: null };
+    }
+
+    // Reset attempts if last attempt was more than lockout duration ago
+    if (now - data.lastAttempt > LOCKOUT_DURATION_MS) {
+        clearRateLimitData();
+        return { allowed: true, remainingAttempts: MAX_LOGIN_ATTEMPTS, lockoutEndTime: null };
+    }
+
+    return {
+        allowed: data.attempts < MAX_LOGIN_ATTEMPTS,
+        remainingAttempts: Math.max(0, MAX_LOGIN_ATTEMPTS - data.attempts),
+        lockoutEndTime: null
+    };
+};
+
+export const recordFailedLoginAttempt = (): { locked: boolean; lockoutEndTime: number | null; remainingAttempts: number } => {
+    const data = getRateLimitData();
+    const now = Date.now();
+
+    data.attempts += 1;
+    data.lastAttempt = now;
+
+    if (data.attempts >= MAX_LOGIN_ATTEMPTS) {
+        data.lockedUntil = now + LOCKOUT_DURATION_MS;
+        setRateLimitData(data);
+        return { locked: true, lockoutEndTime: data.lockedUntil, remainingAttempts: 0 };
+    }
+
+    setRateLimitData(data);
+    return { locked: false, lockoutEndTime: null, remainingAttempts: MAX_LOGIN_ATTEMPTS - data.attempts };
+};
+
+export const recordSuccessfulLogin = (): void => {
+    clearRateLimitData();
+};
+
+export const formatLockoutTime = (lockoutEndTime: number): string => {
+    const remainingMs = lockoutEndTime - Date.now();
+    if (remainingMs <= 0) return '0 seconds';
+    const minutes = Math.ceil(remainingMs / 60000);
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+};
+
+// ============================================================================
+
 export interface AuthResponse {
     user: User | null;
     session: Session | null;
@@ -61,7 +162,7 @@ export const initGoogleOneTap = async (
         onError?: (err: Error) => void;
     }
 ) => {
-    if (!clientId || typeof window === 'undefined') return () => {};
+    if (!clientId || typeof window === 'undefined') return () => { };
 
     try {
         await loadGoogleScript();
@@ -106,24 +207,56 @@ export const initGoogleOneTap = async (
     } catch (err: any) {
         console.error('Failed to init One Tap', err);
         options?.onError?.(err instanceof Error ? err : new Error('Failed to init One Tap'));
-        return () => {};
+        return () => { };
     }
 };
 
-// Sign in with email and password
+// Sign in with email and password (with rate limiting)
 export const signInWithEmail = async (
     email: string,
     password: string
 ): Promise<AuthResponse> => {
+    // Check rate limit before attempting login
+    const rateLimit = checkLoginRateLimit();
+    if (!rateLimit.allowed) {
+        const waitTime = formatLockoutTime(rateLimit.lockoutEndTime!);
+        return {
+            user: null,
+            session: null,
+            error: {
+                message: `Too many failed login attempts. Please try again in ${waitTime}.`,
+                status: 429,
+                name: 'RateLimitError'
+            } as SupabaseAuthError
+        };
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
     });
 
     if (error) {
+        // Record failed attempt
+        const result = recordFailedLoginAttempt();
+        let errorMessage = error.message;
+
+        if (result.locked) {
+            errorMessage = `Account temporarily locked due to too many failed attempts. Try again in ${formatLockoutTime(result.lockoutEndTime!)}`;
+        } else if (result.remainingAttempts <= 2) {
+            errorMessage = `${error.message} (${result.remainingAttempts} attempts remaining)`;
+        }
+
         console.error('Sign in error:', error);
-        return { user: null, session: null, error };
+        return {
+            user: null,
+            session: null,
+            error: { ...error, message: errorMessage } as SupabaseAuthError
+        };
     }
+
+    // Clear rate limit on successful login
+    recordSuccessfulLogin();
 
     return { user: data.user, session: data.session, error: null };
 };

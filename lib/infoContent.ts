@@ -171,47 +171,142 @@ export const infoContent: Record<string, InfoPageContent> = {
         title: 'Privacy Policy',
         subtitle: 'Protecting Your Data Globally',
         image_url: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&auto=format&fit=crop&q=80',
-        description: 'Our commitment to protecting your privacy and managing your data securely.',
-        keywords: 'privacy policy, data protection, gdpr compliance',
+        description: 'Our commitment to protecting your privacy and managing your data securely across Europe and Africa.',
+        keywords: 'privacy policy, data protection, gdpr compliance, data security, juaexpress privacy',
         sections: [
             {
-                title: 'Data Collection',
-                content: 'We collect only the information necessary to provide our services, such as your contact details, shipping address, and order history. We never sell your data to third parties.',
+                title: 'Introduction',
+                content: 'JuaExpress ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website juaexpress.com and use our services. By accessing or using our platform, you agree to this Privacy Policy. Last updated: December 31, 2025.',
+                icon: 'info'
+            },
+            {
+                title: 'Information We Collect',
+                content: 'We collect information you provide directly, including: name, email address, phone number, shipping and billing addresses, payment information (processed securely through third-party providers), profile information, and communications with our support team.\n\nWe automatically collect: device information, IP address, browser type, pages visited, time spent on pages, referring URLs, and location data (with your consent).',
                 icon: 'folder_shared'
             },
             {
-                title: 'Your Rights',
-                content: 'You have the right to access, correct, or delete your personal data at any time. We are committed to GDPR compliance and similar data protection standards across Africa.',
+                title: 'How We Use Your Information',
+                content: 'We use your information to: process and fulfill orders, communicate about purchases and support requests, personalize your shopping experience, send promotional communications (with your consent), detect and prevent fraud, comply with legal obligations, and improve our services through analytics.',
+                icon: 'settings'
+            },
+            {
+                title: 'Information Sharing',
+                content: 'We share your information with: sellers (only what\'s necessary to fulfill orders), payment processors (Stripe, PayPal, M-Pesa), shipping partners (for delivery), service providers (analytics, customer support), and law enforcement (when legally required). We never sell your personal data to third parties for marketing purposes.',
+                icon: 'share'
+            },
+            {
+                title: 'Cookies and Tracking',
+                content: 'We use cookies and similar technologies to remember your preferences, keep you logged in, analyze site traffic, and deliver personalized content. You can control cookies through your browser settings. Essential cookies are required for the platform to function; disabling them may affect your experience.',
+                icon: 'cookie'
+            },
+            {
+                title: 'Your Rights (GDPR & POPIA Compliance)',
+                content: 'Depending on your location, you have the right to: access your personal data, correct inaccurate data, delete your data ("right to be forgotten"), restrict or object to processing, data portability, and withdraw consent. For EU residents, we comply with GDPR. For South African residents, we comply with POPIA. To exercise these rights, contact privacy@juaexpress.com.',
                 icon: 'gpp_maybe'
             },
             {
-                title: 'Security Measures',
-                content: 'We use advanced security protocols to protect your information from unauthorized access, ensuring your shopping experience remains private and secure.',
+                title: 'Data Security',
+                content: 'We implement industry-standard security measures including SSL/TLS encryption, secure payment processing (PCI-DSS compliant), regular security audits, access controls, and data encryption at rest. While we strive to protect your data, no method of transmission over the Internet is 100% secure.',
                 icon: 'shield'
+            },
+            {
+                title: 'International Data Transfers',
+                content: 'Your data may be transferred to and processed in countries outside your residence (including Kenya, UK, Nigeria, and other locations where we operate). We ensure appropriate safeguards are in place, including Standard Contractual Clauses for EU data transfers.',
+                icon: 'public'
+            },
+            {
+                title: 'Data Retention',
+                content: 'We retain your personal data only as long as necessary for the purposes outlined in this policy, typically for the duration of your account plus 7 years for legal/tax compliance. You may request deletion of your account and associated data at any time.',
+                icon: 'schedule'
+            },
+            {
+                title: 'Children\'s Privacy',
+                content: 'Our services are not intended for individuals under 18 years of age. We do not knowingly collect personal information from children. If we become aware of such collection, we will delete the information promptly.',
+                icon: 'child_care'
+            },
+            {
+                title: 'Contact Us',
+                content: 'For privacy-related inquiries or to exercise your rights:\nEmail: juaexpress01@gmail.com\nData Protection Officer: juaexpress01@gmail.com\nAddress: Avenue 5, Rose Avenue, Nairobi, Kenya',
+                icon: 'mail'
             }
         ]
     },
     'terms': {
-        title: 'Terms of Use',
-        subtitle: 'Rules for Our Community',
+        title: 'Terms of Service',
+        subtitle: 'Agreement for Using JuaExpress',
         image_url: 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1200&auto=format&fit=crop&q=80',
-        description: 'The agreement between you and JuaExpress regarding the use of our platform.',
-        keywords: 'terms of service, user agreement, legal terms',
+        description: 'The legal agreement between you and JuaExpress governing use of our e-commerce platform.',
+        keywords: 'terms of service, user agreement, legal terms, juaexpress terms, ecommerce terms',
         sections: [
             {
+                title: 'Acceptance of Terms',
+                content: 'By accessing or using JuaExpress (juaexpress.com), you agree to be bound by these Terms of Service. If you disagree with any part of these terms, you may not access our platform. These terms apply to all users, including buyers, sellers, and visitors. Last updated: December 31, 2025.',
+                icon: 'handshake'
+            },
+            {
+                title: 'Account Registration',
+                content: 'You must provide accurate, complete information when creating an account. You are responsible for maintaining the confidentiality of your credentials and for all activities under your account. You must be at least 18 years old to create an account. Notify us immediately of any unauthorized access.',
+                icon: 'person_add'
+            },
+            {
                 title: 'User Conduct',
-                content: 'By using JuaExpress, you agree to act in good faith, providing accurate information and respecting other members of our multi-vendor community.',
+                content: 'You agree to use JuaExpress only for lawful purposes and in accordance with these Terms. You will not use our platform to: violate any laws or regulations, infringe on intellectual property rights, transmit harmful or fraudulent content, interfere with the platform\'s operation, impersonate others, or engage in any form of harassment or discrimination.',
                 icon: 'groups'
             },
             {
-                title: 'Account Security',
-                content: 'You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.',
-                icon: 'vpn_key'
+                title: 'Buyer Terms',
+                content: 'As a buyer, you agree to: provide accurate shipping information, pay for purchases in a timely manner, not abuse our return/refund policies, communicate respectfully with sellers, and report any issues through proper channels. Purchases are protected by JuaExpress Purchase Protection when using our approved payment methods.',
+                icon: 'shopping_cart'
+            },
+            {
+                title: 'Seller Terms',
+                content: 'As a seller, you agree to: provide accurate product descriptions, ship items within stated timeframes, comply with all applicable laws and regulations, not list prohibited items (counterfeits, illegal goods, hazardous materials), and maintain professional communication. Seller fees and commission rates are outlined in our Seller Agreement.',
+                icon: 'store'
             },
             {
                 title: 'Intellectual Property',
-                content: 'All content on the platform, including logos, text, and graphics, is the property of JuaExpress or its content suppliers and is protected by international copyright laws.',
+                content: 'All content on JuaExpress, including logos, text, graphics, and software, is the property of JuaExpress or its licensors and is protected by international copyright, trademark, and other intellectual property laws. You may not reproduce, distribute, or create derivative works without our written permission.',
                 icon: 'copyright'
+            },
+            {
+                title: 'Prohibited Items',
+                content: 'The following items are strictly prohibited: counterfeit or stolen goods, weapons and explosives, drugs and controlled substances, adult/explicit content, items that violate intellectual property rights, hazardous materials, and any items illegal in the buyer\'s or seller\'s jurisdiction.',
+                icon: 'block'
+            },
+            {
+                title: 'Payment Terms',
+                content: 'All prices are displayed in the respective local currency with conversion estimates available. Payment processing is handled by secure third-party providers. Funds are held in escrow until order completion. JuaExpress is not responsible for currency fluctuation between order placement and payment processing.',
+                icon: 'payments'
+            },
+            {
+                title: 'Limitation of Liability',
+                content: 'JuaExpress is a marketplace platform connecting buyers and sellers. To the maximum extent permitted by law, we are not liable for: seller actions or product quality, transaction disputes beyond our Purchase Protection scope, indirect or consequential damages, service interruptions, or third-party content. Our total liability shall not exceed the fees paid by you in the preceding 12 months.',
+                icon: 'gavel'
+            },
+            {
+                title: 'Indemnification',
+                content: 'You agree to indemnify and hold harmless JuaExpress, its affiliates, officers, and employees from any claims, damages, or expenses arising from your use of the platform, violation of these terms, or infringement of any third-party rights.',
+                icon: 'security'
+            },
+            {
+                title: 'Termination',
+                content: 'We may terminate or suspend your account immediately, without prior notice, for any breach of these Terms. Upon termination, your right to use the platform ceases. Provisions that by their nature should survive termination (intellectual property, limitation of liability, indemnification) shall remain in effect.',
+                icon: 'cancel'
+            },
+            {
+                title: 'Changes to Terms',
+                content: 'We reserve the right to modify these Terms at any time. We will notify users of material changes via email or platform notification. Continued use after changes constitutes acceptance of the new Terms.',
+                icon: 'edit_note'
+            },
+            {
+                title: 'Governing Law & Disputes',
+                content: 'These Terms are governed by the laws of Kenya. Any disputes arising from these Terms or your use of JuaExpress shall first be resolved through our internal dispute resolution process. If unresolved, disputes shall be submitted to the exclusive jurisdiction of the courts of Nairobi, Kenya, unless otherwise required by law in your jurisdiction.',
+                icon: 'balance'
+            },
+            {
+                title: 'Contact',
+                content: 'For questions about these Terms of Service:\nEmail: juaexpress01@gmail.com\nAddress: Avenue 5, Rose Avenue, Nairobi, Kenya\nWebsite: juaexpress.com',
+                icon: 'mail'
             }
         ]
     },
