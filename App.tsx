@@ -232,9 +232,12 @@ const App: React.FC = () => {
   const seoConfig = useMemo(() => {
     if (currentView === 'home') {
       return {
-        title: 'JuaExpress - Your African Shopping Destination',
-        description: 'Discover thousands of quality products on JuaExpress. Shop electronics, fashion, home goods, and more with fast delivery across Africa.',
-        keywords: 'online shopping, e-commerce, African marketplace, Kenya shopping',
+        title: 'JuaExpress - Premium Multi-Country E-Commerce Marketplace',
+        description: 'Shop JuaExpress for premium electronics, fashion, and home goods across UK and Africa. Experience seamless multi-country shopping with secure payments and ultra-fast delivery.',
+        keywords: 'JuaExpress, online shopping Africa, UK marketplace, Kenya e-commerce, electronics Nairobi, fashion Lagos',
+        noindex: true,
+
+
       };
     } else if (currentView === 'five-star') {
       return {
