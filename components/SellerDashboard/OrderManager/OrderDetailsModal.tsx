@@ -4,6 +4,8 @@ import { formatCurrency } from '../../../lib/utils';
 import { fulfillOrder, fulfillParcelOrder, verifyParcelOTP, markOrderReady, submitShipmentProof } from '../../../lib/api';
 import { MediaService } from '../../../lib/media';
 import BuyerReceipt from './BuyerReceipt';
+import { logistics } from '../../../lib/logistics-service';
+import { CarrierProvider, Address, Parcel } from '../../../lib/logistics-types';
 
 interface OrderDetailsModalProps {
     order: SellerOrder;
@@ -17,15 +19,25 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     onOrderUpdated
 }) => {
     const [showTrackingInput, setShowTrackingInput] = useState(false);
-    const [shippingType, setShippingType] = useState<'courier' | 'parcel'>('courier');
+    const [shippingType, setShippingType] = useState<'courier' | 'parcel' | 'logistics'>(() => {
+        // If buyer chose local_parcel, default to parcel shipping type
+        if (order.logistics_meta?.provider === 'local_parcel') return 'parcel';
+        // If buyer chose another logistics provider, default to logistics
+        if (order.logistics_meta) return 'logistics';
+        // Otherwise default to courier
+        return 'courier';
+    });
     const [trackingNumber, setTrackingNumber] = useState('');
     const [isShipping, setIsShipping] = useState(false);
+    const [isBooking, setIsBooking] = useState(false);
     const [isMarkingReady, setIsMarkingReady] = useState(false);
 
     // Parcel-specific fields
     const [parcelService, setParcelService] = useState('');
     const [waybillNumber, setWaybillNumber] = useState('');
     const [collectionPoint, setCollectionPoint] = useState('');
+    const [transportFee, setTransportFee] = useState('');
+    const [paymentDetails, setPaymentDetails] = useState(''); // M-Pesa, Till, etc.
     const [isVerifying, setIsVerifying] = useState(false);
     const [otpInput, setOtpInput] = useState('');
     const [showOTPInput, setShowOTPInput] = useState(false);
@@ -58,13 +70,58 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     setIsShipping(false);
                     return;
                 }
-                const result = await fulfillParcelOrder(order.id, parcelService, waybillNumber, collectionPoint);
+                const feeNum = parseFloat(transportFee);
+                if (!transportFee || isNaN(feeNum) || feeNum <= 0) {
+                    alert('Please enter a valid transport fee amount (e.g. 500).');
+                    setIsShipping(false);
+                    return;
+                }
+                const result = await fulfillParcelOrder(order.id, parcelService, waybillNumber, collectionPoint, feeNum, paymentDetails);
                 if (result.success) {
                     alert(`✅ Order shipped! Mutual Protection Enabled.\n\nThe buyer will receive a secret 4-digit code in their app for secure collection.`);
                     onOrderUpdated?.();
                     onClose();
                 } else {
                     alert(`Failed to ship parcel: ${result.message}`);
+                }
+            } else if (shippingType === 'logistics') {
+                if (!order.logistics_meta) return;
+                setIsBooking(true);
+                try {
+                    // Reconstruct destination from order (simplified for demo)
+                    const destination: Address = {
+                        name: order.customer_name || 'Customer',
+                        phone: order.customer_email || '0000000000', // Mock phone if missing
+                        street_address: order.shipping_address || 'Address',
+                        city: 'Nairobi', // Default for Kenya if not parsed
+                        country_code: 'KE'
+                    };
+
+                    const parcels: Parcel[] = [{
+                        weight: order.items?.reduce((sum, i) => sum + (i.quantity * 0.5), 0) || 1,
+                        length: 20, width: 15, height: 10
+                    }];
+
+                    const result = await logistics.getAdapter(order.logistics_meta.provider as CarrierProvider).createShipment({
+                        order_id: order.id,
+                        service_code: order.logistics_meta.service_id,
+                        carrier_id: order.logistics_meta.rate_id,
+                        origin: { name: 'Seller Warehouse', phone: '123', street_address: 'Main St', city: 'Nairobi', country_code: 'KE' },
+                        destination,
+                        parcels
+                    });
+
+                    const success = await fulfillOrder(order.id, result.tracking_number);
+                    if (success) {
+                        alert(`✅ Shipment booked with ${result.carrier_name}!\nTracking: ${result.tracking_number}`);
+                        onOrderUpdated?.();
+                        onClose();
+                    }
+                } catch (err) {
+                    console.error('Booking error:', err);
+                    alert('Logistics booking failed. Please use courier/parcel mode.');
+                } finally {
+                    setIsBooking(false);
                 }
             } else {
                 const success = await fulfillOrder(order.id, trackingNumber || undefined);
@@ -311,35 +368,114 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                         </div>
                     </div>
 
+                    {/* Buyer's Selection Highlight */}
+                    {order.logistics_meta && (
+                        <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mb-6 animate-in fade-in duration-500">
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                                    <span className="material-icons">local_shipping</span>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-black text-orange-900 uppercase tracking-wider">Buyer's Selected Method</h3>
+                                    <p className="font-bold text-gray-900 mt-1">
+                                        {order.logistics_meta.provider === 'local_parcel'
+                                            ? 'Local Parcel (Station to Station)'
+                                            : `${order.logistics_meta.provider.toUpperCase()} - ${order.logistics_meta.service_id}`}
+                                    </p>
+                                    <p className="text-xs text-gray-600 mt-0.5">
+                                        {order.logistics_meta.provider === 'local_parcel'
+                                            ? 'Fee to be communicated to buyer. Buyer will pay on collection.'
+                                            : `Shipping Fee: ${formatCurrency(order.logistics_meta.cost || 0, currency)} paid by buyer.`}
+                                    </p>
+                                </div>
+                                {order.logistics_meta.provider === 'local_parcel' && (
+                                    <div className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter">
+                                        Manual Handling
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Shipping Options */}
                     {showTrackingInput && canShip && (
                         <div className="space-y-4">
-                            {/* Shipping Type Selection */}
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShippingType('courier')}
-                                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${shippingType === 'courier' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="material-icons text-orange-500">local_shipping</span>
-                                        <div className="text-left">
-                                            <p className="font-bold text-gray-900">Courier Delivery</p>
-                                            <p className="text-xs text-gray-500">DHL, FedEx, etc.</p>
-                                        </div>
-                                    </div>
-                                </button>
-                                <button
-                                    onClick={() => setShippingType('parcel')}
-                                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${shippingType === 'parcel' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="material-icons text-orange-500">directions_bus</span>
-                                        <div className="text-left">
-                                            <p className="font-bold text-gray-900">Local Parcel</p>
-                                            <p className="text-xs text-gray-500">Bus/Shuttle with OTP</p>
-                                        </div>
-                                    </div>
-                                </button>
+                            {/* Shipping Type Selection - Only show buyer's chosen method */}
+                            <div className="flex flex-wrap gap-3">
+                                {/* Determine buyer's choice */}
+                                {(() => {
+                                    const buyerChoseLocalParcel = order.logistics_meta?.provider === 'local_parcel';
+                                    const buyerChoseLogistics = order.logistics_meta && order.logistics_meta.provider !== 'local_parcel';
+                                    const noPreference = !order.logistics_meta;
+
+                                    return (
+                                        <>
+                                            {/* Automated Logistics Booking (Sendy, etc.) - only if buyer chose this */}
+                                            {buyerChoseLogistics && (
+                                                <button
+                                                    onClick={() => setShippingType('logistics')}
+                                                    className={`flex-1 min-w-[200px] p-4 rounded-xl border-2 transition-all ${shippingType === 'logistics' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="material-icons text-orange-500">hail</span>
+                                                        <div className="text-left">
+                                                            <p className="font-bold text-gray-900">Automated Booking</p>
+                                                            <p className="text-xs text-gray-500 capitalize">{order.logistics_meta?.provider} - {order.logistics_meta?.service_id}</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            )}
+
+                                            {/* Courier Delivery - only if no preference OR buyer chose logistics */}
+                                            {(noPreference || buyerChoseLogistics) && (
+                                                <button
+                                                    onClick={() => setShippingType('courier')}
+                                                    className={`flex-1 min-w-[200px] p-4 rounded-xl border-2 transition-all ${shippingType === 'courier' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="material-icons text-orange-500">local_shipping</span>
+                                                        <div className="text-left">
+                                                            <p className="font-bold text-gray-900">Courier Delivery</p>
+                                                            <p className="text-xs text-gray-500">DHL, FedEx, etc.</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            )}
+
+                                            {/* Local Parcel - ONLY if buyer explicitly chose it */}
+                                            {buyerChoseLocalParcel && (
+                                                <button
+                                                    onClick={() => setShippingType('parcel')}
+                                                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${shippingType === 'parcel' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="material-icons text-orange-500">directions_bus</span>
+                                                        <div className="text-left">
+                                                            <p className="font-bold text-gray-900">Local Parcel</p>
+                                                            <p className="text-xs text-gray-500">Bus/Shuttle with OTP</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            )}
+
+                                            {/* Legacy orders with no preference - show Local Parcel too */}
+                                            {noPreference && (
+                                                <button
+                                                    onClick={() => setShippingType('parcel')}
+                                                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${shippingType === 'parcel' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="material-icons text-orange-500">directions_bus</span>
+                                                        <div className="text-left">
+                                                            <p className="font-bold text-gray-900">Local Parcel</p>
+                                                            <p className="text-xs text-gray-500">Bus/Shuttle with OTP</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {/* Courier Input */}
@@ -396,9 +532,65 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                             type="text"
                                             value={collectionPoint}
                                             onChange={(e) => setCollectionPoint(e.target.value)}
-                                            placeholder="e.g., Nairobi CBD Office, Mombasa Stage"
+                                            placeholder="e.g., Downtown Office, Bus Stage"
                                             className="w-full px-4 py-3 bg-white border border-orange-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-orange-900 mb-1">
+                                            Transport Fee (KSh)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={transportFee}
+                                            onChange={(e) => setTransportFee(e.target.value)}
+                                            placeholder="e.g., 500"
+                                            className="w-full px-4 py-3 bg-white border border-orange-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                        />
+                                        <p className="text-[10px] text-orange-700 mt-1 italic">
+                                            Transport fee to be paid by buyer upon collection.
+                                        </p>
+                                    </div>
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-2">
+                                        <label className="block text-sm font-bold text-emerald-900 mb-1">
+                                            <span className="material-icons text-emerald-600 text-sm align-middle mr-1">payments</span>
+                                            Payment Details (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={paymentDetails}
+                                            onChange={(e) => setPaymentDetails(e.target.value)}
+                                            placeholder="e.g., M-Pesa: 0712345678 or Till: 123456"
+                                            className="w-full px-4 py-3 bg-white border border-emerald-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                        <p className="text-[10px] text-emerald-700 mt-1 italic">
+                                            Provide M-Pesa, Till number, or bank details for transport fee payment.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Logistics Details */}
+                            {shippingType === 'logistics' && order.logistics_meta && (
+                                <div className="bg-orange-50 border border-orange-100 rounded-xl p-5 space-y-3 animate-in fade-in">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                                            <span className="material-icons text-sm">info</span>
+                                        </div>
+                                        <h4 className="font-bold text-orange-900 text-sm">Booking Details</h4>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                        <span className="text-orange-700/60 font-medium">Provider:</span>
+                                        <span className="text-orange-900 font-bold capitalize">{order.logistics_meta.provider}</span>
+                                        <span className="text-orange-700/60 font-medium">Service:</span>
+                                        <span className="text-orange-900 font-bold">{order.logistics_meta.service_id}</span>
+                                        <span className="text-orange-700/60 font-medium">Quote:</span>
+                                        <span className="text-orange-900 font-bold">{formatCurrency(order.logistics_meta.cost, currency)}</span>
+                                    </div>
+                                    <div className="pt-2 border-t border-orange-200/50">
+                                        <p className="text-[10px] text-orange-700 italic">
+                                            Confirming will automatically book the pickup and notify the buyer.
+                                        </p>
                                     </div>
                                 </div>
                             )}

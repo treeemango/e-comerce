@@ -12,11 +12,22 @@ import { supabase } from '../../lib/supabase';
 interface BuyerMessagesViewProps {
     userId: string;
     onBack?: () => void;
+    activeConversationId?: string | null;
 }
 
-export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, onBack }) => {
+export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, onBack, activeConversationId }) => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+
+    // Auto-select conversation based on prop
+    useEffect(() => {
+        if (activeConversationId && conversations.length > 0) {
+            const target = conversations.find(c => c.id === activeConversationId);
+            if (target && target.id !== selectedConversation?.id) {
+                setSelectedConversation(target);
+            }
+        }
+    }, [activeConversationId, conversations]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMessages, setLoadingMessages] = useState(false);

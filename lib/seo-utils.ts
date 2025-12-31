@@ -1,6 +1,7 @@
 import { Product, VendorInfo } from '../types';
 import { generateCountryMetaTags, generateCountryBusinessSchema } from './country-seo';
 import { generateCategoryMetaTags, generateCategoryStructuredData, generateCategoryFAQData } from './category-seo';
+import { slugify } from './utils';
 
 // Base configuration for your e-commerce site
 export const SITE_CONFIG = {
@@ -505,16 +506,20 @@ export function getProductPageSEO(product: Product, vendor?: VendorInfo) {
         vendor?.business_name || 'JuaExpress'
     ].filter(Boolean).join(', ');
 
+    // Auto-generate slug from title if not provided
+    const slug = (product as any).url_slug || (product.title ? slugify(product.title) : '');
+
     return {
         title,
         description,
         keywords,
         image: product.image,
-        url: (product as any).canonical_url || `${SITE_CONFIG.url}/product/${product.id}`,
+        url: (product as any).canonical_url || (slug ? `${SITE_CONFIG.url}/product/${product.id}/${slug}` : `${SITE_CONFIG.url}/product/${product.id}`),
         type: 'product',
         noindex: !product.title // Example safety, though usually we want to index
     };
 }
+
 
 /**
  * Generate SEO config for category pages

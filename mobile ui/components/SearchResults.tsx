@@ -4,6 +4,8 @@ import { fetchFilteredProducts, trackSearch } from '@/lib/api';
 import { ProductCard } from './ProductCard';
 import { FilterPanel } from './FilterPanel';
 
+type SortOption = 'best_match' | 'newest' | 'rating' | 'price_low' | 'price_high';
+
 interface SearchResultsProps {
     query: string;
     results: Product[]; // Kept for backwards compatibility
@@ -31,6 +33,8 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     isVisualSearch = false
 }) => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [isSortOpen, setIsSortOpen] = useState(false);
+    const [sortBy, setSortBy] = useState<SortOption>('best_match');
     const [searchResults, setSearchResults] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
     const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({
@@ -45,6 +49,45 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
     // Display text - hide AI keywords for visual search
     const displayQuery = isVisualSearch ? 'Visual Search' : query;
+
+    const sortLabel = React.useMemo(() => {
+        switch (sortBy) {
+            case 'best_match':
+                return 'Best match';
+            case 'newest':
+                return 'Newest';
+            case 'rating':
+                return 'Top rated';
+            case 'price_low':
+                return 'Price: low to high';
+            case 'price_high':
+                return 'Price: high to low';
+            default:
+                return 'Best match';
+        }
+    }, [sortBy]);
+
+    const displayedResults = React.useMemo(() => {
+        if (sortBy === 'best_match') return searchResults;
+
+        const sorted = [...searchResults];
+        switch (sortBy) {
+            case 'newest':
+                return sorted.sort((a, b) => {
+                    const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+                    const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+                    return bTime - aTime;
+                });
+            case 'rating':
+                return sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+            case 'price_low':
+                return sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
+            case 'price_high':
+                return sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
+            default:
+                return sorted;
+        }
+    }, [searchResults, sortBy]);
 
     React.useEffect(() => {
         const performSearch = async () => {
@@ -113,17 +156,86 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         Filters
                     </button>
 
-                    {['Sort by', 'Category', 'Price', 'Brand'].map((filter) => (
-                        <button
-                            key={filter}
-                            className="flex items-center gap-1 px-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-[12px] font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap active:scale-95 transition-all"
-                        >
-                            {filter}
-                            <span className="material-icons-round text-sm opacity-60">expand_more</span>
-                        </button>
-                    ))}
+                    <button
+                        onClick={() => setIsSortOpen(true)}
+                        className={`flex items-center gap-1 px-4 py-2 rounded-xl border text-[12px] font-semibold whitespace-nowrap active:scale-95 transition-all ${isSortOpen
+                            ? 'bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200'
+                            : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-400'
+                            }`}
+                        aria-haspopup="dialog"
+                        aria-expanded={isSortOpen}
+                    >
+                        <span className="material-icons-round text-sm opacity-70">sort</span>
+                        {`Sort: ${sortLabel}`}
+                        <span className="material-icons-round text-sm opacity-60">expand_more</span>
+                    </button>
                 </div>
             </header>
+
+            {/* Sort By Bottom Sheet */}
+            {isSortOpen && !isFilterOpen && (
+                <div
+                    className="fixed inset-0 z-[60]"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Sort options"
+                >
+                    <button
+                        className="absolute inset-0 bg-black/40"
+                        onClick={() => setIsSortOpen(false)}
+                        aria-label="Close sort options"
+                    />
+                    <div className="absolute left-0 right-0 bottom-0 bg-white dark:bg-black rounded-t-3xl border-t border-gray-100 dark:border-gray-800 shadow-2xl">
+                        <div className="px-5 pt-4 pb-2">
+                            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-4" />
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-[14px] font-black text-gray-900 dark:text-white">Sort by</h3>
+                                <button
+                                    onClick={() => setIsSortOpen(false)}
+                                    className="w-9 h-9 rounded-full flex items-center justify-center active:bg-gray-100 dark:active:bg-gray-900"
+                                    aria-label="Close"
+                                >
+                                    <span className="material-icons-round text-xl text-gray-600 dark:text-gray-300">close</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="px-3 pb-6">
+                            {(
+                                [
+                                    { id: 'best_match', label: 'Best match' },
+                                    { id: 'newest', label: 'Newest' },
+                                    { id: 'rating', label: 'Top rated' },
+                                    { id: 'price_low', label: 'Price: low to high' },
+                                    { id: 'price_high', label: 'Price: high to low' },
+                                ] as Array<{ id: SortOption; label: string }>
+                            ).map((opt) => {
+                                const selected = sortBy === opt.id;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => {
+                                            setSortBy(opt.id);
+                                            setIsSortOpen(false);
+                                        }}
+                                        className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-left transition-all ${selected
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'bg-transparent text-gray-800 dark:text-gray-200 active:bg-gray-50 dark:active:bg-gray-900'
+                                            }`}
+                                    >
+                                        <span className="text-[13px] font-bold">{opt.label}</span>
+                                        {selected ? (
+                                            <span className="material-icons-round text-lg">check</span>
+                                        ) : (
+                                            <span className="w-5" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Filter Panel Overlay */}
             {isFilterOpen && (
@@ -165,9 +277,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                                     <div key={n} className="aspect-[3/4] rounded-3xl bg-gray-100 dark:bg-gray-900 animate-pulse"></div>
                                 ))}
                             </div>
-                        ) : searchResults.length > 0 ? (
+                        ) : displayedResults.length > 0 ? (
                             <div className="grid grid-cols-2 gap-3">
-                                {searchResults.map(product => (
+                                {displayedResults.map(product => (
                                     <div key={product.id} className="animate-premium-pop">
                                         <ProductCard
                                             product={product}

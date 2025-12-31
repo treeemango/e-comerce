@@ -18,6 +18,7 @@ import { TopRatedScreen } from './components/TopRatedScreen';
 import { NewArrivalsScreen } from './components/NewArrivalsScreen';
 import { CheckoutSheet } from './components/CheckoutSheet';
 import { OrderSuccessSheet } from './components/OrderSuccessSheet';
+import TrackOrderSheet from './components/TrackOrderSheet';
 import { ProductDetails } from './components/ProductDetails';
 import SimilarItemsView from './components/SimilarItemsView';
 import { AccountSection } from './components/AccountSection';
@@ -35,7 +36,7 @@ import { VendorProfileView } from './components/VendorProfileView';
 import { BuyerProfileView } from './components/BuyerProfileView';
 import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute, fetchProductById, fetchPlatformReviewCount, ensureSupportConversation, fetchRelatedProducts } from '@/lib/api';
 import { Product, Review, UserCoupon, BuyerOrder, RelatedProduct } from '@/types';
-import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle } from '@/lib/auth';
+import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle, isAccountBanned } from '@/lib/auth';
 import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
 import type { NotificationAction } from '../components/NotificationContext';
 import { formatPrice, getUserCurrency, setUserCurrency } from '@/lib/currency';
@@ -48,6 +49,7 @@ import { MobileFeedbackSheet } from './components/MobileFeedbackSheet';
 import MobileWriteReviewSheet from './components/MobileWriteReviewSheet';
 import { PlatformReviewsView } from './components/PlatformReviewsView';
 import { fetchTopPlatformReviews } from '@/lib/api';
+import OrderTrackingTimeline from './components/OrderTrackingTimeline';
 import {
     getExistingPushSubscription,
     removePushSubscriptionFromBackend,
@@ -92,14 +94,20 @@ const App: React.FC = () => {
     const [activeSubcategoryId, setActiveSubcategoryId] = useState<string>('all');
     const [categoryViewOpen, setCategoryViewOpen] = useState<{ departmentId: string; departmentName: string } | null>(null);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [isTrackOrderOpen, setIsTrackOrderOpen] = useState(false);
+    const [trackOrderPrefill, setTrackOrderPrefill] = useState<{ orderId?: string; email?: string }>({});
+    const [expandedTrackingOrderId, setExpandedTrackingOrderId] = useState<string | null>(null);
     const [buyerMessageCount, setBuyerMessageCount] = useState(0);
     const [onboardingType, setOnboardingType] = useState<'seller' | 'driver' | null>(null);
     const [cartToast, setCartToast] = useState<{ show: boolean, productName: string } | null>(null);
+    const [authToast, setAuthToast] = useState<string | null>(null);
     const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
     const [visualSearchProduct, setVisualSearchProduct] = useState<Product | null>(null);
     const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
     const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
     const [activeSellerConversationId, setActiveSellerConversationId] = useState<string | null>(null);
+    const [activeBuyerConversationId, setActiveBuyerConversationId] = useState<string | null>(null);
+    const [activeOrderFilter, setActiveOrderFilter] = useState<'all' | 'pending' | 'shipped' | 'delivered'>('all'); // Add filter state
     const [reviewingOrderId, setReviewingOrderId] = useState<string | null>(null);
     const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
     const [showQRCodeOrderId, setShowQRCodeOrderId] = useState<string | null>(null);
@@ -124,6 +132,15 @@ const App: React.FC = () => {
         const user = await getCurrentUser();
         if (user?.id) {
             const profile = await getUserProfile(user.id);
+
+            if (isAccountBanned(profile)) {
+                await signOut();
+                setUserProfile(null);
+                setAuthToast('Your account has been banned.');
+                setTimeout(() => setAuthToast(null), 3500);
+                return;
+            }
+
             setUserProfile(profile || {
                 id: user.id,
                 email: user.email || '',
@@ -261,6 +278,8 @@ const App: React.FC = () => {
         const productId = params.get('product_id');
         const orderId = params.get('order_id');
         const vendorId = params.get('vendorId');
+        const chatId = params.get('chat_id');
+        const viewDeal = params.get('view') === 'deals';
 
         if (view === 'platform-reviews') {
             const loadReviews = async () => {
@@ -271,6 +290,12 @@ const App: React.FC = () => {
             loadReviews();
         } else if (view === 'vendor-store' && vendorId) {
             setSelectedVendorId(vendorId);
+        } else if (chatId) {
+            setIsAccountOpen(false);
+            setActiveAccountSection('messages');
+            setActiveBuyerConversationId(chatId === 'inbox' ? null : chatId);
+        } else if (viewDeal) {
+            setActiveTab('deals');
         } else if (productId) {
             // Deep link to product
             const loadDeepLinkProduct = async () => {
@@ -288,7 +313,7 @@ const App: React.FC = () => {
             // Deep link to order details (via Account > Orders)
             // We set the active account section to orders.
             // Ideally we would also scroll to the order or open it, but switching view is a good start.
-            setIsAccountOpen(true);
+            setIsAccountOpen(false);
             setActiveAccountSection('orders');
         }
     }, []);
@@ -370,12 +395,13 @@ const App: React.FC = () => {
                 console.error('Error handling in-app deep link (product):', err);
             }
         } else if (type === 'order') {
-            setIsAccountOpen(true);
+            setIsAccountOpen(false);
             setActiveAccountSection('orders');
             // If we supported expanding order details directly, we would do it here.
         } else if (type === 'chat') {
-            setIsAccountOpen(true);
+            setIsAccountOpen(false);
             setActiveAccountSection('messages');
+            setActiveBuyerConversationId(id === 'inbox' ? null : id);
         }
     }, []);
 
@@ -385,13 +411,13 @@ const App: React.FC = () => {
             if (!action?.target) return;
 
             if (action.target === 'wishlist') {
-                setIsAccountOpen(true);
+                setIsAccountOpen(false);
                 setActiveAccountSection('wishlist');
                 return;
             }
 
             if (action.target === 'coupons') {
-                setIsAccountOpen(true);
+                setIsAccountOpen(false);
                 setActiveAccountSection('coupons');
                 return;
             }
@@ -417,8 +443,11 @@ const App: React.FC = () => {
             }
 
             if (action.target === 'chat') {
-                setIsAccountOpen(true);
+                setIsAccountOpen(false);
                 setActiveAccountSection('messages');
+                if (action.id && action.id !== 'inbox') {
+                    setActiveBuyerConversationId(action.id);
+                }
                 return;
             }
 
@@ -431,7 +460,7 @@ const App: React.FC = () => {
             }
 
             if (action.target === 'order') {
-                setIsAccountOpen(true);
+                setIsAccountOpen(false);
                 setActiveAccountSection('orders');
                 return;
             }
@@ -446,6 +475,11 @@ const App: React.FC = () => {
         return () => window.removeEventListener('juax:notification-action', handler as EventListener);
     }, [handleInAppDeepLink]);
 
+    const isDeliveredLike = (status?: string) => {
+        const normalized = status?.toLowerCase();
+        return normalized === 'delivered' || normalized === 'completed';
+    };
+
     const handleConfirmReceipt = async (orderId: string) => {
         if (!window.confirm('Are you sure you have received your parcel? This will release funds to the seller.')) return;
 
@@ -455,9 +489,20 @@ const App: React.FC = () => {
             if (res.success) {
                 // Refresh data immediately
                 refreshUserProfile();
-                if (userProfile?.id) {
-                    const updatedOrders = await fetchBuyerOrders(userProfile.id);
+                {
+                    const updatedOrders = await fetchBuyerOrders(userProfile?.id ?? null);
                     setRecentOrders(updatedOrders);
+
+                    // Web parity: remind buyer to rate & review right after confirming delivery.
+                    alert('Delivery confirmed! Please rate and review your items.');
+
+                    // Modern assist: offer to open the review sheet immediately.
+                    const updated = updatedOrders.find(o => o.id === orderId);
+                    const firstProductId = updated?.items?.[0]?.product_id;
+                    if (firstProductId && window.confirm('Would you like to rate your purchase now?')) {
+                        setReviewingProductId(firstProductId);
+                        setReviewingOrderId(orderId);
+                    }
                 }
             } else {
                 alert(res.message || 'Failed to confirm receipt.');
@@ -469,6 +514,21 @@ const App: React.FC = () => {
             setConfirmingOrderId(null);
         }
     };
+
+    // Load orders when the Orders section is opened (supports both authenticated and guest sessions).
+    useEffect(() => {
+        if (activeAccountSection !== 'orders') return;
+
+        let cancelled = false;
+        (async () => {
+            const orders = await fetchBuyerOrders(userProfile?.id ?? null);
+            if (!cancelled) setRecentOrders(orders);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeAccountSection, userProfile?.id]);
 
     const handleRaiseDispute = async () => {
         if (!disputingOrderId) return;
@@ -502,180 +562,315 @@ const App: React.FC = () => {
             case 'orders': {
                 return (
                     <AccountSection title="Your orders" description="Track and manage your recent purchases" onBack={() => setActiveAccountSection(null)}>
-                        <div className="flex flex-col gap-3">
-                            {recentOrders.length > 0 ? (
-                                recentOrders.map((order, idx) => {
-                                    const shippedDate = order.shipped_at ? new Date(order.shipped_at) : null;
-                                    const diffDays = shippedDate ? (new Date().getTime() - shippedDate.getTime()) / (1000 * 3600 * 24) : 0;
-                                    const canDispute = order.status === 'shipped' && diffDays >= 5;
+                        <div className="mb-3">
+                            <button
+                                onClick={() => {
+                                    setTrackOrderPrefill({ orderId: '', email: userProfile?.email || '' });
+                                    setIsTrackOrderOpen(true);
+                                }}
+                                className="w-full py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl font-bold text-[11px] uppercase tracking-widest active:scale-95 transition-all"
+                            >
+                                Track Order
+                            </button>
+                        </div>
 
-                                    return (
-                                        <div key={order.id || idx} className="flex gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
-                                            <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0">
-                                                {order.items?.[0]?.image_url ? (
-                                                    <img src={order.items[0].image_url} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
-                                                        <span className="material-icons text-gray-400">inventory_2</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="text-sm font-semibold text-black dark:text-white truncate">Order #{order.id.slice(0, 8)}</div>
-                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${order.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
-                                                        order.status === 'shipped' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                                                        }`}>
-                                                        {order.status?.toUpperCase()}
-                                                    </span>
+                        {/* Order Filters */}
+                        <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
+                            {['all', 'pending', 'shipped', 'delivered'].map((filter) => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setActiveOrderFilter(filter as any)}
+                                    className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeOrderFilter === filter
+                                            ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
+                                            : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+                                        }`}
+                                >
+                                    {filter}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            {recentOrders
+                                .filter(order => {
+                                    if (activeOrderFilter === 'all') return true;
+                                    const status = order.status?.toLowerCase() || '';
+                                    if (activeOrderFilter === 'pending') {
+                                        return status === 'pending' || status === 'processing' || status === 'confirmed';
+                                    }
+                                    if (activeOrderFilter === 'shipped') {
+                                        return status === 'shipped';
+                                    }
+                                    if (activeOrderFilter === 'delivered') {
+                                        return status === 'delivered' || status === 'completed';
+                                    }
+                                    return true;
+                                })
+                                .length > 0 ? (
+                                recentOrders
+                                    .filter(order => {
+                                        if (activeOrderFilter === 'all') return true;
+                                        const status = order.status?.toLowerCase() || '';
+                                        if (activeOrderFilter === 'pending') {
+                                            return status === 'pending' || status === 'processing' || status === 'confirmed';
+                                        }
+                                        if (activeOrderFilter === 'shipped') {
+                                            return status === 'shipped';
+                                        }
+                                        if (activeOrderFilter === 'delivered') {
+                                            return status === 'delivered' || status === 'completed';
+                                        }
+                                        return true;
+                                    })
+                                    .map((order, idx) => {
+                                        const shippedDate = order.shipped_at ? new Date(order.shipped_at) : null;
+                                        const diffDays = shippedDate ? (new Date().getTime() - shippedDate.getTime()) / (1000 * 3600 * 24) : 0;
+                                        const canDispute = order.status === 'shipped' && diffDays >= 5;
+
+                                        return (
+                                            <div key={order.id || idx} className="flex gap-3 p-3 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+                                                <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0">
+                                                    {order.items?.[0]?.image_url ? (
+                                                        <img src={order.items[0].image_url} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
+                                                            <span className="material-icons text-gray-400">inventory_2</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                                                    {order.items?.[0]?.product_title || 'Order items'}
-                                                    {order.items && order.items.length > 1 && ` +${order.items.length - 1} more`}
-                                                </div>
-                                                <div className="flex justify-between items-end mt-1">
-                                                    <div className="text-sm font-bold text-price-red">
-                                                        <OrderPrice amount={order.total_amount} currency={order.currency || 'USD'} />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="text-sm font-semibold text-black dark:text-white truncate">Order #{order.id.slice(0, 8)}</div>
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${order.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
+                                                            order.status === 'shipped' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                                                            }`}>
+                                                            {order.status?.toUpperCase()}
+                                                        </span>
                                                     </div>
-                                                    {order.status === 'delivered' && (
+                                                    <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                                        {order.items?.[0]?.product_title || 'Order items'}
+                                                        {order.items && order.items.length > 1 && ` +${order.items.length - 1} more`}
+                                                    </div>
+                                                    <div className="flex justify-between items-end mt-1">
+                                                        <div className="text-sm font-bold text-price-red">
+                                                            <OrderPrice amount={order.total_amount} currency={order.currency || 'USD'} />
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setTrackOrderPrefill({
+                                                                        orderId: order.id,
+                                                                        email: userProfile?.email || order.customer_email || ''
+                                                                    });
+                                                                    setIsTrackOrderOpen(true);
+                                                                }}
+                                                                className="px-3 py-1 bg-orange-50 text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-orange-100"
+                                                            >
+                                                                Track
+                                                            </button>
+
+                                                            {isDeliveredLike(order.status) && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        console.log('Review Clicked:', { orderId: order.id, items: order.items });
+                                                                        const pid = order.items?.[0]?.product_id;
+                                                                        console.log('Target Product ID:', pid);
+                                                                        if (!pid) alert('Error: Product ID missing from order item. ' + JSON.stringify(order.items?.[0] || {}));
+                                                                        setReviewingProductId(pid || null);
+                                                                        setReviewingOrderId(order.id);
+                                                                    }}
+                                                                    className="px-3 py-1 bg-orange-50 text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-orange-100"
+                                                                >
+                                                                    {order.items && order.items.length > 1 ? 'Review Items' : 'Review'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {(order.status?.toLowerCase() === 'shipped' || isDeliveredLike(order.status)) && (
                                                         <button
-                                                            onClick={() => {
-                                                                console.log('Review Clicked:', { orderId: order.id, items: order.items });
-                                                                const pid = order.items?.[0]?.product_id;
-                                                                console.log('Target Product ID:', pid);
-                                                                if (!pid) alert('Error: Product ID missing from order item. ' + JSON.stringify(order.items?.[0] || {}));
-                                                                setReviewingProductId(pid || null);
-                                                                setReviewingOrderId(order.id);
-                                                            }}
-                                                            className="px-3 py-1 bg-orange-50 text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-orange-100"
+                                                            onClick={() =>
+                                                                setExpandedTrackingOrderId(prev => (prev === order.id ? null : order.id))
+                                                            }
+                                                            className="mt-3 flex items-center gap-2 text-orange-600 hover:text-orange-700 transition-colors"
                                                         >
-                                                            {order.items && order.items.length > 1 ? 'Review Items' : 'Review'}
+                                                            <span className="material-icons text-base">local_shipping</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em]">
+                                                                {expandedTrackingOrderId === order.id ? 'Close Details' : 'Track Order'}
+                                                            </span>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Confirm Delivery button for ALL shipped orders */}
+                                                    {order.status === 'shipped' && !(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && (
+                                                        <div className="mt-4 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 dark:from-emerald-900/20 dark:via-green-900/20 dark:to-teal-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800 overflow-hidden shadow-lg p-4">
+                                                            <div className="flex items-center gap-3 mb-3">
+                                                                <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center">
+                                                                    <span className="material-icons text-white text-lg">local_shipping</span>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-emerald-800 dark:text-emerald-200 font-bold text-sm">Order Shipped</p>
+                                                                    <p className="text-emerald-600 dark:text-emerald-400 text-[10px]">Confirm when you receive your package</p>
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleConfirmReceipt(order.id)}
+                                                                disabled={confirmingOrderId === order.id}
+                                                                className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
+                                                            >
+                                                                {confirmingOrderId === order.id ? 'Confirming...' : '✓ I Have Received My Order'}
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Local parcel collection section with OTP */}
+                                                    {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && order.status === 'shipped' && (
+                                                        <div className="mt-4 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-orange-900/20 dark:via-amber-900/20 dark:to-yellow-900/20 rounded-2xl border border-orange-200 dark:border-orange-800 overflow-hidden shadow-lg">
+                                                            <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 flex items-center gap-3">
+                                                                <div className="w-9 h-9 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+                                                                    <span className="material-icons text-white text-lg">directions_bus</span>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-white font-bold text-xs">📦 Parcel Ready for Collection</p>
+                                                                    <p className="text-orange-100 text-[10px]">Show the OTP code to collect</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="p-4 space-y-3">
+                                                                <div className="bg-white dark:bg-black/20 rounded-xl p-4 border-2 border-dashed border-orange-200 dark:border-orange-700 text-center">
+                                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">
+                                                                        Collection Code (OTP)
+                                                                    </p>
+                                                                    <div className="flex items-center justify-center gap-1.5">
+                                                                        {(order.delivery_otp || '----').split('').map((digit, i) => (
+                                                                            <span key={i} className="w-11 h-12 bg-gradient-to-b from-orange-500 to-orange-600 text-white rounded-lg flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/30">
+                                                                                {digit}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium mt-2">
+                                                                        🔐 Share only with parcel agent
+                                                                    </p>
+                                                                </div>
+
+                                                                {showQRCodeOrderId === order.id ? (
+                                                                    <div className="flex flex-col items-center animate-in zoom-in-95 duration-300">
+                                                                        <div className="p-2 bg-white rounded-xl border border-orange-100 shadow-xl mb-2">
+                                                                            <img
+                                                                                src={getOrderQRCodeURL(order.delivery_otp) || ''}
+                                                                                alt="Collection QR Code"
+                                                                                className="w-40 h-40"
+                                                                            />
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => setShowQRCodeOrderId(null)}
+                                                                            className="text-orange-600 font-bold text-[10px] uppercase tracking-widest"
+                                                                        >
+                                                                            Hide QR Code
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex flex-col gap-2">
+                                                                        <button
+                                                                            onClick={() => handleConfirmReceipt(order.id)}
+                                                                            disabled={confirmingOrderId === order.id}
+                                                                            className="w-full py-3 bg-orange-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-orange-600/30 active:scale-95 transition-all"
+                                                                        >
+                                                                            {confirmingOrderId === order.id ? 'Confirming...' : 'I Have Received My Parcel'}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setShowQRCodeOrderId(order.id)}
+                                                                            className="w-full py-3 bg-white border border-orange-500 text-orange-600 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all"
+                                                                        >
+                                                                            Show Collection QR
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="space-y-2">
+                                                                    <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="material-icons text-gray-400 text-sm">local_shipping</span>
+                                                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Service</span>
+                                                                        </div>
+                                                                        <p className="text-xs font-bold text-gray-900 dark:text-white">
+                                                                            {order.parcel_details?.company || order.carrier || 'Standard Parcel'}
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="material-icons text-gray-400 text-sm">confirmation_number</span>
+                                                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Waybill</span>
+                                                                        </div>
+                                                                        <p className="text-xs font-bold text-gray-900 dark:text-white text-right max-w-[55%] truncate">
+                                                                            {order.parcel_details?.waybill_number || order.tracking_number || 'N/A'}
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="material-icons text-gray-400 text-sm">location_on</span>
+                                                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Pickup</span>
+                                                                        </div>
+                                                                        <p className="text-xs font-bold text-gray-900 dark:text-white text-right max-w-[50%]">
+                                                                            {order.parcel_details?.collection_point || order.shipping_additional_info || 'Contact carrier'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Transport Fee + Seller Payment Instructions (matches web BuyerOrdersView) */}
+                                                                {(order.fulfillment_type === 'local_parcel' ||
+                                                                    order.shipping_method === 'local_parcel' ||
+                                                                    order.logistics_meta?.provider === 'local_parcel' ||
+                                                                    order.logistics_meta?.confirmed_transport_fee !== undefined) && (
+                                                                        <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-4 text-white shadow-lg shadow-orange-500/20">
+                                                                            <div className="flex items-center justify-between">
+                                                                                <div>
+                                                                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-100">Transport Fee</p>
+                                                                                    <p className="text-2xl font-black mt-1">
+                                                                                        {typeof order.logistics_meta?.confirmed_transport_fee === 'number' && order.logistics_meta.confirmed_transport_fee > 0
+                                                                                            ? `KSh ${order.logistics_meta.confirmed_transport_fee.toLocaleString()}`
+                                                                                            : 'Fee TBD'}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-orange-100 font-bold mt-1">Payable on collection</p>
+                                                                                </div>
+                                                                                <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
+                                                                                    <span className="material-icons text-white text-xl">payments</span>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {order.logistics_meta?.payment_details && (
+                                                                                <div className="mt-3 bg-white/10 backdrop-blur rounded-xl p-3 border border-white/20">
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        <span className="material-icons text-white text-sm">account_balance_wallet</span>
+                                                                                        <span className="text-[10px] font-black uppercase tracking-wider text-orange-100">Payment Info</span>
+                                                                                    </div>
+                                                                                    <p className="text-sm font-bold text-white">{order.logistics_meta.payment_details}</p>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {expandedTrackingOrderId === order.id && (
+                                                        <OrderTrackingTimeline order={order} />
+                                                    )}
+
+                                                    {canDispute && (
+                                                        <button
+                                                            onClick={() => setDisputingOrderId(order.id)}
+                                                            className="mt-3 w-full py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-[10px] uppercase tracking-widest border border-rose-100 shadow-sm active:scale-95 transition-all text-center"
+                                                        >
+                                                            Dispute: Not Received
                                                         </button>
                                                     )}
                                                 </div>
-
-                                                {/* Confirm Delivery button for ALL shipped orders */}
-                                                {order.status === 'shipped' && !(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && (
-                                                    <div className="mt-4 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 dark:from-emerald-900/20 dark:via-green-900/20 dark:to-teal-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800 overflow-hidden shadow-lg p-4">
-                                                        <div className="flex items-center gap-3 mb-3">
-                                                            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center">
-                                                                <span className="material-icons text-white text-lg">local_shipping</span>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-emerald-800 dark:text-emerald-200 font-bold text-sm">Order Shipped</p>
-                                                                <p className="text-emerald-600 dark:text-emerald-400 text-[10px]">Confirm when you receive your package</p>
-                                                            </div>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => handleConfirmReceipt(order.id)}
-                                                            disabled={confirmingOrderId === order.id}
-                                                            className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
-                                                        >
-                                                            {confirmingOrderId === order.id ? 'Confirming...' : '✓ I Have Received My Order'}
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {/* Local parcel collection section with OTP */}
-                                                {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && order.status === 'shipped' && (
-                                                    <div className="mt-4 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-orange-900/20 dark:via-amber-900/20 dark:to-yellow-900/20 rounded-2xl border border-orange-200 dark:border-orange-800 overflow-hidden shadow-lg">
-                                                        <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 flex items-center gap-3">
-                                                            <div className="w-9 h-9 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-                                                                <span className="material-icons text-white text-lg">directions_bus</span>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-white font-bold text-xs">📦 Parcel Ready for Collection</p>
-                                                                <p className="text-orange-100 text-[10px]">Show the OTP code to collect</p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="p-4 space-y-3">
-                                                            <div className="bg-white dark:bg-black/20 rounded-xl p-4 border-2 border-dashed border-orange-200 dark:border-orange-700 text-center">
-                                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">
-                                                                    Collection Code (OTP)
-                                                                </p>
-                                                                <div className="flex items-center justify-center gap-1.5">
-                                                                    {(order.delivery_otp || '----').split('').map((digit, i) => (
-                                                                        <span key={i} className="w-11 h-12 bg-gradient-to-b from-orange-500 to-orange-600 text-white rounded-lg flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/30">
-                                                                            {digit}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                                <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium mt-2">
-                                                                    🔐 Share only with parcel agent
-                                                                </p>
-                                                            </div>
-
-                                                            {showQRCodeOrderId === order.id ? (
-                                                                <div className="flex flex-col items-center animate-in zoom-in-95 duration-300">
-                                                                    <div className="p-2 bg-white rounded-xl border border-orange-100 shadow-xl mb-2">
-                                                                        <img
-                                                                            src={getOrderQRCodeURL(order.delivery_otp) || ''}
-                                                                            alt="Collection QR Code"
-                                                                            className="w-40 h-40"
-                                                                        />
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={() => setShowQRCodeOrderId(null)}
-                                                                        className="text-orange-600 font-bold text-[10px] uppercase tracking-widest"
-                                                                    >
-                                                                        Hide QR Code
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex flex-col gap-2">
-                                                                    <button
-                                                                        onClick={() => handleConfirmReceipt(order.id)}
-                                                                        disabled={confirmingOrderId === order.id}
-                                                                        className="w-full py-3 bg-orange-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-orange-600/30 active:scale-95 transition-all"
-                                                                    >
-                                                                        {confirmingOrderId === order.id ? 'Confirming...' : 'I Have Received My Parcel'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => setShowQRCodeOrderId(order.id)}
-                                                                        className="w-full py-3 bg-white border border-orange-500 text-orange-600 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all"
-                                                                    >
-                                                                        Show Collection QR
-                                                                    </button>
-                                                                </div>
-                                                            )}
-
-                                                            <div className="space-y-2">
-                                                                <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="material-icons text-gray-400 text-sm">local_shipping</span>
-                                                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Service</span>
-                                                                    </div>
-                                                                    <p className="text-xs font-bold text-gray-900 dark:text-white">
-                                                                        {order.parcel_details?.company || order.carrier || 'Standard Parcel'}
-                                                                    </p>
-                                                                </div>
-                                                                <div className="bg-white dark:bg-black/20 rounded-lg p-3 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="material-icons text-gray-400 text-sm">location_on</span>
-                                                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Pickup</span>
-                                                                    </div>
-                                                                    <p className="text-xs font-bold text-gray-900 dark:text-white text-right max-w-[50%]">
-                                                                        {order.parcel_details?.collection_point || order.shipping_additional_info || 'Contact carrier'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {canDispute && (
-                                                    <button
-                                                        onClick={() => setDisputingOrderId(order.id)}
-                                                        className="mt-3 w-full py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-[10px] uppercase tracking-widest border border-rose-100 shadow-sm active:scale-95 transition-all text-center"
-                                                    >
-                                                        Dispute: Not Received
-                                                    </button>
-                                                )}
                                             </div>
-                                        </div>
-                                    );
-                                })
+                                        );
+                                    })
                             ) : (
                                 <div className="p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
                                     <span className="material-icons text-gray-300 text-4xl mb-2">local_shipping</span>
@@ -998,9 +1193,11 @@ const App: React.FC = () => {
                         userId={userProfile.id}
                         onBack={() => {
                             setActiveAccountSection(null);
+                            setActiveBuyerConversationId(null);
                             // Refresh count when coming back
                             getSellerUnreadCount(userProfile.id).then(setBuyerMessageCount);
                         }}
+                        activeConversationId={activeBuyerConversationId}
                     />
                 );
             }
@@ -1422,6 +1619,7 @@ const App: React.FC = () => {
                             <BuyerMessagesView
                                 userId={userProfile.id}
                                 onBack={() => setActiveTab('home')}
+                                activeConversationId={activeBuyerConversationId}
                             />
                         </div>
                     );
@@ -1509,6 +1707,14 @@ const App: React.FC = () => {
                 }}
                 onDeepLink={handleInAppDeepLink}
             />
+
+            {isTrackOrderOpen && (
+                <TrackOrderSheet
+                    onClose={() => setIsTrackOrderOpen(false)}
+                    initialOrderId={trackOrderPrefill.orderId || ''}
+                    initialEmail={trackOrderPrefill.email || userProfile?.email || ''}
+                />
+            )}
             {/* Category View Overlay - Full Screen */}
             {categoryViewOpen && (
                 <div className="absolute inset-0 z-50 bg-background-light dark:bg-background-dark flex flex-col">
@@ -1806,6 +2012,29 @@ const App: React.FC = () => {
                             className="bg-white text-emerald-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all shadow-sm"
                         >
                             View Cart
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Auth Toast Notification */}
+            {authToast && (
+                <div className="fixed bottom-24 left-4 right-4 z-[100] animate-in slide-in-from-bottom-full duration-300">
+                    <div className="bg-red-600 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between border border-red-500/50 backdrop-blur-md">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                                <span className="material-icons text-lg">block</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Account</span>
+                                <span className="text-xs font-bold truncate max-w-[220px]">{authToast}</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setAuthToast(null)}
+                            className="bg-white text-red-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all shadow-sm"
+                        >
+                            Dismiss
                         </button>
                     </div>
                 </div>

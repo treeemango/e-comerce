@@ -18,7 +18,11 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
     onOrderUpdated
 }) => {
     const [showTrackingInput, setShowTrackingInput] = useState(false);
-    const [fulfillmentMethod, setFulfillmentMethod] = useState<'courier' | 'parcel'>('courier');
+    const [fulfillmentMethod, setFulfillmentMethod] = useState<'courier' | 'parcel'>(() => {
+        if (order.logistics_meta?.provider === 'local_parcel') return 'parcel';
+        if (order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') return 'parcel';
+        return 'courier';
+    });
 
     // Courier Fields
     const [trackingNumber, setTrackingNumber] = useState('');
@@ -27,6 +31,8 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
     const [parcelService, setParcelService] = useState('');
     const [waybillNo, setWaybillNo] = useState('');
     const [collectionPoint, setCollectionPoint] = useState('');
+    const [transportFee, setTransportFee] = useState('');
+    const [paymentDetails, setPaymentDetails] = useState('');
 
     // OTP Field for Verification
     const [otpCode, setOtpCode] = useState('');
@@ -69,8 +75,14 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                     setIsProcessing(false);
                     return;
                 }
-                console.log('Calling fulfillParcelOrder with:', { orderId: order.id, parcelService, waybillNo, collectionPoint });
-                const result = await fulfillParcelOrder(order.id, parcelService, waybillNo, collectionPoint);
+                const feeNum = parseFloat(transportFee);
+                if (!transportFee || Number.isNaN(feeNum) || feeNum <= 0) {
+                    alert('Please enter a valid transport fee amount (e.g. 500).');
+                    setIsProcessing(false);
+                    return;
+                }
+                console.log('Calling fulfillParcelOrder with:', { orderId: order.id, parcelService, waybillNo, collectionPoint, transportFee: feeNum, paymentDetails });
+                const result = await fulfillParcelOrder(order.id, parcelService, waybillNo, collectionPoint, feeNum, paymentDetails);
                 console.log('fulfillParcelOrder result:', result);
                 if (result.success) {
                     alert(`✅ Parcel shipped! Mutual Protection Enabled.\n\nThe buyer will receive a secret 4-digit code in their app for secure collection.`);
@@ -189,6 +201,7 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
     const currency = order.items?.[0]?.currency || 'USD';
 
     const isLocalParcel = order.fulfillment_type === 'local_parcel' ||
+        order.logistics_meta?.provider === 'local_parcel' ||
         order.shipping_method?.toLowerCase().includes('parcel') ||
         order.carrier?.toLowerCase().includes('parcel') ||
         !!order.parcel_details;
@@ -278,6 +291,35 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                             </div>
                         </div>
                     </div>
+
+                    {/* Buyer's Selection Highlight */}
+                    {order.logistics_meta && (
+                        <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 animate-in fade-in duration-500">
+                            <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                                    <span className="material-icons text-lg">local_shipping</span>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-[10px] font-black text-orange-900 uppercase tracking-widest leading-none mb-1.5">Buyer's Selected Method</h3>
+                                    <p className="text-sm font-bold text-gray-900">
+                                        {order.logistics_meta.provider === 'local_parcel'
+                                            ? 'Local Parcel (Station to Station)'
+                                            : `${order.logistics_meta.provider.toUpperCase()} - ${order.logistics_meta.service_id}`}
+                                    </p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">
+                                        {order.logistics_meta.provider === 'local_parcel'
+                                            ? 'Fee paid by buyer on collection. Contact buyer for amount.'
+                                            : `Shipping Fee: ${formatPrice(order.logistics_meta.cost || 0, currency)}`}
+                                    </p>
+                                </div>
+                                {order.logistics_meta.provider === 'local_parcel' && (
+                                    <div className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tight">
+                                        Manual
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Items Section */}
                     <div>
@@ -448,6 +490,33 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                                                         placeholder="Nairobi Office..."
                                                         className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg text-xs"
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase text-orange-900 mb-1">Transport Fee (KSh)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={transportFee}
+                                                        onChange={(e) => setTransportFee(e.target.value)}
+                                                        placeholder="e.g. 500"
+                                                        className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg text-xs"
+                                                    />
+                                                    <p className="text-[8px] text-orange-700 mt-1 italic">
+                                                        Required. Buyer pays this on collection.
+                                                    </p>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase text-orange-900 mb-1">Payment Details (Optional)</label>
+                                                    <input
+                                                        type="text"
+                                                        value={paymentDetails}
+                                                        onChange={(e) => setPaymentDetails(e.target.value)}
+                                                        placeholder="e.g. M-Pesa Till 123456 or Pay to driver"
+                                                        className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg text-xs"
+                                                    />
+                                                    <p className="text-[8px] text-orange-700 mt-1 italic">
+                                                        Shown to the buyer in their order for collection.
+                                                    </p>
                                                 </div>
                                             </div>
                                         )}
@@ -622,10 +691,9 @@ export const SellerOrderDetailsSheet: React.FC<SellerOrderDetailsSheetProps> = (
                         Close
                     </button>
                 </div>
+                {/* Print-only Receipt Component */}
+                <BuyerReceipt order={order} />
             </div>
-
-            {/* Print-only Receipt Component */}
-            <BuyerReceipt order={order} />
         </div>
     );
 };

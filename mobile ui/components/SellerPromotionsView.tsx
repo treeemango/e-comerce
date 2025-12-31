@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { fetchCoupons, fetchAutomaticDiscounts } from '../../lib/api';
+import { fetchCoupons, fetchAutomaticDiscounts, updateCoupon, deleteCoupon, updateAutomaticDiscount, deleteAutomaticDiscount } from '../../lib/api';
 import { PromoCoupon, AutomaticDiscount } from '../../types';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { formatCurrency } from '../../lib/utils';
+import { getSellerCurrency } from '../../lib/seller-currency';
 
 interface SellerPromotionsViewProps {
     sellerId: string;
+    onBack: () => void;
     onCreateCoupon: () => void;
-    onCreateAutomaticDiscount?: () => void;
+    onCreateAutomaticDiscount: () => void;
 }
 
 function cn(...inputs: (string | undefined | null | false)[]) {
@@ -16,6 +19,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 export const SellerPromotionsView: React.FC<SellerPromotionsViewProps> = ({
     sellerId,
+    onBack,
     onCreateCoupon,
     onCreateAutomaticDiscount
 }) => {
@@ -24,27 +28,76 @@ export const SellerPromotionsView: React.FC<SellerPromotionsViewProps> = ({
     const [isLoading, setIsLoading] = useState(true);
     const [mainTab, setMainTab] = useState<'coupons' | 'automatic'>('coupons');
     const [couponTab, setCouponTab] = useState<'all' | 'ongoing' | 'upcoming' | 'expired'>('all');
+    const [sellerCurrency, setSellerCurrency] = useState<string>('USD');
 
     useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            try {
-                if (sellerId) {
-                    const [couponData, autoData] = await Promise.all([
-                        fetchCoupons(sellerId),
-                        fetchAutomaticDiscounts(sellerId)
-                    ]);
-                    setCoupons(couponData);
-                    setAutoDiscounts(autoData);
-                }
-            } catch (e) {
-                console.error("Failed to load promotions", e);
-            } finally {
-                setIsLoading(false);
-            }
+        let cancelled = false;
+        const loadCurrency = async () => {
+            if (!sellerId) return;
+            const currency = await getSellerCurrency(sellerId);
+            if (!cancelled) setSellerCurrency(currency || 'USD');
         };
+        loadCurrency();
+        return () => {
+            cancelled = true;
+        };
+    }, [sellerId]);
+
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            if (sellerId) {
+                const [couponData, autoData] = await Promise.all([
+                    fetchCoupons(sellerId),
+                    fetchAutomaticDiscounts(sellerId)
+                ]);
+                setCoupons(couponData);
+                setAutoDiscounts(autoData);
+            }
+        } catch (e) {
+            console.error("Failed to load promotions", e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
         loadData();
     }, [sellerId]);
+
+    const handleToggleCoupon = async (coupon: PromoCoupon) => {
+        const newStatus = coupon.status === 'Deactivated' ? 'Ongoing' : 'Deactivated';
+        const success = await updateCoupon(coupon.id, { status: newStatus });
+        if (success) {
+            loadData();
+        }
+    };
+
+    const handleDeleteCoupon = async (id: string) => {
+        if (window.confirm('Are you sure you want to delete this coupon?')) {
+            const success = await deleteCoupon(id);
+            if (success) {
+                loadData();
+            }
+        }
+    };
+
+    const handleToggleAutoDiscount = async (discount: AutomaticDiscount) => {
+        const newStatus = discount.status === 'deactivated' ? 'active' : 'deactivated';
+        const success = await updateAutomaticDiscount(discount.id, { status: newStatus });
+        if (success) {
+            loadData();
+        }
+    };
+
+    const handleDeleteAutoDiscount = async (id: string) => {
+        if (window.confirm('Are you sure you want to delete this automatic discount?')) {
+            const success = await deleteAutomaticDiscount(id);
+            if (success) {
+                loadData();
+            }
+        }
+    };
 
     const filteredCoupons = coupons.filter(c => {
         if (couponTab === 'all') return true;
@@ -55,7 +108,15 @@ export const SellerPromotionsView: React.FC<SellerPromotionsViewProps> = ({
         <div className="bg-gray-50 min-h-full pb-20">
             {/* Header */}
             <div className="bg-white px-4 pt-4 pb-0 sticky top-0 z-10">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-3 mb-4">
+                    <button
+                        onClick={onBack}
+                        className="p-2 -ml-2 text-gray-700"
+                        aria-label="Back"
+                        type="button"
+                    >
+                        <span className="material-icons">arrow_back</span>
+                    </button>
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">Promotions</h2>
                         <p className="text-xs text-gray-500 mt-1">Boost your sales with deals</p>
@@ -130,10 +191,33 @@ export const SellerPromotionsView: React.FC<SellerPromotionsViewProps> = ({
                                         {coupon.status}
                                     </div>
 
-                                    <div className="pr-12">
-                                        <h3 className="font-bold text-gray-900 text-lg">{coupon.name}</h3>
-                                        <div className="text-xs text-gray-500 font-mono mt-0.5">
-                                            Code: <span className="text-gray-900 bg-gray-100 px-1 rounded">{coupon.code || 'AUTO'}</span>
+                                    <div className="flex justify-between items-start pr-4">
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-gray-900 text-lg">{coupon.name}</h3>
+                                            <div className="text-xs text-gray-500 font-mono mt-0.5">
+                                                Code: <span className="text-gray-900 bg-gray-100 px-1 rounded">{coupon.code || 'AUTO'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => handleToggleCoupon(coupon)}
+                                                className={cn(
+                                                    "p-1.5 rounded-lg transition-colors",
+                                                    coupon.status === 'Deactivated' ? "text-green-600 hover:bg-green-50" : "text-amber-600 hover:bg-amber-50"
+                                                )}
+                                                title={coupon.status === 'Deactivated' ? 'Activate' : 'Deactivate'}
+                                            >
+                                                <span className="material-icons text-lg">
+                                                    {coupon.status === 'Deactivated' ? 'play_arrow' : 'pause'}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteCoupon(coupon.id)}
+                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Delete"
+                                            >
+                                                <span className="material-icons text-lg">delete_outline</span>
+                                            </button>
                                         </div>
                                     </div>
 
@@ -141,7 +225,7 @@ export const SellerPromotionsView: React.FC<SellerPromotionsViewProps> = ({
                                         <div className="flex flex-col">
                                             <span className="text-xs text-gray-400">Discount</span>
                                             <span className="font-bold text-orange-600 text-base">
-                                                {coupon.discount_amount ? `$${coupon.discount_amount}` : `${coupon.discount_percentage}%`} OFF
+                                                {coupon.discount_amount ? formatCurrency(coupon.discount_amount, sellerCurrency) : `${coupon.discount_percentage}%`} OFF
                                             </span>
                                         </div>
                                         <div className="w-px h-8 bg-gray-100" />
@@ -207,18 +291,40 @@ export const SellerPromotionsView: React.FC<SellerPromotionsViewProps> = ({
                                                 ? `Buy ${discount.buy_qty} Get ${discount.get_qty} FREE`
                                                 : discount.discount_type === 'percentage'
                                                     ? `${discount.discount_value}% OFF`
-                                                    : `$${discount.discount_value} OFF`}
+                                                    : `${formatCurrency(discount.discount_value, sellerCurrency)} OFF`}
                                         </div>
                                         <div className="text-[10px] text-gray-400 mt-0.5">
-                                            {discount.min_requirement_value > 0 ? `Min. spend $${discount.min_requirement_value}` : 'No minimum'}
+                                            {discount.min_requirement_value > 0 ? `Min. spend ${formatCurrency(discount.min_requirement_value, sellerCurrency)}` : 'No minimum'}
                                         </div>
                                     </div>
                                 </div>
                                 <div className={cn(
                                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                    discount.status === 'active' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                                    discount.status === 'active' ? "bg-green-100 text-green-700" :
+                                        discount.status === 'deactivated' ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"
                                 )}>
                                     {discount.status}
+                                </div>
+                                <div className="flex gap-1 ml-2">
+                                    <button
+                                        onClick={() => handleToggleAutoDiscount(discount)}
+                                        className={cn(
+                                            "p-1.5 rounded-lg transition-colors",
+                                            discount.status === 'deactivated' ? "text-green-600 hover:bg-green-50" : "text-amber-600 hover:bg-amber-50"
+                                        )}
+                                        title={discount.status === 'deactivated' ? 'Activate' : 'Deactivate'}
+                                    >
+                                        <span className="material-icons text-lg">
+                                            {discount.status === 'deactivated' ? 'play_arrow' : 'pause'}
+                                        </span>
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteAutoDiscount(discount.id)}
+                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Delete"
+                                    >
+                                        <span className="material-icons text-lg">delete_outline</span>
+                                    </button>
                                 </div>
                             </div>
                         ))

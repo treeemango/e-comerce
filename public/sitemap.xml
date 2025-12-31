@@ -1,655 +1,654 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
-  
+
   <!-- Main Pages -->
   <url>
     <loc>https://juaexpress.com/</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
-  
+
   <url>
     <loc>https://juaexpress.com/five-star</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
-  </url>
-  
-  <url>
-    <loc>https://juaexpress.com/best-selling</loc>
-    <lastmod>2025-12-28</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>
-  
-  <!-- Static Pages -->
-  <url>
-    <loc>https://juaexpress.com/about</loc>
-    <lastmod>2025-12-28</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  
-  <url>
-    <loc>https://juaexpress.com/contact</loc>
-    <lastmod>2025-12-28</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  
-  <url>
-    <loc>https://juaexpress.com/help</loc>
-    <lastmod>2025-12-28</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  
-  <url>
-    <loc>https://juaexpress.com/seller-login</loc>
-    <lastmod>2025-12-28</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
   </url>
 
   <url>
+    <loc>https://juaexpress.com/best-selling</loc>
+    <lastmod>2025-12-30</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Static Pages -->
+  <url>
+    <loc>https://juaexpress.com/about</loc>
+    <lastmod>2025-12-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://juaexpress.com/contact</loc>
+    <lastmod>2025-12-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://juaexpress.com/help</loc>
+    <lastmod>2025-12-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://juaexpress.com/seller-login</loc>
+    <lastmod>2025-12-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://juaexpress.com/category/mobile-&-smart-phones</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/360-degree-digital-cameras</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tv-&-monitor-mounts</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/decor</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/medium-format-digital-cameras</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tools</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/multi-clamps</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/compact-digital-cameras</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/fresh-&-frozen-vegetables</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tool-sockets</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/marketing-&-advertising</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/fencing-training-aids</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/golf</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/gift-cards</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/armless-chaises</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/outdoor-benches</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tanning-beds</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/religious-veils</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tarot-cards</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/uncategorized</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/wedding-ceremony-supplies</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/jewelry-trays</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/drop-in-bathtubs</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/erotic-books</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/animals-&-pet-supplies</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/ammunition-reloading-presses</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/pet-bowl-stands</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/generator-accessories</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/kitchen-&-utility-sinks</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/welding-accessories</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/hourglasses</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/waste-management-services</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/property-management</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/vinyl</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/specialized-construction-services</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/carpentry</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/erotic-food-&-edibles</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/brass-knuckles</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/automotive-services</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/vehicle-inspection</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/automotive-electrical-services</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/car-repair-&-maintenance</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/car-security-&-safety</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/erotic-clothing</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/ammunition</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/weapons-&-weapon-accessories</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/weapon-grips</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/diving-&-snorkeling</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/sofa-accessories</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tennis-racket-grips-&-tape</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/erotic-magazines</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/erotic-videos</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/sex-toys-&-erotic-games</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/specialized-home-services</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/sparklers</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/weapon-rails</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/weapon-slings</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/staff-&-stick-weapons</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/throwing-stars</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/manufacturing</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/manicure-tool-sets</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/weekly-contact-lenses</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/electronic-dictionaries-&-translators</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/pillboxes</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/denture-adhesives</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/sports-mouthguards</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/cameras</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/serveware</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/vibration-meters</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/upholstered-benches</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/fish-&-aquatic-supplies</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/camera-lens-zoom-units</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/scopes</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/mature</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/hole-punches</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/canopy-beds</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/bunk-beds-&-bed-frames</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/portable-game-console-cases</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/wall-mounted-jewelry-organizers</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/gps-mounts</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/electronics</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/networking</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/wall-paneling</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/pin-type-meters</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/electric-diffusers</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/concrete-&-foundations</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/conference-phones</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/cleaning-patches</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/spears</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/tablet-computer-docks-&-stands</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/swords</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/diodes</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/rubber-ring-kits</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/music-cassette-tapes</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/bathtubs</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/coaching-&-officiating</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/surkhi-mortar</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/services</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/game-remotes</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://juaexpress.com/category/roofing-&-guttering</loc>
-    <lastmod>2025-12-28</lastmod>
+    <lastmod>2025-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -792,12 +791,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://juaexpress.com/product/3cc8144d-6408-4630-be8f-1f7c32c04cf0</loc>
-    <lastmod>2025-12-25</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://juaexpress.com/product/def86999-dfab-43a8-b080-2d3192766d46</loc>
     <lastmod>2025-12-12</lastmod>
     <changefreq>weekly</changefreq>
@@ -858,12 +851,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://juaexpress.com/product/636b0a28-351d-48f9-b019-99e12b6430fb</loc>
-    <lastmod>2025-12-25</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://juaexpress.com/product/6363af06-9357-4816-8169-7ea3f71f3248</loc>
     <lastmod>2025-12-12</lastmod>
     <changefreq>weekly</changefreq>
@@ -872,6 +859,12 @@
   <url>
     <loc>https://juaexpress.com/product/e2b18c95-4be5-4032-82e7-bb9305279604</loc>
     <lastmod>2025-12-12</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://juaexpress.com/product/3cc8144d-6408-4630-be8f-1f7c32c04cf0</loc>
+    <lastmod>2025-12-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -920,12 +913,6 @@
   <url>
     <loc>https://juaexpress.com/product/608fee0e-0e44-42fb-8557-c29398fc5ff7</loc>
     <lastmod>2025-12-24</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://juaexpress.com/product/45a82a82-8322-4596-8d53-6f9c9b5cfc95</loc>
-    <lastmod>2025-12-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -1032,12 +1019,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://juaexpress.com/product/3fe46b4f-af5d-4a59-9dbd-e64883b193a4</loc>
-    <lastmod>2025-12-24</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://juaexpress.com/product/6c3fe45e-7411-4445-840a-2726355d5dcf</loc>
     <lastmod>2025-12-27</lastmod>
     <changefreq>weekly</changefreq>
@@ -1058,6 +1039,30 @@
   <url>
     <loc>https://juaexpress.com/product/7792a555-78fb-441f-a3dd-7b1c81580793</loc>
     <lastmod>2025-12-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://juaexpress.com/product/9c027f12-cc41-42a1-aa9f-5d7e6ed7625d</loc>
+    <lastmod>2025-12-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://juaexpress.com/product/636b0a28-351d-48f9-b019-99e12b6430fb</loc>
+    <lastmod>2025-12-25</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://juaexpress.com/product/3fe46b4f-af5d-4a59-9dbd-e64883b193a4</loc>
+    <lastmod>2025-12-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://juaexpress.com/product/45a82a82-8322-4596-8d53-6f9c9b5cfc95</loc>
+    <lastmod>2025-12-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

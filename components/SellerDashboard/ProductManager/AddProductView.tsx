@@ -3,6 +3,7 @@ import { CreateProductPayload, ProductAttributeData, ProductVariantData, MediaUp
 import { createProductFull, fetchVerticals, fetchCategories, fetchBrands, fetchAttributes, fetchAttributeOptions } from '../../../lib/api';
 import { MediaService } from '../../../lib/media';
 import { getCurrencySymbol } from '../../../lib/currency';
+import { autoDetectCurrency, useCurrencyConverter } from '../../../lib/currency';
 import { cn } from '../../../lib/utils';
 import { aiService } from '../../../lib/ai-service';
 import { supabase } from '../../../lib/supabase';
@@ -135,6 +136,21 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         </div>
     );
 };
+
+const FieldHelp: React.FC<{ text: string }> = ({ text }) => (
+    <span className="relative inline-flex items-center group align-middle">
+        <span
+            className="material-icons text-[14px] text-gray-400 cursor-help"
+            tabIndex={0}
+            aria-label={text}
+        >
+            info
+        </span>
+        <span className="hidden group-hover:block group-focus-within:block pointer-events-none absolute z-[80] left-1/2 -translate-x-1/2 top-full mt-2 w-72 rounded-lg bg-gray-900 text-white text-[11px] font-medium px-3 py-2 shadow-lg">
+            {text}
+        </span>
+    </span>
+);
 
 
 interface AddProductViewProps {
@@ -423,9 +439,50 @@ const RegionMultiSelect: React.FC<RegionMultiSelectProps> = ({
     );
 };
 
+// Walkthrough constants
+const WALKTHROUGH_KEY = 'addProductWalkthroughSeen';
+const walkthroughSteps = [
+    { title: 'Welcome to Add Product', description: 'This wizard will guide you through adding a new product to your store.' },
+    { title: 'Basic Info', description: 'Start by entering your product title, description, category, and brand.' },
+    { title: 'Media', description: 'Upload high-quality images and videos of your product.' },
+    { title: 'Attributes', description: 'Set product attributes like size, color, and other specifications.' },
+    { title: 'Pricing & Delivery', description: 'Configure pricing, variants, and delivery options.' },
+    { title: 'SEO & Review', description: 'Optimize for search engines and review before publishing.' }
+];
+
 const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onSuccess }) => {
     const [currentStep, setCurrentStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Walkthrough state
+    const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(() => {
+        try {
+            return !localStorage.getItem(WALKTHROUGH_KEY);
+        } catch {
+            return false;
+        }
+    });
+    const [walkthroughStep, setWalkthroughStep] = useState(0);
+
+    const closeWalkthrough = (markSeen = false) => {
+        if (markSeen) {
+            try {
+                localStorage.setItem(WALKTHROUGH_KEY, '1');
+            } catch {
+                // ignore
+            }
+        }
+        setIsWalkthroughOpen(false);
+    };
+
+    const nextWalkthrough = () => {
+        const last = walkthroughStep >= walkthroughSteps.length - 1;
+        if (last) {
+            closeWalkthrough(true);
+        } else {
+            setWalkthroughStep(s => s + 1);
+        }
+    };
 
     // AI States
     const [isImprovingTitle, setIsImprovingTitle] = useState(false);
@@ -471,7 +528,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [minOrderValue, setMinOrderValue] = useState<number>(0);
     const [deliveryCost, setDeliveryCost] = useState<number>(0);
     const [deliveryTime, setDeliveryTime] = useState('');
-    const [deliveryTimeDays, setDeliveryTimeDays] = useState<number>(1);
+    const [deliveryTimeDaysInput, setDeliveryTimeDaysInput] = useState('1');
     const [isExpressDelivery, setIsExpressDelivery] = useState(false);
     const [delayCredit, setDelayCredit] = useState<number>(0);
     const [minOrderForFreeDelivery, setMinOrderForFreeDelivery] = useState<number>(0);
@@ -512,6 +569,31 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const [baseStock, setBaseStock] = useState<number>(100);
     const [optionValueInputs, setOptionValueInputs] = useState<Record<string, string>>({});
     const currencySymbol = useMemo(() => getCurrencySymbol(currency) || '$', [currency]);
+
+    // Live conversion preview for seller inputs (to USD)
+    const conversionTargetCurrency = 'USD';
+    const sellerInputConversionValues = useMemo(() => {
+        const values: { amount: number; currency: string; id: string }[] = [];
+
+        values.push({ id: 'base-price', amount: basePrice || 0, currency });
+        values.push({ id: 'base-compare', amount: baseCompareAtPrice || 0, currency });
+
+        quantityDiscounts.forEach((tier, idx) => {
+            values.push({ id: `tier-${idx}`, amount: tier.unit_price || 0, currency });
+        });
+
+        variants.forEach((variant, idx) => {
+            values.push({ id: `variant-${idx}-price`, amount: variant.price || 0, currency });
+            values.push({ id: `variant-${idx}-compare`, amount: typeof variant.compare_at_price === 'number' ? variant.compare_at_price : 0, currency });
+        });
+
+        return values;
+    }, [basePrice, baseCompareAtPrice, quantityDiscounts, variants, currency]);
+
+    const { convertedValues: sellerConvertedInputs } = useCurrencyConverter(
+        sellerInputConversionValues,
+        conversionTargetCurrency
+    );
 
     // Helper to generate variants from options
     useEffect(() => {
@@ -770,13 +852,27 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             alert('Please enter a product title first.');
             return;
         }
+        const categoryName = categories.find(c => c.id === categoryId)?.name;
+        const isAmbiguousCategory = (name?: string) => {
+            if (!name) return false;
+            return name.includes('&') || /\band\b/i.test(name);
+        };
+
+        const inferTitleFocus = (t: string) => {
+            const lower = t.toLowerCase();
+            const looksLikeAccessory = /\b(mount|wall\s*mount|bracket|holder|stand|rack|arm)\b/i.test(lower);
+            if (!looksLikeAccessory) return '';
+            return `${t}. This is an accessory/mount/bracket (NOT the TV/monitor itself). Improve the title for the mount/accessory only.`;
+        };
+
+        const inferred = inferTitleFocus(title);
+
+
         setIsImprovingTitle(true);
         try {
-            const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const improved = await aiService.improveTitle(title, categoryName);
-            if (improved) {
-                setTitle(improved);
-            }
+            const focus = inferred || (isAmbiguousCategory(categoryName) ? title : undefined);
+            const improved = await aiService.improveTitle(title, categoryName, focus);
+            if (improved) setTitle(improved);
         } catch (error) {
             console.error('AI Title error:', error);
             alert('AI was unable to improve the title. Please try again.');
@@ -790,10 +886,25 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             alert('Please enter a product title first.');
             return;
         }
+        const categoryName = categories.find(c => c.id === categoryId)?.name;
+
+        const isAmbiguousCategory = (name?: string) => {
+            if (!name) return false;
+            return name.includes('&') || /\band\b/i.test(name);
+        };
+
+        const inferDescriptionFocus = (t: string) => {
+            const lower = t.toLowerCase();
+            const looksLikeAccessory = /\b(mount|wall\s*mount|bracket|holder|stand|rack|arm)\b/i.test(lower);
+            if (!looksLikeAccessory) return '';
+            return `${t}. This is an accessory/mount/bracket (NOT the TV/monitor itself). Write the description for the mount/accessory only.`;
+        };
+
         setIsGeneratingDescription(true);
         try {
-            const categoryName = categories.find(c => c.id === categoryId)?.name;
-            const desc = await aiService.generateDescription(title, categoryName, attributes);
+            const inferred = inferDescriptionFocus(title);
+            const focus = inferred || (isAmbiguousCategory(categoryName) ? title : undefined);
+            const desc = await aiService.generateDescription(title, categoryName, attributes, focus);
             if (desc) {
                 setDescription(desc);
             }
@@ -1153,6 +1264,11 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 }
             }
 
+            const deliveryTimeDaysParsed = (() => {
+                const parsed = parseInt(deliveryTimeDaysInput, 10);
+                return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+            })();
+
             const payload = {
                 title,
                 description,
@@ -1174,7 +1290,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 seo_keywords: joinedSeoKeywords || undefined,
                 delivery_cost: Number.isFinite(deliveryCost) ? deliveryCost : 0,
                 delivery_time_estimate: deliveryTime,
-                delivery_time_days: Number.isFinite(deliveryTimeDays) ? deliveryTimeDays : 1,
+                delivery_time_days: deliveryTimeDaysParsed,
                 tags: safeTags,
                 use_case_tags: safeUseCases,
                 occasion_tags: safeOccasions,
@@ -1213,6 +1329,37 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     return (
         <div className="min-h-screen bg-gray-50 pb-40">
             <div className="max-w-4xl mx-auto py-12 px-6">
+                {isWalkthroughOpen && (
+                    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <span className="material-icons text-blue-700 text-lg">auto_stories</span>
+                                <h3 className="font-bold text-blue-900 text-sm">{walkthroughSteps[walkthroughStep]?.title}</h3>
+                                <span className="text-[10px] font-bold text-blue-700 bg-white/60 border border-blue-200 rounded px-2 py-0.5">
+                                    {walkthroughStep + 1}/{walkthroughSteps.length}
+                                </span>
+                            </div>
+                            <p className="text-xs text-blue-900/80 mt-1 leading-relaxed">{walkthroughSteps[walkthroughStep]?.description}</p>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => closeWalkthrough(true)}
+                                className="text-[11px] font-bold text-blue-700 hover:underline"
+                            >
+                                Skip
+                            </button>
+                            <button
+                                type="button"
+                                onClick={nextWalkthrough}
+                                className="bg-orange-600 text-white text-[11px] font-black uppercase px-3 py-2 rounded-lg"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Progress Indicators */}
                 <div className="mb-8">
                     <div className="flex items-center justify-between relative">
@@ -1269,6 +1416,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
                             {/* Product Details */}
                             <div>
+
                                 <div className="flex items-center justify-between mb-1">
                                     <label className="block text-sm font-medium text-gray-700">Product Title *</label>
                                     <button
@@ -1283,13 +1431,21 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         {isImprovingTitle ? 'Improving...' : 'AI Improve'}
                                     </button>
                                 </div>
-                                <input
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                    placeholder="e.g. Nike Air Max 2023"
-                                />
+                                <div className="space-y-1">
+                                    <input
+                                        type="text"
+                                        value={title}
+                                        onChange={(e) => setTitle(e.target.value)}
+                                        maxLength={100}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                        placeholder="e.g. Nike Air Max 2023"
+                                    />
+                                    <div className="flex justify-end pr-1">
+                                        <span className={`text-[10px] font-medium transition-colors ${title.length >= 100 ? 'text-red-500' : title.length > 85 ? 'text-orange-500' : 'text-gray-400'}`}>
+                                            {title.length} / 100
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -1307,13 +1463,22 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         {isGeneratingDescription ? 'Generating...' : 'AI Write'}
                                     </button>
                                 </div>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    rows={4}
-                                    className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                    placeholder="Describe your product..."
-                                />
+                                <div className="relative">
+                                    <textarea
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        rows={4}
+                                        maxLength={3000}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none pr-20"
+                                        placeholder="Describe your product..."
+                                    />
+                                    <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 bg-white/80 backdrop-blur-sm rounded-md shadow-sm border border-gray-100">
+                                        <div className={`w-1.5 h-1.5 rounded-full ${description.length >= 3000 ? 'bg-red-500 animate-pulse' : description.length > 2500 ? 'bg-orange-500' : 'bg-green-500'}`} />
+                                        <span className={`text-[10px] font-bold tabular-nums transition-colors ${description.length >= 3000 ? 'text-red-600' : description.length > 2500 ? 'text-orange-600' : 'text-gray-500'}`}>
+                                            {description.length.toLocaleString()} / 3,000
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Brand Selection - Enhanced with trickle down */}
@@ -1407,19 +1572,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Canonical URL</label>
-                                            <input
-                                                type="url"
-                                                value={canonicalUrl}
-                                                onChange={(e) => setCanonicalUrl(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
-                                                placeholder="https://yourstore.com/products/slug"
-                                            />
-                                        </div>
+                                    <div className="grid grid-cols-1 gap-6">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">SEO Keywords</label>
+
                                             <div className="flex gap-2">
                                                 <input
                                                     type="text"
@@ -1505,7 +1661,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Use Case Tags</label>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="block text-sm font-medium text-gray-700">Use Case Tags</label>
+                                            <button
+                                                type="button"
+                                                onClick={handleGenerateUseCaseTags}
+                                                disabled={isGeneratingUseCaseTags || !title.trim()}
+                                                className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                            >
+                                                <span className={`material-icons text-sm ${isGeneratingUseCaseTags ? 'animate-spin' : ''}`}>
+                                                    {isGeneratingUseCaseTags ? 'refresh' : 'auto_awesome'}
+                                                </span>
+                                                {isGeneratingUseCaseTags ? 'Generating...' : 'AI Suggest'}
+                                            </button>
+                                        </div>
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"
@@ -1538,7 +1707,20 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Occasion Tags</label>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="block text-sm font-medium text-gray-700">Occasion Tags</label>
+                                            <button
+                                                type="button"
+                                                onClick={handleGenerateOccasionTags}
+                                                disabled={isGeneratingOccasionTags || !title.trim()}
+                                                className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                            >
+                                                <span className={`material-icons text-sm ${isGeneratingOccasionTags ? 'animate-spin' : ''}`}>
+                                                    {isGeneratingOccasionTags ? 'refresh' : 'auto_awesome'}
+                                                </span>
+                                                {isGeneratingOccasionTags ? 'Generating...' : 'AI Suggest'}
+                                            </button>
+                                        </div>
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"
@@ -1932,7 +2114,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                 </h4>
                                 <div className="flex gap-4">
                                     <div className="flex-1">
-                                        <label className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Currency</label>
+                                        <label className="flex items-center gap-1 text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">
+                                            Currency
+                                            <FieldHelp text="Choose the currency you will enter prices in. Buyers may see a converted amount depending on their location." />
+                                        </label>
                                         <select
                                             value={currency}
                                             onChange={e => setCurrency(e.target.value)}
@@ -1944,7 +2129,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </select>
                                     </div>
                                     <div className="flex-1">
-                                        <label className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Pricing Unit</label>
+                                        <label className="flex items-center gap-1 text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">
+                                            Pricing Unit
+                                            <FieldHelp text="Select how you sell this product (per piece, per kg, per box). This appears next to the price and is used for wholesale tiers." />
+                                        </label>
                                         <select
                                             value={pricingUnit}
                                             onChange={e => setPricingUnit(e.target.value)}
@@ -1965,7 +2153,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     {/* Price Inputs */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Price ({currencySymbol}{currency}) *</label>
+                                            <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                                Price ({currencySymbol}{currency}) *
+                                                <FieldHelp text="Your selling price. If you use variants, each variant can have its own price." />
+                                            </label>
                                             <div className="relative">
                                                 <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
                                                 <input
@@ -1976,6 +2167,9 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                     placeholder="0.00"
                                                 />
                                             </div>
+                                            {currency !== conversionTargetCurrency && basePrice > 0 && sellerConvertedInputs['base-price']?.converted && (
+                                                <div className="mt-1 text-[11px] text-gray-500">≈ {sellerConvertedInputs['base-price'].converted}</div>
+                                            )}
                                         </div>
 
                                         <div className="md:col-span-3 pt-4 border-t border-orange-100">
@@ -2013,7 +2207,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                                 />
                                                             </div>
                                                             <div className="flex-1">
-                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Wholesale price ({currencySymbol})</label>
+                                                                <label className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase mb-1">
+                                                                    Wholesale price ({currencySymbol})
+                                                                    <FieldHelp text="Optional bulk price per unit when the buyer purchases at least the minimum quantity." />
+                                                                </label>
                                                                 <input
                                                                     type="number"
                                                                     value={tier.unit_price}
@@ -2025,6 +2222,9 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                                     placeholder="e.g. 45"
                                                                     className="w-full bg-gray-50 border border-gray-200 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-orange-500 font-bold text-orange-600"
                                                                 />
+                                                                {currency !== conversionTargetCurrency && tier.unit_price > 0 && sellerConvertedInputs[`tier-${idx}`]?.converted && (
+                                                                    <div className="mt-1 text-[10px] text-gray-500">≈ {sellerConvertedInputs[`tier-${idx}`].converted}</div>
+                                                                )}
                                                             </div>
                                                             <button
                                                                 type="button"
@@ -2049,7 +2249,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                             )}
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Original Price</label>
+                                            <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                                Original Price
+                                                <FieldHelp text="Optional anchor/original price. If higher than selling price, buyers may see a discount." />
+                                            </label>
                                             <div className="relative">
                                                 <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
                                                 <input
@@ -2060,9 +2263,15 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                     placeholder="Anchor price"
                                                 />
                                             </div>
+                                            {currency !== conversionTargetCurrency && typeof baseCompareAtPrice === 'number' && baseCompareAtPrice > 0 && sellerConvertedInputs['base-compare']?.converted && (
+                                                <div className="mt-1 text-[11px] text-gray-500">≈ {sellerConvertedInputs['base-compare'].converted}</div>
+                                            )}
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity *</label>
+                                            <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                                Stock Quantity *
+                                                <FieldHelp text="How many units are available to sell. For variants, stock is set per variant." />
+                                            </label>
                                             <input
                                                 type="number"
                                                 value={baseStock}
@@ -2225,12 +2434,42 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                 <table className="w-full text-sm text-left">
                                                     <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                                                         <tr>
-                                                            <th className="px-6 py-3">Variant</th>
-                                                            <th className="px-6 py-3">Image</th>
-                                                            <th className="px-6 py-3">Price ({currencySymbol}{currency})</th>
-                                                            <th className="px-6 py-3">Original Price</th>
-                                                            <th className="px-6 py-3">Stock</th>
-                                                            <th className="px-6 py-3">SKU</th>
+                                                            <th className="px-6 py-3">
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    Variant
+                                                                    <FieldHelp text="Each row is one purchasable option (e.g. Color/Size)." />
+                                                                </span>
+                                                            </th>
+                                                            <th className="px-6 py-3">
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    Image
+                                                                    <FieldHelp text="Optional image for this specific variant." />
+                                                                </span>
+                                                            </th>
+                                                            <th className="px-6 py-3">
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    Price ({currencySymbol}{currency})
+                                                                    <FieldHelp text="Selling price for this variant." />
+                                                                </span>
+                                                            </th>
+                                                            <th className="px-6 py-3">
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    Original Price
+                                                                    <FieldHelp text="Optional compare/anchor price for this variant (used to show discounts)." />
+                                                                </span>
+                                                            </th>
+                                                            <th className="px-6 py-3">
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    Stock
+                                                                    <FieldHelp text="Available quantity for this variant." />
+                                                                </span>
+                                                            </th>
+                                                            <th className="px-6 py-3">
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    SKU
+                                                                    <FieldHelp text="Auto-generated identifier for inventory and orders." />
+                                                                </span>
+                                                            </th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-gray-100">
@@ -2260,36 +2499,46 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-3">
-                                                                    <div className="flex items-center gap-1">
-                                                                        <span className="text-gray-500 text-sm">{currencySymbol}</span>
-                                                                        <input
-                                                                            type="number"
-                                                                            value={variant.price}
-                                                                            onChange={(e) => {
-                                                                                const newVariants = [...variants];
-                                                                                newVariants[idx].price = parseFloat(e.target.value) || 0;
-                                                                                setVariants(newVariants);
-                                                                            }}
-                                                                            className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
-                                                                        />
+                                                                    <div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-gray-500 text-sm">{currencySymbol}</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                value={variant.price}
+                                                                                onChange={(e) => {
+                                                                                    const newVariants = [...variants];
+                                                                                    newVariants[idx].price = parseFloat(e.target.value) || 0;
+                                                                                    setVariants(newVariants);
+                                                                                }}
+                                                                                className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
+                                                                            />
+                                                                        </div>
+                                                                        {currency !== conversionTargetCurrency && variant.price > 0 && sellerConvertedInputs[`variant-${idx}-price`]?.converted && (
+                                                                            <div className="mt-1 text-[10px] text-gray-500">≈ {sellerConvertedInputs[`variant-${idx}-price`].converted}</div>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-3">
-                                                                    <div className="flex items-center gap-1">
-                                                                        <span className="text-gray-500 text-sm">{currencySymbol}</span>
-                                                                        <input
-                                                                            type="number"
-                                                                            value={variant.compare_at_price ?? ''}
-                                                                            onChange={(e) => {
-                                                                                const newVariants = [...variants];
-                                                                                const newValue = e.target.value ? parseFloat(e.target.value) : undefined;
-                                                                                newVariants[idx].compare_at_price = newValue;
-                                                                                newVariants[idx].original_price = newValue;
-                                                                                setVariants(newVariants);
-                                                                            }}
-                                                                            className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
-                                                                            placeholder="Anchor"
-                                                                        />
+                                                                    <div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-gray-500 text-sm">{currencySymbol}</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                value={variant.compare_at_price ?? ''}
+                                                                                onChange={(e) => {
+                                                                                    const newVariants = [...variants];
+                                                                                    const newValue = e.target.value ? parseFloat(e.target.value) : undefined;
+                                                                                    newVariants[idx].compare_at_price = newValue;
+                                                                                    newVariants[idx].original_price = newValue;
+                                                                                    setVariants(newVariants);
+                                                                                }}
+                                                                                className="w-24 border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none"
+                                                                                placeholder="Anchor"
+                                                                            />
+                                                                        </div>
+                                                                        {currency !== conversionTargetCurrency && typeof variant.compare_at_price === 'number' && variant.compare_at_price > 0 && sellerConvertedInputs[`variant-${idx}-compare`]?.converted && (
+                                                                            <div className="mt-1 text-[10px] text-gray-500">≈ {sellerConvertedInputs[`variant-${idx}-compare`].converted}</div>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-3">
@@ -2326,7 +2575,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Cost</label>
+                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                            Delivery Cost
+                                            <FieldHelp text="Shipping fee the buyer pays (if free delivery is off)." />
+                                        </label>
                                         <div className="relative">
                                             <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
                                             <input
@@ -2341,7 +2593,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Est. Delivery Time</label>
+                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                            Est. Delivery Time
+                                            <FieldHelp text="A quick label shown to buyers (e.g. 3–5 days)." />
+                                        </label>
                                         <div className="relative">
                                             <span className="absolute left-3 top-2.5 text-gray-400">
                                                 <span className="material-icons text-sm">schedule</span>
@@ -2361,18 +2616,25 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Time (Days)</label>
+                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                            Delivery Time (Days)
+                                            <FieldHelp text="Numeric delivery days used for sorting/estimation. Keep it realistic." />
+                                        </label>
                                         <input
                                             type="number"
                                             min={1}
-                                            value={deliveryTimeDays}
-                                            onChange={(e) => setDeliveryTimeDays(parseInt(e.target.value) || 1)}
+                                            step={1}
+                                            value={deliveryTimeDaysInput}
+                                            onChange={(e) => setDeliveryTimeDaysInput(e.target.value)}
                                             className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none"
                                             placeholder="1"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Delay Credit</label>
+                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
+                                            Delay Credit
+                                            <FieldHelp text="Optional credit offered if delivery is delayed." />
+                                        </label>
                                         <div className="relative">
                                             <span className="absolute left-3 top-2.5 text-gray-500">{currencySymbol}</span>
                                             <input
@@ -2392,7 +2654,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                                     <div className="p-4 border border-gray-200 rounded-xl bg-gray-50 flex items-center justify-between">
                                         <div>
-                                            <p className="text-sm font-bold text-gray-900">Minimum Order Value</p>
+                                            <p className="text-sm font-bold text-gray-900 inline-flex items-center gap-1">
+                                                Minimum Order Value
+                                                <FieldHelp text="Optional. Prevents checkout below this cart amount." />
+                                            </p>
                                             <p className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">Prevent low-value orders</p>
                                         </div>
                                         <div className="relative w-32">
@@ -2407,7 +2672,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     </div>
                                     <div className="p-4 border border-gray-200 rounded-xl bg-gray-50 flex items-center justify-between">
                                         <div>
-                                            <p className="text-sm font-bold text-gray-900">Free Delivery Threshold</p>
+                                            <p className="text-sm font-bold text-gray-900 inline-flex items-center gap-1">
+                                                Free Delivery Threshold
+                                                <FieldHelp text="If Free Delivery is enabled, orders at/above this amount get free shipping." />
+                                            </p>
                                             <p className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">Waive cost above this amount</p>
                                         </div>
                                         <div className="relative w-32">
@@ -2423,7 +2691,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                 </div>
 
                                 <div className="space-y-4">
-                                    <label className="block text-sm font-bold text-gray-700 uppercase tracking-widest px-1">Delivery Scope</label>
+                                    <label className="flex items-center gap-1 text-sm font-bold text-gray-700 uppercase tracking-widest px-1">
+                                        Delivery Scope
+                                        <FieldHelp text="Where you can deliver this product: nationwide, selected regions, or specific cities/radius." />
+                                    </label>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {DELIVERY_SCOPE_OPTIONS.map((opt) => (
                                             <button
@@ -2466,8 +2737,9 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
                                     {deliveryScope !== 'nationwide' && (
                                         <div className="mt-4 p-5 bg-orange-50/50 border border-orange-100 rounded-xl animate-in slide-in-from-top-2 duration-300">
-                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+                                            <label className="flex items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
                                                 {deliveryScope === 'regional' ? 'Target Regions' : 'Specific Locations / Cities'}
+                                                <FieldHelp text={deliveryScope === 'regional' ? "Pick regions/states you can deliver to." : "Add cities or a delivery radius (example: Nairobi CBD, 10km)."} />
                                             </label>
 
                                             {deliveryScope === 'regional' ? (
@@ -2536,7 +2808,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                 <span className="material-icons">task_alt</span>
                                             </div>
                                             <div>
-                                                <div className="text-sm font-bold text-gray-900">Free Delivery</div>
+                                                <div className="text-sm font-bold text-gray-900 inline-flex items-center gap-1">
+                                                    Free Delivery
+                                                    <FieldHelp text="When enabled, delivery cost is waived for orders that meet the free delivery threshold." />
+                                                </div>
                                                 <div className="text-[10px] text-gray-500 uppercase font-medium">Waive cost above threshold</div>
                                             </div>
                                         </div>
@@ -2554,7 +2829,10 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                                 <span className="material-icons">bolt</span>
                                             </div>
                                             <div>
-                                                <div className="text-sm font-bold text-gray-900">Express Shipping</div>
+                                                <div className="text-sm font-bold text-gray-900 inline-flex items-center gap-1">
+                                                    Express Shipping
+                                                    <FieldHelp text="Marks this listing as able to ship faster than standard." />
+                                                </div>
                                                 <div className="text-[10px] text-gray-500 uppercase font-medium">Faster than standard shipping</div>
                                             </div>
                                         </div>

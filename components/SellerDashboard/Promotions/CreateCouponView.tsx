@@ -3,6 +3,32 @@ import React, { useState, useEffect } from 'react';
 
 import { createCoupon, fetchSellerProductsForCoupons } from '../../../lib/api';
 import { Product } from '../../../types';
+import { getCurrencySymbol, getSellerCurrency } from '../../../lib/seller-currency';
+
+const FieldHelp: React.FC<{ text: string }> = ({ text }) => {
+    const [open, setOpen] = React.useState(false);
+    return (
+        <span
+            className="relative inline-flex"
+            onMouseEnter={() => setOpen(true)}
+            onMouseLeave={() => setOpen(false)}
+        >
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                aria-label="Help"
+                className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+            >
+                <span className="material-icons text-[14px]">help_outline</span>
+            </button>
+            {open && (
+                <span className="absolute z-50 top-full mt-2 left-1/2 -translate-x-1/2 w-72 rounded-lg bg-gray-900 text-white text-xs leading-relaxed px-3 py-2 shadow-lg">
+                    {text}
+                </span>
+            )}
+        </span>
+    );
+};
 
 interface CreateCouponViewProps {
     sellerId: string;
@@ -18,18 +44,34 @@ const toLocalInputValue = (date: Date) => {
 };
 
 const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess, onCancel }) => {
+    const [sellerCurrency, setSellerCurrency] = useState<string>('USD');
+    const currencySymbol = getCurrencySymbol(sellerCurrency);
+
     const [couponName, setCouponName] = useState('');
     const [code, setCode] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
     const [discountType, setDiscountType] = useState<'amount' | 'percent'>('amount');
-    const [discountValue, setDiscountValue] = useState<number>(0);
-    const [quantity, setQuantity] = useState<number>(100);
+    const [discountValueInput, setDiscountValueInput] = useState<string>('');
+    const [quantityInput, setQuantityInput] = useState<string>('100');
 
     // Product Selection
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadCurrency = async () => {
+            if (!sellerId) return;
+            const currency = await getSellerCurrency(sellerId);
+            if (!cancelled) setSellerCurrency(currency || 'USD');
+        };
+        loadCurrency();
+        return () => {
+            cancelled = true;
+        };
+    }, [sellerId]);
 
     useEffect(() => {
         const loadProducts = async () => {
@@ -46,6 +88,13 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
         if (sellerId) loadProducts();
     }, [sellerId]);
 
+    const toNumberOrZero = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return 0;
+        const n = Number(trimmed);
+        return Number.isFinite(n) ? Math.max(0, n) : 0;
+    };
+
     const handleToggleProduct = (id: string) => {
         setSelectedProductIds(prev =>
             prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
@@ -53,7 +102,10 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
     };
 
     const handleCreate = async () => {
-        if (!couponName || !startTime || !endTime || !discountValue) {
+        const discountValue = toNumberOrZero(discountValueInput);
+        const quantity = Math.floor(toNumberOrZero(quantityInput));
+
+        if (!couponName || !startTime || !endTime || discountValue <= 0) {
             alert("Please fill in all required fields");
             return;
         }
@@ -107,7 +159,10 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
 
                         <div className="space-y-2">
                             <div className="flex justify-between">
-                                <label className="text-sm font-bold text-gray-900">Coupon name</label>
+                                <div className="flex items-center">
+                                    <label className="text-sm font-bold text-gray-900">Coupon name</label>
+                                    <FieldHelp text="Internal name for your reference. Customers won't see this name." />
+                                </div>
                             </div>
                             <p className="text-xs text-gray-500">Enter a name for the coupon with less than 50 characters.The coupon name will not be visible to customers.</p>
                             <div className="relative">
@@ -124,7 +179,10 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-gray-900">Coupon Code (Optional)</label>
+                            <div className="flex items-center">
+                                <label className="text-sm font-bold text-gray-900">Coupon Code (Optional)</label>
+                                <FieldHelp text="Optional custom code buyers type at checkout. Leave blank to auto-generate a code." />
+                            </div>
                             <p className="text-xs text-gray-500">Custom code for users to enter. Leave blank to auto-generate.</p>
                             <input
                                 type="text"
@@ -136,20 +194,26 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-gray-900">Discount Value</label>
+                            <div className="flex items-center">
+                                <label className="text-sm font-bold text-gray-900">Discount Value</label>
+                                <FieldHelp text={
+                                    `Choose either a fixed amount off (e.g. ${currencySymbol}5) or a percentage off (e.g. 10%).`
+                                } />
+                            </div>
                             <div className="flex gap-4 items-center">
                                 <select
                                     value={discountType}
                                     onChange={(e) => setDiscountType(e.target.value as 'amount' | 'percent')}
                                     className="border border-gray-300 rounded px-3 py-2 text-sm"
                                 >
-                                    <option value="amount">Fixed Amount ($)</option>
+                                    <option value="amount">Fixed Amount ({sellerCurrency})</option>
                                     <option value="percent">Percentage (%)</option>
                                 </select>
                                 <input
                                     type="number"
-                                    value={discountValue}
-                                    onChange={(e) => setDiscountValue(Number(e.target.value))}
+                                    value={discountValueInput}
+                                    onChange={(e) => setDiscountValueInput(e.target.value)}
+                                    min={0}
                                     placeholder="0"
                                     className="border border-gray-300 rounded px-3 py-2 text-sm w-32"
                                 />
@@ -157,17 +221,24 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-gray-900">Total Quantity</label>
+                            <div className="flex items-center">
+                                <label className="text-sm font-bold text-gray-900">Total Quantity</label>
+                                <FieldHelp text="Total number of coupons available to be claimed/used across all buyers." />
+                            </div>
                             <input
                                 type="number"
-                                value={quantity}
-                                onChange={(e) => setQuantity(Number(e.target.value))}
+                                value={quantityInput}
+                                onChange={(e) => setQuantityInput(e.target.value)}
+                                min={0}
                                 className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-gray-900">Schedule</label>
+                            <div className="flex items-center">
+                                <label className="text-sm font-bold text-gray-900">Schedule</label>
+                                <FieldHelp text="The coupon can be claimed/used only within this active time range." />
+                            </div>
                             <p className="text-xs text-gray-500">Select a duration of between 1-90 days.</p>
                             <div className="flex items-center gap-2">
                                 <input
@@ -231,7 +302,10 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
                     {/* Product Select Panel */}
                     <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
                         <div className="space-y-1">
-                            <h3 className="font-bold text-gray-900">Select product with coupons</h3>
+                            <div className="flex items-center">
+                                <h3 className="font-bold text-gray-900">Select product with coupons</h3>
+                                <FieldHelp text="Coupons apply only to the products you select here. Select at least one product to continue." />
+                            </div>
                             <p className="text-xs text-gray-500">Relevant products and the number of coupons are recommended based on product strategies. Sellers are advised to refer to these recommendations.</p>
                         </div>
 
@@ -308,7 +382,10 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
 
                 {/* Preview Sidebar */}
                 <div className="w-80 space-y-4">
-                    <h3 className="font-bold text-gray-900">Buyer browsing example</h3>
+                    <div className="flex items-center">
+                        <h3 className="font-bold text-gray-900">Buyer browsing example</h3>
+                        <FieldHelp text="Preview only. This shows how the coupon could appear to buyers." />
+                    </div>
                     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                         <div className="aspect-square bg-gray-100 relative">
                             <img src="https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400" alt="Preview" className="w-full h-full object-cover" />

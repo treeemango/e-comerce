@@ -1737,6 +1737,9 @@ export const fetchProductVariants = async (productId: string): Promise<{ variant
             id: v.id,
             title: v.title || '', // Variants might often share title or have specific one
             price: v.price,
+            originalPrice: v.original_price,
+            compare_at_price: v.compare_at_price,
+            discountPercent: v.discount_percent,
             image: v.image_url, // Maps to image?
             stock: v.stock,
             options: v.options,
@@ -1960,7 +1963,16 @@ export const checkout = async (
         county: string;
         country: string;
     },
-    options?: { couponCode?: string | null; expressDelivery?: boolean }
+    options?: {
+        couponCode?: string | null;
+        expressDelivery?: boolean;
+        logisticsMeta?: {
+            provider: string;
+            service_id: string;
+            rate_id: string;
+            cost: number;
+        } | null;
+    }
 ): Promise<string | null> => {
     // Get guest session ID for non-authenticated users
     const guestSessionId = !userId ? getGuestSessionId() : null;
@@ -1981,7 +1993,8 @@ export const checkout = async (
             p_shipping_county: shippingDetails.county,
             p_shipping_country: shippingDetails.country,
             p_coupon_code: options?.couponCode ?? null,
-            p_express_delivery: options?.expressDelivery ?? false
+            p_express_delivery: options?.expressDelivery ?? false,
+            p_logistics_meta: options?.logisticsMeta ?? null
         });
 
     if (error) {
@@ -2177,6 +2190,9 @@ export interface GuestOrderDetails {
         price: number;
         image: string;
     }[];
+    tracking_events?: any[];
+    fulfillment_type?: string;
+    logistics_meta?: any;
 }
 
 /**
@@ -2205,6 +2221,23 @@ export const trackGuestOrder = async (orderId: string, email: string): Promise<G
         // The RPC returns an array, get the first row
         const orderData = data[0];
 
+        let trackingEvents: any[] = [];
+        try {
+            const { data: eventsData, error: eventsError } = await supabase.rpc('get_order_tracking_events_universal', {
+                p_order_id: orderId,
+                p_email: email.toLowerCase().trim()
+            });
+
+            if (!eventsError) {
+                trackingEvents = (eventsData as any[]) || [];
+            } else {
+                // Fallback to direct table read (may be blocked by RLS for guests)
+                trackingEvents = await fetchOrderTrackingEvents(orderId);
+            }
+        } catch {
+            trackingEvents = await fetchOrderTrackingEvents(orderId);
+        }
+
         return {
             order_id: orderData.order_id,
             order_number: orderData.order_number || orderData.order_id,
@@ -2218,7 +2251,10 @@ export const trackGuestOrder = async (orderId: string, email: string): Promise<G
                 quantity: item.quantity || 1,
                 price: item.price || 0,
                 image: item.image || ''
-            }))
+            })),
+            fulfillment_type: orderData.fulfillment_type,
+            logistics_meta: orderData.logistics_meta,
+            tracking_events: trackingEvents
         };
     } catch (err) {
         console.error('Unexpected error tracking order:', err);
@@ -3094,6 +3130,32 @@ export const fetchCoupons = async (sellerId: string): Promise<PromoCoupon[]> => 
     return data || [];
 };
 
+export const updateCoupon = async (id: string, payload: Partial<PromoCoupon>): Promise<boolean> => {
+    const { error } = await supabase
+        .from('coupons')
+        .update(payload)
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error updating coupon:', error);
+        return false;
+    }
+    return true;
+};
+
+export const deleteCoupon = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('coupons')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting coupon:', error);
+        return false;
+    }
+    return true;
+};
+
 export const fetchActiveCoupons = async (limit = 30): Promise<PromoCoupon[]> => {
     const nowIso = new Date().toISOString();
 
@@ -3157,6 +3219,19 @@ export const updateAutomaticDiscount = async (id: string, payload: Partial<Autom
     return true;
 };
 
+export const deleteAutomaticDiscount = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('automatic_discounts')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting automatic discount:', error);
+        return false;
+    }
+    return true;
+};
+
 // --- Quantity Discounts ---
 
 export const fetchQuantityDiscounts = async (productId: string): Promise<QuantityDiscountTier[]> => {
@@ -3209,10 +3284,13 @@ export const updateQuantityDiscounts = async (productId: string, tiers: Quantity
     return true;
 };
 
-export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> => {
-    if (!userId) return [];
+export const fetchBuyerOrders = async (userId: string | null): Promise<BuyerOrder[]> => {
+    const isGuest = !userId;
+    const guestSessionId = isGuest ? getGuestSessionId() : null;
 
-    const { data, error } = await supabase
+    if (!userId && !guestSessionId) return [];
+
+    let query = supabase
         .from('orders')
         .select(`
             id,
@@ -3220,6 +3298,7 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             created_at,
             updated_at,
             status,
+            customer_email,
             total: total_price,
             tax_amount,
             tax_rate,
@@ -3231,6 +3310,7 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             fulfillment_type,
             shipped_at,
             shipment_proof_url,
+            logistics_meta,
             items: order_items!order_items_order_id_fkey(
                 id,
                 product_id,
@@ -3246,8 +3326,15 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
                 )
             )
             `)
-        .eq('user_id', userId)
         .order('created_at', { ascending: false });
+
+    if (isGuest) {
+        query = query.eq('guest_session_id', guestSessionId!);
+    } else {
+        query = query.eq('user_id', userId!);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('Error fetching buyer orders:', error);
@@ -3271,7 +3358,6 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
         if (proofsError) {
             console.error('Error fetching delivery proofs:', proofsError);
         } else {
-            console.log('Fetched OTP proofs:', proofsData);
             (proofsData || []).forEach((p: any) => {
                 if (p.verification_status === 'pending' || p.verification_status === 'verified') {
                     otpMap[p.order_id] = p.proof_data;
@@ -3279,8 +3365,6 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             });
         }
     }
-
-    console.log('OTP Map:', otpMap);
 
     // Flatten nested structure to match BuyerOrder interface
     return (data || []).map((order: any) => {
@@ -3318,6 +3402,7 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
             status: order.status,
             total_amount: finalTotal,
             currency: order.items?.[0]?.product?.currency,
+            customer_email: order.customer_email || null,
             tracking_code: order.tracking_number || null,
             tracking_number: order.tracking_number,
             carrier: order.carrier,
@@ -3329,6 +3414,7 @@ export const fetchBuyerOrders = async (userId: string): Promise<BuyerOrder[]> =>
                 waybill_number: order.tracking_number || '',
                 collection_point: order.shipping_additional_info || undefined
             } : null,
+            logistics_meta: order.logistics_meta || null,
             delivery_otp,
             items
         };
@@ -5722,6 +5808,25 @@ export async function fetchAllUsers(filters?: {
     }
 }
 
+export async function setUserBanStatus(targetUserId: string, banned: boolean): Promise<User | null> {
+    try {
+        const { data, error } = await supabase.rpc('admin_set_user_ban_status', {
+            p_target_user_id: targetUserId,
+            p_banned: banned
+        });
+
+        if (error) {
+            console.error('Error setting user ban status:', error);
+            return null;
+        }
+
+        return (data as User) ?? null;
+    } catch (error) {
+        console.error('Error in setUserBanStatus:', error);
+        return null;
+    }
+}
+
 // Activity Logging
 export async function logAdminActivity(
     adminId: string,
@@ -6392,11 +6497,17 @@ export const fulfillOrder = async (orderId: string, trackingNumber?: string) => 
     }
 
     // 2. Add tracking event
-    await supabase.from('order_tracking_events').insert({
+    const { error: trackingError } = await supabase.from('order_tracking_events').insert({
         order_id: orderId,
-        event_type: 'shipped',
+        // NOTE: `order_tracking_events.event_type` is validated by DB triggers/functions.
+        // Use a supported tracking state (see types.ts OrderTrackingEvent union).
+        event_type: 'picked_up',
         event_description: `Order fulfilled and shipped${trackingNumber ? ` (Tracking: ${trackingNumber})` : ''} `
     });
+
+    if (trackingError) {
+        console.error('[fulfillOrder] Error inserting tracking event:', trackingError);
+    }
 
     return true;
 };
@@ -6416,11 +6527,15 @@ export const markOrderReady = async (orderId: string) => {
     }
 
     // 2. Add tracking event
-    await supabase.from('order_tracking_events').insert({
+    const { error: trackingError } = await supabase.from('order_tracking_events').insert({
         order_id: orderId,
         event_type: 'ready_for_pickup',
         event_description: 'Order is packed and ready for pickup by the driver.'
     });
+
+    if (trackingError) {
+        console.error('[markOrderReady] Error inserting tracking event:', trackingError);
+    }
 
     return true;
 };
@@ -6434,9 +6549,25 @@ export const fulfillParcelOrder = async (
     orderId: string,
     parcelService: string,
     waybillNumber: string,
-    collectionPoint?: string
+    collectionPoint?: string,
+    transportFee?: number,
+    paymentDetails?: string
 ) => {
-    console.log('[fulfillParcelOrder] Starting...', { orderId, parcelService, waybillNumber, collectionPoint });
+    console.log('[fulfillParcelOrder] Starting...', { orderId, parcelService, waybillNumber, collectionPoint, transportFee, paymentDetails });
+
+    // Fetch existing order to merge logistics_meta
+    const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('logistics_meta')
+        .eq('id', orderId)
+        .single();
+
+    const updatedLogisticsMeta = {
+        ...(existingOrder?.logistics_meta || {}),
+        confirmed_transport_fee: transportFee || 0,
+        payment_details: paymentDetails || null,
+        carrier_confirmed_at: new Date().toISOString()
+    };
 
     // 1. Generate a 4-digit OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -6451,7 +6582,8 @@ export const fulfillParcelOrder = async (
             carrier: parcelService,
             tracking_number: waybillNumber,
             shipping_additional_info: collectionPoint || '',
-            fulfillment_type: 'local_parcel'
+            fulfillment_type: 'local_parcel',
+            logistics_meta: updatedLogisticsMeta
         })
         .eq('id', orderId)
         .select();
@@ -6483,19 +6615,28 @@ export const fulfillParcelOrder = async (
     }
 
     // 4. Add tracking event
-    await supabase.from('order_tracking_events').insert({
+    const { error: trackingError } = await supabase.from('order_tracking_events').insert({
         order_id: orderId,
-        event_type: 'shipped',
+        // Use a supported tracking state to avoid DB trigger CASE failures.
+        event_type: 'picked_up',
         event_description: `Parcel sent via ${parcelService} (Waybill: ${waybillNumber}). Collection Point: ${collectionPoint || 'N/A'} `
     });
+
+    if (trackingError) {
+        console.error('[fulfillParcelOrder] Error inserting tracking event:', trackingError);
+    }
 
     // 5. Release transport fees to seller initially
     const { data: userData } = await supabase.auth.getUser();
     if (userData?.user?.id) {
-        await supabase.rpc('release_transport_fees', {
+        const { error: releaseError } = await supabase.rpc('release_transport_fees', {
             p_order_id: orderId,
             p_seller_id: userData.user.id
         });
+
+        if (releaseError) {
+            console.error('[fulfillParcelOrder] Error calling release_transport_fees:', releaseError);
+        }
     }
 
     return { success: true };
@@ -6548,9 +6689,21 @@ export const confirmOrderReceiptBuyer = async (orderId: string) => {
         return { success: false, message: `Confirmation failed: ${error.message} ` };
     }
 
+    // Some RPCs return VOID in Postgres, which comes back as `null` in Supabase.
+    // Treat a null/undefined response as success when there's no error.
+    if (data == null) {
+        return { success: true, message: 'Delivery confirmed.' };
+    }
+
+    // Be defensive in case the function returns a boolean or an object.
+    if (typeof data === 'boolean') {
+        return { success: data, message: data ? 'Delivery confirmed.' : 'Confirmation failed.' };
+    }
+
+    const anyData = data as any;
     return {
-        success: data.success,
-        message: data.message
+        success: Boolean(anyData.success ?? true),
+        message: anyData.message || 'Delivery confirmed.'
     };
 };
 
@@ -6693,7 +6846,8 @@ export const fetchSellerOrders = async (sellerId: string) => {
                 shipment_proof_url,
                 fulfillment_type,
                 tracking_number,
-                carrier
+                carrier,
+                logistics_meta
             )
         `)
         .in('product_id', productIds)
@@ -6734,6 +6888,7 @@ export const fetchSellerOrders = async (sellerId: string) => {
                 fulfillment_type: item.order.fulfillment_type,
                 tracking_number: item.order.tracking_number,
                 carrier: item.order.carrier,
+                logistics_meta: item.order.logistics_meta || null,
                 items: []
             });
         }
@@ -6805,6 +6960,9 @@ export const updateProductDetails = async (productId: string | number, updates: 
     categoryName?: string;
     status?: ProductStatus;
     stock?: number;
+    isFlashSale?: boolean;
+    flashSaleStart?: string;
+    flashSaleEnd?: string;
 }) => {
     console.log('Updating product details:', productId, updates);
     const {
@@ -6817,7 +6975,10 @@ export const updateProductDetails = async (productId: string | number, updates: 
         categoryId,
         categoryName,
         status,
-        stock
+        stock,
+        isFlashSale,
+        flashSaleStart,
+        flashSaleEnd
     } = updates;
 
     const productUpdatePayload: Record<string, any> = {};
@@ -6828,6 +6989,9 @@ export const updateProductDetails = async (productId: string | number, updates: 
     if (typeof categoryName === 'string') productUpdatePayload.category_name = categoryName;
     if (status) productUpdatePayload.status = status === 'active' ? 'approved' : status;
     if (typeof stock === 'number') productUpdatePayload.stock = stock;
+    if (typeof isFlashSale === 'boolean') productUpdatePayload.is_flash_sale = isFlashSale;
+    if (typeof flashSaleStart === 'string') productUpdatePayload.flash_sale_start = flashSaleStart;
+    if (typeof flashSaleEnd === 'string') productUpdatePayload.flash_sale_end = flashSaleEnd;
 
     if (Object.keys(productUpdatePayload).length > 0) {
         const { error: productError } = await supabase

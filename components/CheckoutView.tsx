@@ -4,6 +4,8 @@ import { applyCoupon, checkout, fetchUserCoupons, fetchCartDeliveryFee, syncCart
 import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
 
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
+import { logistics } from '../lib/logistics-service';
+import { ShippingRate } from '../lib/logistics-types';
 
 interface CheckoutViewProps {
     cartItems: Product[];
@@ -55,6 +57,11 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
     const [townSuggestions, setTownSuggestions] = useState<string[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [taxInfo, setTaxInfo] = useState<TaxBreakdown | null>(null);
+
+    // Logistics state
+    const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
+    const [isFetchingRates, setIsFetchingRates] = useState(false);
+    const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
 
     const KENYAN_TOWNS = [
         'Nairobi - CBD', 'Nairobi - Westlands', 'Nairobi - Kilimani', 'Nairobi - Lavington', 'Nairobi - Karen',
@@ -226,6 +233,67 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         }
     }, [userId, items, subtotal, hasAttemptedAutoApply, appliedCoupon]);
 
+    // Fetch real-time shipping rates when address changes
+    useEffect(() => {
+        const fetchRates = async () => {
+            // Only fetch if basic destination info is present
+            if (!formData.country || !formData.townCity || items.length === 0) return;
+
+            setIsFetchingRates(true);
+            try {
+                // Destination address from form
+                const destinationAddress = {
+                    name: `${formData.firstName} ${formData.lastName}`.trim() || 'Guest Customer',
+                    phone: formData.phoneNumber || '0000000000',
+                    email: formData.email,
+                    street_address: formData.addressLine1 || 'Pending Address',
+                    city: formData.townCity,
+                    country_code: COUNTRIES.find(c => c.name === formData.country)?.code || 'KE',
+                    postal_code: formData.postcode
+                };
+
+                // Source address placeholder (In production, this could be per-vendor)
+                const sourceAddress = {
+                    name: 'JuaExpress Warehouse',
+                    phone: '+254700000000',
+                    street_address: 'Industrial Area',
+                    city: 'Nairobi',
+                    country_code: 'KE'
+                };
+
+                // Calculate package info
+                const parcels = [
+                    {
+                        weight: items.reduce((sum, item) => sum + (item.quantity * 0.5), 0),
+                        length: 20,
+                        width: 15,
+                        height: 10
+                    }
+                ];
+
+                const rates = await logistics.getAllRates({
+                    origin: sourceAddress,
+                    destination: destinationAddress,
+                    parcels: parcels
+                });
+
+                setShippingRates(rates);
+                // Selection logic: persist selection if possible, else pick standard
+                if (rates.length > 0) {
+                    const match = selectedRate ? rates.find(r => r.service_code === selectedRate.service_code) : null;
+                    if (!match) setSelectedRate(rates[0]);
+                }
+            } catch (err) {
+                console.error('Error fetching shipping rates:', err);
+            } finally {
+                setIsFetchingRates(false);
+            }
+        };
+
+        const timeoutId = setTimeout(fetchRates, 1000); // 1s debounce
+        return () => clearTimeout(timeoutId);
+    }, [formData.country, formData.townCity, formData.addressLine1, items.length]);
+
 
     const bulkSavings = promoResult ? promoResult.totalSavings : 0;
 
@@ -258,14 +326,17 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
         });
 
         // Totals
-        vals.push({ id: 'delivery-fee', amount: deliveryFee, currency: baseCurrency });
+        // Use real-time rate if selected, otherwise fallback to legacy deliveryFee
+        const actualDeliveryFee = selectedRate ? selectedRate.rate_amount : deliveryFee;
+        vals.push({ id: 'delivery-fee', amount: actualDeliveryFee, currency: selectedRate?.currency || baseCurrency });
+
         vals.push({ id: 'tax-amount', amount: taxAmount, currency: baseCurrency });
         vals.push({ id: 'discount-amount', amount: discountAmount, currency: baseCurrency });
         vals.push({ id: 'bulk-savings', amount: bulkSavings, currency: baseCurrency });
         vals.push({ id: 'subtotal-summary', amount: subtotal, currency: baseCurrency });
 
         return vals;
-    }, [items, deliveryFee, taxAmount, discountAmount, bulkSavings, subtotal]);
+    }, [items, deliveryFee, selectedRate, taxAmount, discountAmount, bulkSavings, subtotal]);
 
     const { convertedValues, preferredCurrency } = useCurrencyConverter(priceValues);
 
@@ -384,6 +455,12 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                 {
                     couponCode: appliedCoupon?.code || null,
                     expressDelivery: isExpress,
+                    logisticsMeta: selectedRate ? {
+                        provider: selectedRate.carrier_id as any,
+                        service_id: selectedRate.service_code,
+                        rate_id: selectedRate.carrier_id,
+                        cost: selectedRate.rate_amount
+                    } : null
                 }
             );
 
@@ -565,6 +642,53 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                         <p className="text-xs text-gray-500 mt-1">Tax will be calculated based on your shipping country</p>
                                     </div>
 
+                                    {/* Shipping Options */}
+                                    {formData.townCity && shippingRates.length > 0 && (
+                                        <div className="mt-6 space-y-3 animate-in fade-in duration-500">
+                                            <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Shipping Options</h3>
+                                            <div className="space-y-2">
+                                                {shippingRates.map(rate => {
+                                                    const rateKey = `${rate.carrier_id}-${rate.service_code}`;
+                                                    const isSelected = selectedRate?.carrier_id === rate.carrier_id && selectedRate?.service_code === rate.service_code;
+
+                                                    return (
+                                                        <div
+                                                            key={rateKey}
+                                                            onClick={() => setSelectedRate(rate)}
+                                                            className={`p-4 border-2 rounded-xl cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-gray-700' : 'border-gray-100 dark:border-gray-800 hover:border-gray-200'}`}
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-orange-500' : 'border-gray-300'}`}>
+                                                                    {isSelected && <div className="w-2.5 h-2.5 bg-orange-500 rounded-full" />}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-bold text-sm text-gray-900 dark:text-white">{rate.carrier_name} - {rate.service_name}</p>
+                                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                        {rate.service_code === 'LOCAL_PARCEL'
+                                                                            ? 'Deliver via G4S, EasyCoach, etc. Fee paid on collection.'
+                                                                            : `Estimated delivery: ${rate.estimated_delivery_days} days`}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="font-bold text-sm text-gray-900 dark:text-white">
+                                                                    {rate.rate_amount === 0 && rate.service_code === 'LOCAL_PARCEL' ? 'TBD' : formatPrice(rate.rate_amount, rate.currency)}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {isFetchingRates && (
+                                        <div className="mt-6 flex items-center justify-center gap-2 text-sm text-gray-500 animate-pulse">
+                                            <span className="material-icons animate-spin text-sm">sync</span>
+                                            Calculating shipping rates...
+                                        </div>
+                                    )}
+
                                     <div className="pt-6">
                                         <button
                                             onClick={() => setStep('payment')}
@@ -641,7 +765,7 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                 <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Review & Place Order</h2>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 pb-6 border-b border-gray-100 dark:border-gray-700">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8 pb-6 border-b border-gray-100 dark:border-gray-700">
                                         <div>
                                             <div className="flex justify-between mb-2">
                                                 <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Shipping To</h3>
@@ -650,6 +774,20 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                             <p className="text-sm font-medium">{formData.firstName} {formData.lastName}</p>
                                             <p className="text-sm text-gray-500">{formData.addressLine1}</p>
                                             <p className="text-sm text-gray-500">{formData.townCity}, {formData.postcode}</p>
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between mb-2">
+                                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Shipping Method</h3>
+                                                <button onClick={() => setStep('shipping')} className="text-xs text-orange-500 hover:underline">Change</button>
+                                            </div>
+                                            {selectedRate ? (
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{selectedRate.carrier_name} - {selectedRate.service_name}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">Est. delivery: {selectedRate.estimated_delivery_days} days</p>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-500">Standard Delivery</p>
+                                            )}
                                         </div>
                                         <div>
                                             <div className="flex justify-between mb-2">
@@ -708,6 +846,14 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                                         </div>
                                     )}
 
+                                    {selectedRate?.service_code === 'LOCAL_PARCEL' && (
+                                        <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-xl flex items-center gap-2 mb-4">
+                                            <span className="material-icons text-orange-500 text-sm">info</span>
+                                            <p className="text-[10px] font-bold text-orange-800 dark:text-orange-200 uppercase tracking-wider">
+                                                Note: You'll pay the transport fee directly to the courier on collection.
+                                            </p>
+                                        </div>
+                                    )}
                                     <div className="flex gap-4">
                                         <button
                                             onClick={handleSubmitOrder}
@@ -742,10 +888,15 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
 
                                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                     <span>Shipping</span>
-                                    <span className={deliveryFee === 0 ? 'text-green-600 font-bold' : 'text-gray-900 dark:text-white font-bold'}>
-                                        {deliveryFee === 0 ? 'FREE' : getConvertedSummaryPriceStr('delivery-fee', convertedDeliveryFee)}
+                                    <span className={(deliveryFee === 0 || selectedRate?.service_code === 'LOCAL_PARCEL') ? 'text-orange-600 font-bold' : 'text-gray-900 dark:text-white font-bold'}>
+                                        {selectedRate?.service_code === 'LOCAL_PARCEL'
+                                            ? 'Paid on Collection'
+                                            : (deliveryFee === 0 ? 'FREE' : getConvertedSummaryPriceStr('delivery-fee', convertedDeliveryFee))}
                                     </span>
                                 </div>
+                                {selectedRate?.service_code === 'LOCAL_PARCEL' && (
+                                    <p className="text-[10px] text-right text-orange-500 font-bold -mt-3 italic">Transport fee payable to carrier</p>
+                                )}
                                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                                     <span>{taxName} ({taxPercentage}%)</span>
                                     <span>{getConvertedSummaryPriceStr('tax-amount', convertedTaxAmount)}</span>
@@ -798,7 +949,7 @@ const CheckoutView: React.FC<CheckoutViewProps> = ({ cartItems, totalAmount, onC
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

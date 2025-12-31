@@ -325,6 +325,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             <div className="bg-white dark:bg-gray-900 rounded-3xl overflow-hidden shadow-md shadow-gray-100/50 dark:shadow-none border border-gray-100 dark:border-gray-800">
               {[
                 { icon: 'mail', label: 'Messages', tab: 'messages' },
+                { icon: 'local_offer', label: 'Promotions', tab: 'promotions' },
                 { icon: 'account_balance_wallet', label: 'Payouts', tab: 'wallet' },
                 { icon: 'star', label: 'Manage Reviews', tab: 'reviews' },
                 { icon: 'assignment_return', label: 'Manage Returns', tab: 'returns' },
@@ -437,8 +438,10 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
                   { label: 'Messages', icon: 'chat_bubble', color: 'bg-emerald-500', onClick: () => setActiveTab('messages') },
                   { label: 'Analytics', icon: 'insights', color: 'bg-violet-500', onClick: () => navigateTo('analytics', 'overview') },
                   { label: 'Reviews', icon: 'star', color: 'bg-amber-500', onClick: () => navigateTo('reviews', 'overview') },
+                  { label: 'Promotions', icon: 'local_offer', color: 'bg-orange-500', onClick: () => navigateTo('promotions', 'overview') },
                   { label: 'Returns', icon: 'assignment_return', color: 'bg-rose-500', onClick: () => navigateTo('returns', 'overview') },
                   { label: 'Settings', icon: 'settings', color: 'bg-gray-700', onClick: () => navigateTo('settings', 'overview') },
+                  { label: 'Support', icon: 'contact_support', color: 'bg-cyan-500', onClick: onSupportClick },
                 ].map((action, idx) => (
                   <button key={idx} onClick={action.onClick} className="flex flex-col items-center gap-2 group">
                     <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg transition-all active:scale-90", action.color, `shadow-${action.color.split('-')[1]}-500/20`)}>

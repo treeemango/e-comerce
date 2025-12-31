@@ -10,6 +10,29 @@ self.addEventListener('push', function (event) {
         }
     }
 
+    // Construct URL if missing but target info is present
+    if (!data.url) {
+        if (data.target === 'chat') {
+            data.url = `/?chat_id=${data.id || 'inbox'}`;
+        } else if (data.target === 'product' && data.id) {
+            data.url = `/?product_id=${data.id}`;
+        } else if (data.target === 'order' && data.id) {
+            data.url = `/?order_id=${data.id}`;
+        } else if (data.target === 'wishlist') {
+            data.url = '/?view=wishlist';
+        } else if (data.target === 'coupons') {
+            data.url = '/?view=account-page&section=Coupon%20codes';
+        } else if (data.target === 'seller-orders') {
+            data.url = '/?view=seller-dashboard&tab=manage-orders';
+        } else if (data.target === 'inventory') {
+            data.url = '/?view=seller-dashboard&tab=manage-products';
+        } else if (data.target === 'finances') {
+            data.url = '/?view=seller-dashboard&tab=finances';
+        } else if (data.target === 'deals') {
+            data.url = '/?view=deals';
+        }
+    }
+
     const options = {
         body: data.body || 'You have a new update.',
         icon: '/icon-192.png',
@@ -18,7 +41,7 @@ self.addEventListener('push', function (event) {
         data: {
             dateOfArrival: Date.now(),
             primaryKey: '1',
-            url: data.url || '/' // Capture the URL from payload
+            url: data.url || '/'
         },
         actions: [
             { action: 'open', title: 'Open' }

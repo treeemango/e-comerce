@@ -470,7 +470,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const priceValues = useMemo(() => {
         const vals: { id: string; amount: number; currency: string }[] = [];
         vals.push({ id: 'displayPrice', amount: currentVariant?.price || product.price, currency: currencyCode });
-        if (product.originalPrice) vals.push({ id: 'originalPrice', amount: product.originalPrice, currency: currencyCode });
+        const originalPriceAmount = currentVariant?.originalPrice || currentVariant?.compare_at_price || product.originalPrice;
+        if (originalPriceAmount) vals.push({ id: 'originalPrice', amount: originalPriceAmount, currency: currencyCode });
         if (product.delayCredit) vals.push({ id: 'delayCredit', amount: product.delayCredit, currency: currencyCode });
         vals.push({ id: 'deliveryCost', amount: product.delivery_cost || 0, currency: currencyCode });
         quantityDiscounts.forEach((tier, idx) => {
@@ -729,19 +730,19 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 {getPriceFormatted('displayPrice', currentVariant?.price || product.price).whole}
                                 <span className="text-lg font-black opacity-40">.{getPriceFormatted('displayPrice', currentVariant?.price || product.price).decimal}</span>
                             </span>
-                            {product.originalPrice && (
+                            {(currentVariant?.originalPrice || currentVariant?.compare_at_price || product.originalPrice) && (
                                 <span className="text-sm text-gray-400 line-through font-medium">
-                                    {getPrice('originalPrice', product.originalPrice)}
+                                    {getPrice('originalPrice', currentVariant?.originalPrice || currentVariant?.compare_at_price || product.originalPrice || 0)}
                                 </span>
                             )}
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        {product.discountPercent && (
+                        {(currentVariant?.discountPercent || product.discountPercent) ? (
                             <div className="bg-red-600 dark:bg-red-500 text-white px-3 py-1.5 rounded-xl font-black text-sm shadow-lg shadow-red-200 dark:shadow-none">
-                                -{product.discountPercent}% OFF
+                                -{currentVariant?.discountPercent || product.discountPercent}% OFF
                             </div>
-                        )}
+                        ) : null}
                         {product.lower_than_similar && (
                             <div className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs shadow-lg shadow-emerald-200 dark:shadow-none">
                                 <span className="material-icons-round text-sm">trending_down</span>
@@ -847,9 +848,15 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                             }`}>
                                             <img src={v.image!} className="w-full h-full object-cover" alt="" />
                                         </div>
-                                        <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'
-                                            }`}>
-                                            {getPriceFormatted(`variant-${originalIndex}`, v.price).whole}
+                                        <div className="flex flex-col items-center">
+                                            <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
+                                                {getPriceFormatted(`variant-${originalIndex}`, v.price).whole}
+                                            </div>
+                                            {(v.originalPrice || v.compare_at_price) && (v.originalPrice || v.compare_at_price || 0) > v.price && (
+                                                <div className="text-[8px] text-gray-400 line-through">
+                                                    {getPrice(`variant-orig-${originalIndex}`, v.originalPrice || v.compare_at_price || 0)}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -1647,11 +1654,25 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                 <div className="flex-1 min-w-0 py-1">
                                     <div className="flex gap-6 overflow-x-auto hide-scrollbar pb-2">
                                         <div className="flex-shrink-0">
-                                            <div className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter transition-colors">
-                                                {getPriceFormatted('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price).whole}
-                                                <span className="text-sm opacity-40">.{getPriceFormatted('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price).decimal}</span>
+                                            <div className="flex items-baseline gap-2">
+                                                <div className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter transition-colors">
+                                                    {getPriceFormatted('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price).whole}
+                                                    <span className="text-sm opacity-40">.{getPriceFormatted('displayPrice', sheetPreviewVariant?.price || currentVariant?.price || product.price).decimal}</span>
+                                                </div>
+                                                {(sheetPreviewVariant?.originalPrice || sheetPreviewVariant?.compare_at_price) && (
+                                                    <div className="text-sm text-gray-400 line-through">
+                                                        {getPrice('originalPrice', sheetPreviewVariant?.originalPrice || sheetPreviewVariant?.compare_at_price || 0)}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Min. order: 1 piece</div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Min. order: 1 piece</div>
+                                                {(sheetPreviewVariant?.discountPercent || product.discountPercent) && (
+                                                    <div className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg shadow-sm">
+                                                        -{Math.round(sheetPreviewVariant?.discountPercent || product.discountPercent || 0)}% OFF
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                         {quantityDiscounts.map((tier, idx) => (
                                             <div key={idx} className="flex-shrink-0 opacity-80 decoration-gray-400">
@@ -1697,18 +1718,25 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                             onClick={() => setSheetPreviewVariant(variant || null)}
                                                             className={`flex items-center justify-between p-4 border-b border-gray-100/50 dark:border-gray-800/50 last:border-0 transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'bg-orange-50/10 dark:bg-orange-900/5' : ''}`}
                                                         >
-                                                            <div className="flex items-center gap-4">
-                                                                <div className={`w-14 h-14 rounded-xl overflow-hidden border transition-all ${sheetPreviewVariant?.id === variant?.id ? 'border-orange-500 shadow-orange-100 dark:shadow-none scale-105' : 'border-gray-100 dark:border-gray-800 shadow-sm'}`}>
+                                                            <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                                <div className={`w-14 h-14 rounded-xl overflow-hidden border flex-shrink-0 transition-all ${sheetPreviewVariant?.id === variant?.id ? 'border-orange-500 shadow-orange-100 dark:shadow-none scale-105' : 'border-gray-100 dark:border-gray-800 shadow-sm'}`}>
                                                                     <img src={repImg || product.image} className="w-full h-full object-cover" alt="" />
                                                                 </div>
-                                                                <div className="flex flex-col gap-0.5">
-                                                                    <span className={`text-sm font-black uppercase tracking-tight transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{val}</span>
-                                                                    <span className="text-xs font-bold text-gray-400">
-                                                                        {getPrice('displayPrice', variantPrice)}
-                                                                    </span>
+                                                                <div className="flex flex-col gap-0.5 min-w-0">
+                                                                    <span className={`text-sm font-black uppercase tracking-tight truncate transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{val}</span>
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        <span className="text-xs font-black text-gray-400 whitespace-nowrap">
+                                                                            {getPrice('displayPrice', variantPrice)}
+                                                                        </span>
+                                                                        {(variant?.originalPrice || variant?.compare_at_price) && (
+                                                                            <span className="text-[10px] text-gray-300 line-through whitespace-nowrap">
+                                                                                {getPrice('originalPrice', variant?.originalPrice || variant?.compare_at_price || 0)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-1">
+                                                            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); updateQty(-1); }}
                                                                     disabled={qty === 0}

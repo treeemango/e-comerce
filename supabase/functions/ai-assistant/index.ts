@@ -1,7 +1,7 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// @ts-ignore: Deno is available in the Edge Function environment
 const GROK_API_KEY = (Deno as any).env.get("GROK_API_KEY");
 console.log("GROK_API_KEY detected:", !!GROK_API_KEY);
 
@@ -77,8 +77,8 @@ serve(async (req: Request) => {
                         feature: featureKey,
                     }),
                     {
-                    status: 403,
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                        status: 403,
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
                     }
                 );
             }
@@ -89,16 +89,21 @@ serve(async (req: Request) => {
         }
 
         let prompt = "";
-        let systemPrompt = "You are a helpful e-commerce copywriter assistant. Your goal is to help sellers create high-quality, SEO-optimized product listings. Provide concise, professional, and engaging content.";
+        let systemPrompt = "You are a helpful e-commerce copywriter assistant. Your goal is to help sellers create high-quality, SEO-optimized product listings. Provide concise, professional, and engaging content. CRITICAL: Never change brand names, model numbers, or technical specs from the original title.";
         let messages: any[] = [];
         let useVision = false;
 
         switch (action) {
             case "improve_title":
-                prompt = `Improve this product title for better visibility and sales: "${params.title}"${params.category ? ` in the category "${params.category}"` : ""}. Return ONLY the improved title string. Do not include any tags, quotes, or word counts.`;
+                prompt = `Improve this product title for better visibility and sales: "${params.title}"${params.category ? ` in the category "${params.category}"` : ""}.${params.focus ? `\nContext/Focus: "${params.focus}".\n` : ""} 
+                IMPORTANT: 
+                - Follow the context strictly. 
+                - DO NOT change or hallucinate brand names (e.g., if it says Vitron, keep it Vitron, do not change to Vizio). 
+                - Preserve all model numbers and technical specs.
+                - Return ONLY the improved title string. Do not include any tags, quotes, or word counts.`;
                 break;
             case "generate_description":
-                prompt = `Generate a compelling product description for: "${params.title}"${params.category ? ` in category "${params.category}"` : ""}. ${params.attributes ? `Key features: ${JSON.stringify(params.attributes)}` : ""}. 
+                prompt = `Generate a compelling product description for: "${params.title}"${params.category ? ` in category "${params.category}"` : ""}. ${params.focus ? `\nThe seller clarification (what the product actually is / what to focus on): "${params.focus}".\nIMPORTANT: Follow this clarification strictly. Do NOT describe adjacent items suggested by the category name.\n` : ""}${params.attributes ? `Key features: ${JSON.stringify(params.attributes)}` : ""}. 
                 Guidelines:
                 - Use professional and engaging language.
                 - Use bullet points for features.

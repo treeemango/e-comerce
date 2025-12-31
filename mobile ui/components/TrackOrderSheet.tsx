@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { trackGuestOrder, GuestOrderDetails } from '@/lib/api';
 import { formatPrice } from '@/lib/currency';
 import { supabase } from '@/lib/supabase';
@@ -11,8 +11,19 @@ interface TrackOrderSheetProps {
 
 type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
 
+const normalizeOrderStatus = (raw?: string | null): OrderStatus => {
+    const s = (raw || '').toLowerCase().trim();
+
+    if (!s) return 'pending';
+    if (s === 'completed' || s.includes('deliver')) return 'delivered';
+    if (s.includes('ship') || s.includes('picked') || s.includes('transit') || s.includes('out_for_delivery')) return 'shipped';
+    if (s.includes('process') || s.includes('confirm') || s.includes('paid')) return 'processing';
+    if (s.includes('cancel') || s.includes('refund')) return 'cancelled';
+    return 'pending';
+};
+
 const STATUS_STEPS: { status: OrderStatus; label: string; icon: string }[] = [
-    { status: 'pending', label: 'Placed', icon: 'receipt_long' },
+    { status: 'pending', label: 'Order Placed', icon: 'receipt_long' },
     { status: 'processing', label: 'Processing', icon: 'inventory_2' },
     { status: 'shipped', label: 'Shipped', icon: 'local_shipping' },
     { status: 'delivered', label: 'Delivered', icon: 'check_circle' }
@@ -28,6 +39,7 @@ export const TrackOrderSheet: React.FC<TrackOrderSheetProps> = ({
     const [orderDetails, setOrderDetails] = useState<GuestOrderDetails | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const didAutoTrack = useRef(false);
 
     const handleTrackOrder = async () => {
         if (!orderId.trim() || !email.trim()) {
@@ -52,6 +64,21 @@ export const TrackOrderSheet: React.FC<TrackOrderSheetProps> = ({
             setIsLoading(false);
         }
     };
+
+    // Auto-track when opened from an existing order (web parity behavior)
+    useEffect(() => {
+        if (didAutoTrack.current) return;
+        if (!initialOrderId || !initialEmail) return;
+        if (orderDetails) return;
+
+        didAutoTrack.current = true;
+        // Ensure local state matches props
+        setOrderId(initialOrderId);
+        setEmail(initialEmail);
+        // Trigger lookup
+        void handleTrackOrder();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialOrderId, initialEmail]);
 
     // Real-time status subscription
     useEffect(() => {
@@ -80,11 +107,68 @@ export const TrackOrderSheet: React.FC<TrackOrderSheetProps> = ({
     }, [orderDetails?.order_id]);
 
     const getStatusIndex = (status: string): number => {
-        const index = STATUS_STEPS.findIndex(s => s.status === status?.toLowerCase());
+        const normalized = normalizeOrderStatus(status);
+        const index = STATUS_STEPS.findIndex(s => s.status === normalized);
         return index >= 0 ? index : 0;
     };
 
     const currentStatusIndex = orderDetails ? getStatusIndex(orderDetails.status) : -1;
+
+    const journeyEvents = useMemo(() => {
+        if (!orderDetails) return [] as any[];
+
+        const raw = Array.isArray(orderDetails.tracking_events) ? orderDetails.tracking_events : [];
+        const normalized = raw
+            .filter(Boolean)
+            .map((e: any) => ({
+                id: e.id,
+                created_at: e.created_at,
+                event_description: e.event_description || e.event_type || 'Update',
+                location_name: e.location_name || e.location || null,
+            }))
+            .filter((e: any) => !!e.created_at);
+
+        if (normalized.length > 0) {
+            return normalized.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        }
+
+        // Fallback: synthesize a simple journey like web if tracking table is blocked/empty
+        const createdAt = orderDetails.created_at || new Date().toISOString();
+        const synthetic: any[] = [
+            {
+                id: 'synthetic-placed',
+                created_at: createdAt,
+                event_description: 'Order placed successfully',
+                location_name: null
+            },
+            {
+                id: 'synthetic-confirmed',
+                created_at: createdAt,
+                event_description: 'Order confirmed and processing',
+                location_name: null
+            }
+        ];
+
+        const status = (orderDetails.status || '').toLowerCase();
+        if (['shipped', 'delivered', 'completed'].includes(status)) {
+            synthetic.push({
+                id: 'synthetic-shipped',
+                created_at: createdAt,
+                event_description: 'Order has been shipped',
+                location_name: null
+            });
+        }
+        if (['delivered', 'completed'].includes(status)) {
+            synthetic.push({
+                id: 'synthetic-delivered',
+                created_at: createdAt,
+                event_description: 'Order delivered successfully',
+                location_name: null
+            });
+        }
+
+        return synthetic;
+    }, [orderDetails]);
 
     return (
         <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex flex-col justify-end">
@@ -184,6 +268,63 @@ export const TrackOrderSheet: React.FC<TrackOrderSheetProps> = ({
                                     })}
                                 </div>
                             </div>
+
+                            {/* Order Journey (web parity) */}
+                            {journeyEvents.length > 0 && (
+                                <div className="bg-gray-50/50 dark:bg-gray-900/30 p-5 rounded-3xl border border-gray-100 dark:border-gray-800">
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">Order Journey</h3>
+                                    <div className="relative pl-6 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200 dark:before:bg-gray-700">
+                                        {journeyEvents.map((event: any, idx: number) => {
+                                            const isCurrent = idx === journeyEvents.length - 1;
+                                            return (
+                                                <div key={event.id || idx} className="relative">
+                                                    <div className={`absolute -left-[20px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${isCurrent ? 'bg-orange-500 scale-125' : 'bg-gray-300 dark:bg-gray-600'
+                                                        }`} />
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className={`text-xs font-bold ${isCurrent ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'}`}>
+                                                                {event.event_description}
+                                                            </p>
+                                                            <span className="text-[9px] font-black text-gray-300 dark:text-gray-500 uppercase">
+                                                                {event.created_at ? new Date(event.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-400 font-medium">
+                                                            {event.created_at ? new Date(event.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' }) : ''}
+                                                            {event.location_name ? ` • ${event.location_name}` : ''}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Local Parcel Transport Fee Highlight */}
+                            {(orderDetails.fulfillment_type === 'local_parcel' || orderDetails.logistics_meta?.provider === 'local_parcel') && (
+                                <div className="bg-orange-50 dark:bg-orange-900/20 p-5 rounded-3xl border border-orange-100 dark:border-orange-800/50">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center text-white">
+                                            <span className="material-icons">payments</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-black text-orange-900 dark:text-orange-100">Transport Fee</p>
+                                            <p className="text-[10px] text-orange-700 dark:text-orange-300 font-medium">To be paid on collection</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white dark:bg-black/40 rounded-2xl p-4 text-center">
+                                        <p className="text-2xl font-black text-orange-600">
+                                            {orderDetails.logistics_meta?.confirmed_transport_fee
+                                                ? `KSh ${orderDetails.logistics_meta.confirmed_transport_fee.toLocaleString()}`
+                                                : 'TBD'}
+                                        </p>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                            Amount payable to carrier
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Order Info */}
                             <div className="grid grid-cols-2 gap-4">

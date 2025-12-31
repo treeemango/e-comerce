@@ -81,6 +81,8 @@ const ModerationQueueView: React.FC = () => {
     };
 
     const handleApprove = async (id: string) => {
+        const review = flaggedReviews.find(r => r.id === id);
+
         // Approve the review
         const { error } = await supabase
             .from('enhanced_reviews')
@@ -89,6 +91,18 @@ const ModerationQueueView: React.FC = () => {
 
         if (!error) {
             setFlaggedReviews(prev => prev.filter(r => r.id !== id));
+
+            // Notify the user
+            if (review) {
+                await supabase.from('notifications').insert({
+                    user_id: review.user_id,
+                    type: 'success',
+                    title: 'Review Approved',
+                    message: `Your review for "${review.product_title}" has been approved!`,
+                    action_payload: { target: 'product', id: review.product_id }, // specific structure for mobile/web nav
+                    is_read: false
+                });
+            }
         }
     };
 

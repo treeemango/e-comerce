@@ -464,16 +464,15 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 
   return (
     <section>
-      {/* Visual Subcategory Circles */}
+      {/* Visual Subcategory Circles - Modernized */}
       {visualCategories && visualCategories.length > 0 && (
-        <div className="flex gap-4 overflow-x-auto pb-6 pt-2 no-scrollbar px-1 mb-2">
+        <div className="flex gap-6 overflow-x-auto pb-8 pt-4 no-scrollbar px-2 mb-4">
           {visualCategories.map((cat) => (
             <div
               key={cat.id}
-              className="flex flex-col items-center cursor-pointer min-w-[120px] group"
+              className="flex flex-col items-center cursor-pointer min-w-[130px] group relative"
               onClick={() => {
                 if (onCategoryClick) {
-                  // Append subcategory to current breadcrumbs
                   const newCrumb: Breadcrumb = {
                     label: cat.name,
                     type: 'subcategory',
@@ -484,16 +483,37 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 }
               }}
             >
-              <div className="w-28 h-28 rounded-full border border-gray-200 p-1 group-hover:border-primary transition-colors overflow-hidden bg-gray-50 mb-3 shadow-sm">
-                <img
-                  src={cat.image || 'https://via.placeholder.com/100'}
-                  alt={cat.name}
-                  className="w-full h-full rounded-full object-cover"
-                />
+              <div className="relative w-32 h-32 rounded-3xl overflow-hidden transition-all duration-500 ease-out 
+                            group-hover:rounded-2xl group-hover:scale-105 group-hover:-translate-y-2
+                            bg-white/40 dark:bg-gray-800/40 backdrop-blur-md
+                            border border-white/50 dark:border-gray-700/50 shadow-lg group-hover:shadow-2xl group-hover:shadow-primary/20">
+
+                {/* Image Container with Glassmorphism Overlay */}
+                <div className="absolute inset-0 p-2">
+                  <div className="w-full h-full rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700">
+                    <img
+                      src={cat.image || 'https://via.placeholder.com/150'}
+                      alt={cat.name}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                  </div>
+                </div>
+
+                {/* Subtle Glow Effect on Hover */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-primary/0 via-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               </div>
-              <span className="text-sm text-center font-medium text-gray-800 dark:text-gray-200 group-hover:text-primary leading-tight line-clamp-2 max-w-[110px] h-10 flex items-center justify-center">
-                {cat.name}
-              </span>
+
+              {/* Enhanced Label */}
+              <div className="mt-4 transition-all duration-300 group-hover:translate-y-1">
+                <span className="text-sm text-center font-bold text-gray-800 dark:text-gray-100 group-hover:text-primary 
+                               tracking-tight leading-tight line-clamp-2 max-w-[120px] h-10 flex items-center justify-center
+                               transition-colors">
+                  {cat.name}
+                </span>
+
+                {/* Animated Dash */}
+                <div className="w-0 h-1 bg-primary mx-auto rounded-full transition-all duration-300 group-hover:w-8 mt-1 opacity-0 group-hover:opacity-100" />
+              </div>
             </div>
           ))}
         </div>
@@ -637,7 +657,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
               {hasActiveFilters() && (
                 <button
                   onClick={clearAllFilters}
-                  className="text-sm text-primary hover:underline font-medium"
+                  className="text-sm text-red-600 hover:text-red-700 hover:underline font-bold"
                 >
                   Clear all
                 </button>
@@ -648,17 +668,21 @@ const ProductSection: React.FC<ProductSectionProps> = ({
             <div className="relative filter-container z-50">
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide scroll-smooth">
                 {/* Main Filters Button */}
+                {/* Main Filters Button */}
                 <button
                   onClick={() => setShowVerticalFilters(true)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${totalAppliedFilters > 0
-                    ? 'bg-gray-100 border-gray-300 text-black'
-                    : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                  className={`flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md active:scale-95
+                    ${totalAppliedFilters > 0
+                      ? 'bg-red-600 text-white border-red-700 shadow-red-200/50'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/30'
                     }`}
                 >
-                  <span className="material-icons text-base">filter_list</span>
+                  <span className="material-icons text-lg">tune</span>
                   Filters
                   {totalAppliedFilters > 0 && (
-                    <span className="ml-0.5">({totalAppliedFilters})</span>
+                    <span className="ml-1 bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-inner">
+                      {totalAppliedFilters}
+                    </span>
                   )}
                 </button>
 
@@ -666,18 +690,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 {searchFilters && searchFilters.categories.length > 0 && (
                   <button
                     onClick={() => setActiveFilter(activeFilter === 'category' ? null : 'category')}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'category' || appliedFilters.category_ids.length > 0
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                      ${activeFilter === 'category' || appliedFilters.category_ids.length > 0
+                        ? 'bg-red-600 text-white border-red-700'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                       }`}
                   >
                     Category
                     {appliedFilters.category_ids.length > 0 && (
-                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                      <span className="bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-sm">
                         {appliedFilters.category_ids.length}
                       </span>
                     )}
-                    <span className="material-icons text-base">expand_more</span>
+                    <span className={`material-icons text-lg transition-transform duration-300 ${activeFilter === 'category' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                 )}
 
@@ -685,18 +710,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 {searchFilters && searchFilters.brands.length > 0 && (
                   <button
                     onClick={() => setActiveFilter(activeFilter === 'brand' ? null : 'brand')}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'brand' || appliedFilters.brand_ids.length > 0
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                      ${activeFilter === 'brand' || appliedFilters.brand_ids.length > 0
+                        ? 'bg-red-600 text-white border-red-700'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                       }`}
                   >
                     Brand
                     {appliedFilters.brand_ids.length > 0 && (
-                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                      <span className="bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-sm">
                         {appliedFilters.brand_ids.length}
                       </span>
                     )}
-                    <span className="material-icons text-base">expand_more</span>
+                    <span className={`material-icons text-lg transition-transform duration-300 ${activeFilter === 'brand' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                 )}
 
@@ -704,13 +730,14 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 {searchFilters && searchFilters.price_range.max_price > 0 && (
                   <button
                     onClick={() => setActiveFilter(activeFilter === 'price' ? null : 'price')}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'price' || appliedFilters.price_min !== null || appliedFilters.price_max !== null
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                      ${activeFilter === 'price' || appliedFilters.price_min !== null || appliedFilters.price_max !== null
+                        ? 'bg-red-600 text-white border-red-700'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                       }`}
                   >
                     Price
-                    <span className="material-icons text-base">expand_more</span>
+                    <span className={`material-icons text-lg transition-transform duration-300 ${activeFilter === 'price' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                 )}
 
@@ -718,18 +745,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 {searchFilters && searchFilters.delivery_locations && searchFilters.delivery_locations.length > 0 && (
                   <button
                     onClick={() => setActiveFilter(activeFilter === 'delivery' ? null : 'delivery')}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'delivery' || appliedFilters.delivery_locations.length > 0
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                      ${activeFilter === 'delivery' || appliedFilters.delivery_locations.length > 0
+                        ? 'bg-red-600 text-white border-red-700'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                       }`}
                   >
                     Delivery
                     {appliedFilters.delivery_locations.length > 0 && (
-                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                      <span className="bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-sm">
                         {appliedFilters.delivery_locations.length}
                       </span>
                     )}
-                    <span className="material-icons text-base">expand_more</span>
+                    <span className={`material-icons text-lg transition-transform duration-300 ${activeFilter === 'delivery' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                 )}
 
@@ -737,18 +765,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 {searchFilters && searchFilters.vendor_countries && searchFilters.vendor_countries.length > 0 && (
                   <button
                     onClick={() => setActiveFilter(activeFilter === 'country' ? null : 'country')}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'country' || appliedFilters.vendor_countries.length > 0
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                      ${activeFilter === 'country' || appliedFilters.vendor_countries.length > 0
+                        ? 'bg-red-600 text-white border-red-700'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                       }`}
                   >
                     Country
                     {appliedFilters.vendor_countries.length > 0 && (
-                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                      <span className="bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-sm">
                         {appliedFilters.vendor_countries.length}
                       </span>
                     )}
-                    <span className="material-icons text-base">expand_more</span>
+                    <span className={`material-icons text-lg transition-transform duration-300 ${activeFilter === 'country' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                 )}
 
@@ -756,18 +785,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 {searchFilters && searchFilters.conditions && searchFilters.conditions.length > 0 && (
                   <button
                     onClick={() => setActiveFilter(activeFilter === 'condition' ? null : 'condition')}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${activeFilter === 'condition' || (appliedFilters.conditions?.length || 0) > 0
-                      ? 'bg-black text-white border-black shadow-sm'
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                      ${activeFilter === 'condition' || (appliedFilters.conditions?.length || 0) > 0
+                        ? 'bg-red-600 text-white border-red-700'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                       }`}
                   >
                     Condition
                     {(appliedFilters.conditions?.length || 0) > 0 && (
-                      <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                      <span className="bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-sm">
                         {appliedFilters.conditions?.length}
                       </span>
                     )}
-                    <span className="material-icons text-base">expand_more</span>
+                    <span className={`material-icons text-lg transition-transform duration-300 ${activeFilter === 'condition' ? 'rotate-180' : ''}`}>expand_more</span>
                   </button>
                 )}
 
@@ -781,18 +811,19 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                       <button
                         key={attributeName}
                         onClick={() => setActiveFilter(isActive ? null : attributeName)}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap border ${isActive || selectedCount > 0
-                          ? 'bg-black text-white border-black shadow-sm'
-                          : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                        className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border shadow-sm hover:shadow-md
+                          ${isActive || selectedCount > 0
+                            ? 'bg-red-600 text-white border-red-700'
+                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-red-400/40'
                           }`}
                       >
                         {attributeName}
                         {selectedCount > 0 && (
-                          <span className="bg-white text-black rounded-full px-1.5 py-0.5 text-xs font-bold">
+                          <span className="bg-white text-red-600 rounded-lg px-1.5 py-0.5 text-xs font-black shadow-sm">
                             {selectedCount}
                           </span>
                         )}
-                        <span className="material-icons text-base">expand_more</span>
+                        <span className={`material-icons text-lg transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}>expand_more</span>
                       </button>
                     );
                   })}

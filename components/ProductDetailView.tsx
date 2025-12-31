@@ -58,6 +58,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [similarItems, setSimilarItems] = useState<RelatedProduct[]>([]);
    const [inspiredItems, setInspiredItems] = useState<RelatedProduct[]>([]);
    const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+   const [isLoadingUseCase, setIsLoadingUseCase] = useState(false);
+   const [isLoadingSame, setIsLoadingSame] = useState(false);
    const [activeMediaIndex, setActiveMediaIndex] = useState(0);
    const [hoverPreviewMedia, setHoverPreviewMedia] = useState<MediaItem | null>(null);
    const [userHasSelected, setUserHasSelected] = useState(false);
@@ -88,7 +90,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
    const [resolvedVendor, setResolvedVendor] = useState(product.vendor);
 
-   // Coupon State
    const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
    const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
@@ -210,10 +211,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    }, [product.price, currentVariant]);
 
    const displayRRP = useMemo(() => {
+      const variantRrp = currentVariant?.originalPrice ?? currentVariant?.compare_at_price;
+      if (typeof variantRrp === 'number' && variantRrp > 0) return variantRrp;
+
       const backendRrp = product.originalPrice ?? product.rrp;
       if (typeof backendRrp === 'number' && backendRrp > 0) return backendRrp;
       return null; // avoid fake RRPs to prevent misleading discounts
-   }, [product.originalPrice, product.rrp]);
+   }, [product.originalPrice, product.rrp, currentVariant]);
 
    useEffect(() => {
       setResolvedVendor(product.vendor);
@@ -249,12 +253,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    }, [product.id, product.seller_id, product.vendor, resolvedVendor]);
 
    const discountPercent = useMemo(() => {
+      if (currentVariant?.discountPercent) return Math.round(currentVariant.discountPercent);
       if (typeof product.discountPercent === 'number') return Math.round(product.discountPercent);
       if (displayRRP && displayRRP > displayPrice) {
          return Math.round(((displayRRP - displayPrice) / displayRRP) * 100);
       }
       return null;
-   }, [displayPrice, displayRRP, product.discountPercent]);
+   }, [displayPrice, displayRRP, product.discountPercent, currentVariant]);
 
    const promoLine = useMemo(() => {
       if (product.promoText) return product.promoText;
@@ -404,8 +409,10 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             setIsLoadingRelated(true);
             try {
                // 1. Fetch visually similar products for current item
+               setIsLoadingSame(true);
                const { same, similar } = await fetchRelatedProducts(product.id.toString());
                setSameItems(same);
+               setIsLoadingSame(false);
 
                // 2. Fetch browsing history to get inspired products
                const history = await fetchRecentViews(product.id.toString());
@@ -469,6 +476,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             // Fetch Use Case Recommendations
             if (product.use_case_tags && product.use_case_tags.length > 0) {
                const tag = product.use_case_tags[0];
+               setIsLoadingUseCase(true);
                try {
                   const { fetchFilteredProducts } = await import('../lib/api');
                   const results = await fetchFilteredProducts(tag, {
@@ -484,6 +492,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   setUseCaseItems(results.filter(p => p.id.toString() !== product.id?.toString()).slice(0, 6));
                } catch (e) {
                   console.error("Failed to load use case items", e);
+               } finally {
+                  setIsLoadingUseCase(false);
                }
             }
          }
@@ -519,6 +529,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       // Add variant prices
       productVariants.forEach(v => {
          vals.push({ id: `variant-${v.id}`, amount: v.price, currency: currencyCode });
+         if (v.originalPrice || v.compare_at_price) {
+            vals.push({ id: `variant-orig-${v.id}`, amount: v.originalPrice || v.compare_at_price || 0, currency: currencyCode });
+         }
       });
 
       // Add delivery cost
@@ -1652,24 +1665,30 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          <ProductQuestions product={product} />
 
          {/* AI Search Results: Use Case Recommendations */}
-         {
-            product.use_case_tags && product.use_case_tags.length > 0 && useCaseItems.length > 0 && (
-               <div className="mt-16">
-                  <div className="flex items-center justify-between mb-6">
-                     <div className="flex flex-col">
-                        <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                           More for {product.use_case_tags[0]}
-                           <span className="text-xs font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">
-                              AI Curated
-                           </span>
-                        </h2>
-                     </div>
+         {(isLoadingUseCase || (product.use_case_tags && product.use_case_tags.length > 0 && useCaseItems.length > 0)) && (
+            <div className="mt-16">
+               <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-col">
+                     <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        More for {product.use_case_tags?.[0] || 'you'}
+                        <span className="text-[10px] font-black uppercase tracking-widest bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 px-2 py-1 rounded">
+                           AI Curated
+                        </span>
+                     </h2>
+                  </div>
+                  {!isLoadingUseCase && product.use_case_tags?.[0] && (
                      <a href={`/search?q=${product.use_case_tags[0]}`} className="text-sm font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 flex items-center gap-1">
                         See all
                         <span className="material-icons text-sm">arrow_forward</span>
                      </a>
-                  </div>
+                  )}
+               </div>
 
+               {isLoadingUseCase ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                     <ProductCardSkeleton count={6} />
+                  </div>
+               ) : (
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                      {useCaseItems.map(item => (
                         <ProductCard
@@ -1680,19 +1699,24 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         />
                      ))}
                   </div>
-               </div>
-            )
-         }
+               )}
+            </div>
+         )}
 
          {/* AI Search Results: Same Items */}
-         {
-            sameItems.length > 0 && (
-               <div className="mt-16">
-                  <div className="flex items-center mb-6">
-                     <span className="material-icons text-shop-red text-2xl mr-2">image_search</span>
-                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Exact matches for you</h2>
-                     <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">Looks just like yours</span>
+         {(isLoadingSame || sameItems.length > 0) && (
+            <div className="mt-16">
+               <div className="flex items-center mb-6">
+                  <span className="material-icons text-shop-red text-2xl mr-2">image_search</span>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Exact matches for you</h2>
+                  <span className="ml-2 text-[10px] font-black uppercase tracking-widest bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-2 py-1 rounded">Looks just like yours</span>
+               </div>
+
+               {isLoadingSame ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                     <ProductCardSkeleton count={6} />
                   </div>
+               ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                      {sameItems.map(p => (
                         <ProductCard
@@ -1703,9 +1727,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         />
                      ))}
                   </div>
-               </div>
-            )
-         }
+               )}
+            </div>
+         )}
 
          {/* AI Search Results: Similar Items & Mixed Recommendations */}
          {(similarItems.length > 0 || isLoadingRelated) && (
@@ -1718,8 +1742,10 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   </div>
                </div>
 
-               {isLoadingRelated && similarItems.length === 0 ? (
-                  <ProductCardSkeleton count={12} />
+               {isLoadingRelated ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                     <ProductCardSkeleton count={12} />
+                  </div>
                ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                      {similarItems.map(p => (
@@ -1920,8 +1946,17 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                                    <img src={variant?.image || product.image} className="w-full h-full object-cover" alt={val} />
                                                 </div>
                                                 <div>
-                                                   <p className="text-sm font-bold text-slate-800 dark:text-white">{val}</p>
-                                                   <p className="text-xs text-slate-500">{variant ? getPrice(`variant-${variant.id}`, variant.price, currencyCode) : getPrice('displayPrice', product.price, currencyCode)}</p>
+                                                   <p className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-tight">{val}</p>
+                                                   <div className="flex items-center gap-2">
+                                                      <p className="text-sm font-black text-orange-600 dark:text-orange-400">
+                                                         {variant ? getPrice(`variant-${variant.id}`, variant.price, currencyCode) : getPrice('displayPrice', product.price, currencyCode)}
+                                                      </p>
+                                                      {(variant?.originalPrice || variant?.compare_at_price) && (variant?.originalPrice || variant?.compare_at_price || 0) > variant!.price && (
+                                                         <p className="text-xs text-slate-400 line-through">
+                                                            {getPrice(`variant-orig-${variant!.id}`, variant!.originalPrice || variant!.compare_at_price || 0, currencyCode)}
+                                                         </p>
+                                                      )}
+                                                   </div>
                                                 </div>
                                              </div>
 

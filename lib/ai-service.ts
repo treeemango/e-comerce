@@ -54,14 +54,14 @@ class AIService {
         return data.result;
     }
 
-    async improveTitle(title: string, category?: string): Promise<string> {
+    async improveTitle(title: string, category?: string, focus?: string): Promise<string> {
         if (!title.trim()) return '';
-        return this.callFunction('improve_title', { title, category });
+        return this.callFunction('improve_title', { title, category, focus });
     }
 
-    async generateDescription(title: string, category?: string, attributes?: any): Promise<string> {
+    async generateDescription(title: string, category?: string, attributes?: any, focus?: string): Promise<string> {
         if (!title.trim()) return '';
-        return this.callFunction('generate_description', { title, category, attributes });
+        return this.callFunction('generate_description', { title, category, attributes, focus });
     }
 
     async generateSEO(title: string, description: string): Promise<SEOMetadata> {

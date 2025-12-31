@@ -3,6 +3,8 @@ import { Product, UserCoupon, AppliedCoupon } from '@/types';
 import { applyPromotionsToCart, PromotionsResult } from '@/lib/promotions';
 import { fetchUserCoupons, applyCoupon, checkout, fetchCartDeliveryFee, syncCart, fetchUserAddresses, UserAddress, fetchTaxBreakdown, TaxBreakdown } from '@/lib/api';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
+import { logistics } from '@/lib/logistics-service';
+import { ShippingRate } from '@/lib/logistics-types';
 
 interface CartItem {
   product: Product;
@@ -39,8 +41,10 @@ type CheckoutStep = 'shipping' | 'payment' | 'review';
 export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onClose, onPlaceOrder }) => {
   const [step, setStep] = useState<CheckoutStep>('shipping');
   const [isGuest, setIsGuest] = useState(!userId);
-  const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
-  const [payment, setPayment] = useState<'card' | 'mpesa' | 'cod' | 'wallet'>('card');
+  const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
+  const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
+  const [isFetchingRates, setIsFetchingRates] = useState(false);
+  const [payment, setPayment] = useState<'card' | 'mpesa' | 'wallet'>('card');
   const [mpesaPhone, setMpesaPhone] = useState('');
   const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
@@ -170,12 +174,44 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
   }, [items]);
 
   useEffect(() => {
-    const getDeliveryFee = async () => {
-      const fee = await fetchCartDeliveryFee(userId || null, shipping === 'express');
-      setDeliveryFee(fee);
+    const fetchRates = async () => {
+      if (!addressData.country || !addressData.townCity || items.length === 0) return;
+
+      setIsFetchingRates(true);
+      try {
+        const rates = await logistics.getAllRates({
+          origin: {
+            name: 'JuaExpress Warehouse',
+            phone: '+254700000000',
+            street_address: 'Industrial Area',
+            city: 'Nairobi',
+            country_code: 'KE'
+          },
+          destination: {
+            name: `${addressData.firstName} ${addressData.lastName}`,
+            phone: addressData.phoneNumber,
+            street_address: addressData.addressLine1,
+            city: addressData.townCity,
+            country_code: COUNTRIES.find(c => c.name === addressData.country)?.code || 'KE'
+          },
+          parcels: [{
+            weight: items.reduce((sum, i) => sum + (i.quantity * 0.5), 0),
+            length: 20, width: 15, height: 10
+          }]
+        });
+        setShippingRates(rates);
+        if (rates.length > 0 && !selectedRate) {
+          setSelectedRate(rates[0]);
+        }
+      } catch (err) {
+        console.error('Error fetching rates:', err);
+      } finally {
+        setIsFetchingRates(false);
+      }
     };
-    getDeliveryFee();
-  }, [userId, shipping, items]);
+    const tid = setTimeout(fetchRates, 1000);
+    return () => clearTimeout(tid);
+  }, [addressData.townCity, addressData.addressLine1, addressData.country, items.length]);
 
   useEffect(() => {
     const autoApplyBestCoupon = async () => {
@@ -280,7 +316,9 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
   const taxes = taxInfo?.tax_amount ?? ((subtotal + deliveryFee - totalSavings - discountAmount) * 0.16);
   const taxName = taxInfo?.tax_name ?? 'VAT';
   const taxPercentage = taxInfo?.tax_percentage ?? 16;
-  const total = Math.max(0, (promoResult?.finalTotal || subtotal) - discountAmount) + deliveryFee + taxes;
+
+  const actualDeliveryFee = selectedRate ? selectedRate.rate_amount : deliveryFee;
+  const total = Math.max(0, (promoResult?.finalTotal || subtotal) - discountAmount) + actualDeliveryFee + taxes;
 
   // Currency conversion for all monetary values
   const priceValues = useMemo(() => {
@@ -290,9 +328,8 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
     vals.push({ id: 'subtotal', amount: subtotal, currency: baseCurrency });
     vals.push({ id: 'discount', amount: discountAmount, currency: baseCurrency });
     vals.push({ id: 'taxes', amount: taxes, currency: baseCurrency });
-    vals.push({ id: 'deliveryFee', amount: deliveryFee, currency: baseCurrency });
+    vals.push({ id: 'deliveryFee', amount: actualDeliveryFee, currency: selectedRate?.currency || baseCurrency });
     vals.push({ id: 'total', amount: total, currency: baseCurrency });
-    vals.push({ id: 'expressDelivery', amount: 6.99, currency: baseCurrency });
 
     return vals;
   }, [subtotal, discountAmount, taxes, deliveryFee, total, items]);
@@ -340,7 +377,13 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
         },
         {
           couponCode: appliedCoupon?.code,
-          expressDelivery: shipping === 'express',
+          expressDelivery: selectedRate?.service_code === 'BODA', // Keeping for legacy tracking
+          logisticsMeta: selectedRate ? {
+            provider: selectedRate.carrier_id as any,
+            service_id: selectedRate.service_code,
+            rate_id: selectedRate.carrier_id,
+            cost: selectedRate.rate_amount
+          } : null
         }
       );
 
@@ -467,51 +510,72 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
               <section className="space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Delivery Information</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <input placeholder="First Name" value={addressData.firstName} onChange={e => setAddressData({ ...addressData, firstName: e.target.value })} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
-                  <input placeholder="Last Name" value={addressData.lastName} onChange={e => setAddressData({ ...addressData, lastName: e.target.value })} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">First Name</label>
+                    <input placeholder="First Name" value={addressData.firstName} onChange={e => setAddressData({ ...addressData, firstName: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">Last Name</label>
+                    <input placeholder="Last Name" value={addressData.lastName} onChange={e => setAddressData({ ...addressData, lastName: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                  </div>
                 </div>
                 {(isGuest || !userId) && (
-                  <input placeholder="Email Address" value={addressData.email} onChange={e => setAddressData({ ...addressData, email: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
-                )}
-                <input placeholder="Phone Number" value={addressData.phoneNumber} onChange={e => setAddressData({ ...addressData, phoneNumber: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
-                <input placeholder="Shipping Address" value={addressData.addressLine1} onChange={e => setAddressData({ ...addressData, addressLine1: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="relative">
-                    <input
-                      placeholder="Town / City"
-                      value={addressData.townCity}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setAddressData({ ...addressData, townCity: val });
-                        if (val.length > 1) {
-                          const filtered = KENYAN_TOWNS.filter(t => t.toLowerCase().includes(val.toLowerCase()));
-                          setTownSuggestions(filtered);
-                          setShowSuggestions(true);
-                        } else {
-                          setShowSuggestions(false);
-                        }
-                      }}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                      className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm"
-                    />
-                    {showSuggestions && townSuggestions.length > 0 && (
-                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl shadow-xl max-h-48 overflow-auto">
-                        {townSuggestions.map(town => (
-                          <div
-                            key={town}
-                            className="px-4 py-3 hover:bg-orange-50 dark:hover:bg-gray-900 text-xs font-medium dark:text-white border-b border-gray-50 dark:border-gray-800 last:border-0"
-                            onClick={() => {
-                              setAddressData({ ...addressData, townCity: town });
-                              setShowSuggestions(false);
-                            }}
-                          >
-                            {town}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">Email Address</label>
+                    <input placeholder="Email Address" value={addressData.email} onChange={e => setAddressData({ ...addressData, email: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
                   </div>
-                  <input placeholder="Postcode" value={addressData.postcode} onChange={e => setAddressData({ ...addressData, postcode: e.target.value })} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                )}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">Phone Number</label>
+                  <input placeholder="Phone Number" value={addressData.phoneNumber} onChange={e => setAddressData({ ...addressData, phoneNumber: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">Shipping Address</label>
+                  <input placeholder="Shipping Address" value={addressData.addressLine1} onChange={e => setAddressData({ ...addressData, addressLine1: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">Town / City</label>
+                    <div className="relative">
+                      <input
+                        placeholder="Town / City"
+                        value={addressData.townCity}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setAddressData({ ...addressData, townCity: val });
+                          if (val.length > 1) {
+                            const filtered = KENYAN_TOWNS.filter(t => t.toLowerCase().includes(val.toLowerCase()));
+                            setTownSuggestions(filtered);
+                            setShowSuggestions(true);
+                          } else {
+                            setShowSuggestions(false);
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                        className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm"
+                      />
+                      {showSuggestions && townSuggestions.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl shadow-xl max-h-48 overflow-auto">
+                          {townSuggestions.map(town => (
+                            <div
+                              key={town}
+                              className="px-4 py-3 hover:bg-orange-50 dark:hover:bg-gray-900 text-xs font-medium dark:text-white border-b border-gray-50 dark:border-gray-800 last:border-0"
+                              onClick={() => {
+                                setAddressData({ ...addressData, townCity: town });
+                                setShowSuggestions(false);
+                              }}
+                            >
+                              {town}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500">Postcode</label>
+                    <input placeholder="Postcode" value={addressData.postcode} onChange={e => setAddressData({ ...addressData, postcode: e.target.value })} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border-0 text-sm" />
+                  </div>
                 </div>
 
                 <div>
@@ -532,28 +596,41 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
               </section>
 
               <section className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Shipping Method</h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Shipping Method</h3>
+                  {isFetchingRates && <span className="material-icons animate-spin text-xs text-primary">sync</span>}
+                </div>
                 <div className="grid grid-cols-1 gap-3">
-                  <div
-                    onClick={() => setShipping('standard')}
-                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${shipping === 'standard' ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
-                  >
-                    <div>
-                      <p className="text-sm font-bold">Standard Delivery</p>
-                      <p className="text-[10px] text-gray-500">Est. {getEstimatedDelivery(false)}</p>
+                  {shippingRates.map(rate => {
+                    const rateKey = `${rate.carrier_id}-${rate.service_code}`;
+                    const isSelected = selectedRate?.carrier_id === rate.carrier_id && selectedRate?.service_code === rate.service_code;
+
+                    return (
+                      <div
+                        key={rateKey}
+                        onClick={() => setSelectedRate(rate)}
+                        className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${isSelected ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
+                      >
+                        <div className="flex-1 mr-4">
+                          <p className="text-sm font-bold">{rate.carrier_name} - {rate.service_name}</p>
+                          <p className="text-[10px] text-gray-500">
+                            {rate.service_code === 'LOCAL_PARCEL'
+                              ? 'Deliver via G4S, EasyCoach, etc. Fee paid on collection.'
+                              : `Estimated delivery: ${rate.estimated_delivery_days} days`}
+                          </p>
+                        </div>
+                        <p className={`text-sm font-black ${rate.rate_amount === 0 ? 'text-green-600' : 'text-primary'}`}>
+                          {rate.rate_amount === 0 && rate.service_code === 'LOCAL_PARCEL' ? 'TBD' : currencyFormatPrice(rate.rate_amount, rate.currency)}
+                        </p>
+                      </div>
+                    );
+                  })}
+
+                  {shippingRates.length === 0 && !isFetchingRates && (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl text-center">
+                      <p className="text-[10px] text-gray-500 font-medium">Please enter a valid city for shipping rates</p>
                     </div>
-                    <p className="text-sm font-black text-green-600">FREE</p>
-                  </div>
-                  <div
-                    onClick={() => setShipping('express')}
-                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${shipping === 'express' ? 'border-primary bg-orange-50 dark:bg-gray-900' : 'border-gray-100 dark:border-gray-800'}`}
-                  >
-                    <div>
-                      <p className="text-sm font-bold">Express Delivery</p>
-                      <p className="text-[10px] text-gray-500">Est. {getEstimatedDelivery(true)}</p>
-                    </div>
-                    <p className="text-sm font-black text-primary">{getConvertedPrice('expressDelivery', 6.99)}</p>
-                  </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -569,7 +646,6 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
                     { id: 'card', label: 'Credit / Debit Card', icon: 'credit_card', color: 'blue' },
                     { id: 'mpesa', label: 'M-Pesa Mobile Money', icon: 'phone_android', color: 'green' },
                     { id: 'wallet', label: 'User Wallet', icon: 'account_balance_wallet', color: 'orange' },
-                    { id: 'cod', label: 'Cash on Delivery', icon: 'payments', color: 'gray' }
                   ].map(opt => (
                     <div
                       key={opt.id}
@@ -618,7 +694,7 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
                   <span className="material-icons text-blue-500">local_shipping</span>
                   <div className="flex-1">
                     <p className="text-xs font-bold">Delivery to {addressData.townCity}</p>
-                    <p className="text-[10px] text-gray-500">Scheduled: {getEstimatedDelivery(shipping === 'express')}</p>
+                    <p className="text-[10px] text-gray-500">{selectedRate?.carrier_name || 'Standard'} Shipment</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 p-4 bg-green-50/50 dark:bg-green-900/20 rounded-2xl">
@@ -641,6 +717,17 @@ export const CheckoutSheet: React.FC<CheckoutSheetProps> = ({ items, userId, onC
               <span className="font-medium">Subtotal</span>
               <span className="font-bold text-gray-700 dark:text-gray-300">{getConvertedPrice('subtotal', subtotal)}</span>
             </div>
+            <div className="flex justify-between text-[12px] text-gray-500">
+              <span className="font-medium">Shipping</span>
+              <span className={(actualDeliveryFee === 0 || selectedRate?.service_code === 'LOCAL_PARCEL') ? 'text-orange-600 font-bold' : 'text-gray-700 dark:text-gray-300 font-bold'}>
+                {selectedRate?.service_code === 'LOCAL_PARCEL'
+                  ? 'Paid on Collection'
+                  : (actualDeliveryFee === 0 ? 'FREE' : getConvertedPrice('deliveryFee', actualDeliveryFee))}
+              </span>
+            </div>
+            {selectedRate?.service_code === 'LOCAL_PARCEL' && (
+              <p className="text-[9px] text-right text-orange-500 font-bold -mt-2 italic">Transport fee payable to carrier</p>
+            )}
             {discountAmount > 0 && (
               <div className="flex justify-between text-[12px] text-emerald-600">
                 <div className="flex items-center gap-1.5">

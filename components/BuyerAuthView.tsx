@@ -7,9 +7,10 @@ interface BuyerAuthViewProps {
     authContext?: { view: string };
     isModal?: boolean;
     variant?: 'modal' | 'compactPopover';
+    externalError?: string;
 }
 
-const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, authContext, isModal = false, variant = 'modal' }) => {
+const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, authContext, isModal = false, variant = 'modal', externalError }) => {
     const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -123,6 +124,7 @@ const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, a
 
     // Compact quick-sign view (Google-first)
     const isCompact = isModal && variant === 'compactPopover';
+    const displayError = error || externalError || '';
 
     if (isModal && !showFullForm) {
         return (
@@ -162,10 +164,10 @@ const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, a
                         <span className="font-bold text-gray-800">Choose account</span>
                     </button>
 
-                    {error && (
+                    {displayError && (
                         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center gap-2">
                             <span className="material-icons-round text-red-500 text-sm">error</span>
-                            {error}
+                            {displayError}
                         </div>
                     )}
 
@@ -230,12 +232,12 @@ const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, a
                 {/* Premium Auth Card */}
                 <div className="bg-white rounded-3xl shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
                     {/* Error/Success Messages */}
-                    {error && (
+                    {displayError && (
                         <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3">
                             <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
                                 <span className="material-icons-round text-red-500">error</span>
                             </div>
-                            <span className="text-red-700 text-sm font-medium">{error}</span>
+                            <span className="text-red-700 text-sm font-medium">{displayError}</span>
                         </div>
                     )}
 

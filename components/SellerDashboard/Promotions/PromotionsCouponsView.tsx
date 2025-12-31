@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchCoupons, fetchAutomaticDiscounts } from '../../../lib/api';
+import { fetchCoupons, fetchAutomaticDiscounts, updateCoupon, deleteCoupon, updateAutomaticDiscount, deleteAutomaticDiscount } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 import { PromoCoupon, AutomaticDiscount } from '../../../types';
 
@@ -13,6 +13,7 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
     const [coupons, setCoupons] = useState<PromoCoupon[]>([]);
     const [autoDiscounts, setAutoDiscounts] = useState<AutomaticDiscount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [statusTab, setStatusTab] = useState<'All' | 'Ongoing' | 'Upcoming' | 'Expired'>('All');
 
     const loadData = async () => {
         setIsLoading(true);
@@ -26,6 +27,32 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
             }
         }
         setIsLoading(false);
+    };
+
+    const handleToggleCoupon = async (coupon: PromoCoupon) => {
+        const newStatus = coupon.status === 'Deactivated' ? 'Ongoing' : 'Deactivated';
+        const success = await updateCoupon(coupon.id, { status: newStatus });
+        if (success) loadData();
+    };
+
+    const handleDeleteCoupon = async (id: string) => {
+        if (window.confirm('Are you sure you want to delete this coupon?')) {
+            const success = await deleteCoupon(id);
+            if (success) loadData();
+        }
+    };
+
+    const handleToggleAutoDiscount = async (discount: AutomaticDiscount) => {
+        const newStatus = discount.status === 'deactivated' ? 'active' : 'deactivated';
+        const success = await updateAutomaticDiscount(discount.id, { status: newStatus });
+        if (success) loadData();
+    };
+
+    const handleDeleteAutoDiscount = async (id: string) => {
+        if (window.confirm('Are you sure you want to delete this automatic discount?')) {
+            const success = await deleteAutomaticDiscount(id);
+            if (success) loadData();
+        }
     };
 
     useEffect(() => {
@@ -96,10 +123,18 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
             <div className="space-y-4">
                 {/* Tabs */}
                 <div className="flex items-center gap-6 border-b border-gray-200">
-                    <button className="pb-3 border-b-2 border-gray-900 font-bold text-sm text-gray-900">All</button>
-                    <button className="pb-3 text-sm text-gray-500 hover:text-gray-700">Ongoing</button>
-                    <button className="pb-3 text-sm text-gray-500 hover:text-gray-700">Upcoming</button>
-                    <button className="pb-3 text-sm text-gray-500 hover:text-gray-700">Expired</button>
+                    {(['All', 'Ongoing', 'Upcoming', 'Expired'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setStatusTab(tab)}
+                            className={cn(
+                                "pb-3 text-sm transition-all border-b-2 px-1",
+                                statusTab === tab ? "border-gray-900 font-bold text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"
+                            )}
+                        >
+                            {tab}
+                        </button>
+                    ))}
                     <div className="flex-1 text-right">
                         <a href="#" className="text-orange-500 text-xs hover:underline">View created history &gt;</a>
                     </div>
@@ -137,48 +172,66 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {coupons.map(coupon => (
-                                    <tr key={coupon.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 align-top">
-                                            <div className="text-sm font-bold text-gray-900">{coupon.name}</div>
-                                            <div className="text-gray-500 text-xs mt-1">
-                                                {coupon.code && <span className="font-mono bg-gray-100 px-1 rounded mr-1 border border-gray-200">{coupon.code}</span>}
-                                                <span className="text-orange-600 font-bold">
-                                                    {coupon.discount_amount ? `$${coupon.discount_amount} off` : `${coupon.discount_percentage}% off`}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 align-top">
-                                            <div className={`inline-flex px-2 py-0.5 border rounded-full text-[10px] uppercase font-black mb-1 ${coupon.status === 'Ongoing' ? 'text-green-600 border-green-200 bg-green-50' :
-                                                coupon.status === 'Expired' ? 'text-red-500 border-red-200 bg-red-50' :
-                                                    'text-gray-500 border-gray-200 bg-gray-50'
-                                                }`}>
-                                                {coupon.status}
-                                            </div>
-                                            <div className="text-[10px] text-gray-400 font-medium mt-1">
-                                                {new Date(coupon.start_time).toLocaleDateString()} - {new Date(coupon.end_time).toLocaleDateString()}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 align-top">
-                                            <div className="text-xs text-gray-500 font-medium italic">Store-wide promotion</div>
-                                        </td>
-                                        <td className="px-6 py-4 align-top text-sm text-gray-900 font-medium">
-                                            {coupon.total_quantity?.toLocaleString() || 'Unlimited'}
-                                        </td>
-                                        <td className="px-6 py-4 align-top">
-                                            <div className="text-sm font-bold text-gray-900">{coupon.claimed_quantity} / {coupon.used_quantity}</div>
-                                            <div className="w-20 h-1 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                                                <div
-                                                    className="h-full bg-orange-500"
-                                                    style={{ width: `${Math.min((coupon.used_quantity / (coupon.total_quantity || 1)) * 100, 100)}%` }}
-                                                />
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 align-top text-right">
-                                            <button className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline">Edit</button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {coupons
+                                    .filter(c => statusTab === 'All' || c.status === statusTab)
+                                    .map(coupon => (
+                                        <tr key={coupon.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 align-top">
+                                                <div className="text-sm font-bold text-gray-900">{coupon.name}</div>
+                                                <div className="text-gray-500 text-xs mt-1">
+                                                    {coupon.code && <span className="font-mono bg-gray-100 px-1 rounded mr-1 border border-gray-200">{coupon.code}</span>}
+                                                    <span className="text-orange-600 font-bold">
+                                                        {coupon.discount_amount ? `$${coupon.discount_amount} off` : `${coupon.discount_percentage}% off`}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 align-top">
+                                                <div className={`inline-flex px-2 py-0.5 border rounded-full text-[10px] uppercase font-black mb-1 ${coupon.status === 'Ongoing' ? 'text-green-600 border-green-200 bg-green-50' :
+                                                    coupon.status === 'Expired' ? 'text-red-500 border-red-200 bg-red-50' :
+                                                        'text-gray-500 border-gray-200 bg-gray-50'
+                                                    }`}>
+                                                    {coupon.status}
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 font-medium mt-1">
+                                                    {new Date(coupon.start_time).toLocaleDateString()} - {new Date(coupon.end_time).toLocaleDateString()}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 align-top">
+                                                <div className="text-xs text-gray-500 font-medium italic">Store-wide promotion</div>
+                                            </td>
+                                            <td className="px-6 py-4 align-top text-sm text-gray-900 font-medium">
+                                                {coupon.total_quantity?.toLocaleString() || 'Unlimited'}
+                                            </td>
+                                            <td className="px-6 py-4 align-top">
+                                                <div className="text-sm font-bold text-gray-900">{coupon.claimed_quantity} / {coupon.used_quantity}</div>
+                                                <div className="w-20 h-1 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-orange-500"
+                                                        style={{ width: `${Math.min((coupon.used_quantity / (coupon.total_quantity || 1)) * 100, 100)}%` }}
+                                                    />
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 align-top text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleToggleCoupon(coupon)}
+                                                        className={cn(
+                                                            "text-xs font-bold",
+                                                            coupon.status === 'Deactivated' ? "text-green-600 hover:text-green-800" : "text-amber-600 hover:text-amber-800"
+                                                        )}
+                                                    >
+                                                        {coupon.status === 'Deactivated' ? 'Activate' : 'Deactivate'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteCoupon(coupon.id)}
+                                                        className="text-xs font-bold text-red-600 hover:text-red-800"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 {coupons.length === 0 && (
                                     <tr>
                                         <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-sm">
@@ -200,39 +253,63 @@ const PromotionsCouponsView: React.FC<PromotionsCouponsViewProps> = ({ sellerId,
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {autoDiscounts.map(discount => (
-                                    <tr key={discount.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm font-bold text-gray-900">{discount.name}</div>
-                                            <div className="text-xs text-orange-600 font-bold mt-1">
-                                                {discount.discount_type === 'percentage' ? `${discount.discount_value}% OFF` :
-                                                    discount.discount_type === 'fixed_amount' ? `$${discount.discount_value} OFF` :
-                                                        `BUY ${discount.buy_qty} GET ${discount.get_qty} FREE`}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className={cn(
-                                                "inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase border",
-                                                discount.status === 'active' ? "bg-green-50 text-green-600 border-green-200" :
-                                                    discount.status === 'scheduled' ? "bg-blue-50 text-blue-600 border-blue-200" :
-                                                        "bg-gray-50 text-gray-500 border-gray-200"
-                                            )}>
-                                                {discount.status}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">
-                                            {discount.min_requirement_value > 0 ? `Orders over $${discount.min_requirement_value}` : 'No minimum'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-xs text-gray-500 font-medium">
-                                                {new Date(discount.starts_at).toLocaleDateString()} - {new Date(discount.ends_at).toLocaleDateString()}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button className="text-xs font-bold text-red-600 hover:text-red-800">Deactivate</button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {autoDiscounts
+                                    .filter(d => {
+                                        if (statusTab === 'All') return true;
+                                        if (statusTab === 'Ongoing') return d.status === 'active';
+                                        if (statusTab === 'Upcoming') return d.status === 'scheduled';
+                                        if (statusTab === 'Expired') return d.status === 'expired';
+                                        return true;
+                                    })
+                                    .map(discount => (
+                                        <tr key={discount.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm font-bold text-gray-900">{discount.name}</div>
+                                                <div className="text-xs text-orange-600 font-bold mt-1">
+                                                    {discount.discount_type === 'percentage' ? `${discount.discount_value}% OFF` :
+                                                        discount.discount_type === 'fixed_amount' ? `$${discount.discount_value} OFF` :
+                                                            `BUY ${discount.buy_qty} GET ${discount.get_qty} FREE`}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className={cn(
+                                                    "inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase border",
+                                                    discount.status === 'active' ? "bg-green-50 text-green-600 border-green-200" :
+                                                        discount.status === 'scheduled' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                                                            "bg-gray-50 text-gray-500 border-gray-200"
+                                                )}>
+                                                    {discount.status}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">
+                                                {discount.min_requirement_value > 0 ? `Orders over $${discount.min_requirement_value}` : 'No minimum'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-xs text-gray-500 font-medium">
+                                                    {new Date(discount.starts_at).toLocaleDateString()} - {new Date(discount.ends_at).toLocaleDateString()}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleToggleAutoDiscount(discount)}
+                                                        className={cn(
+                                                            "text-xs font-bold",
+                                                            discount.status === 'deactivated' ? "text-green-600 hover:text-green-800" : "text-amber-600 hover:text-amber-800"
+                                                        )}
+                                                    >
+                                                        {discount.status === 'deactivated' ? 'Activate' : 'Deactivate'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteAutoDiscount(discount.id)}
+                                                        className="text-xs font-bold text-red-600 hover:text-red-800"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 {autoDiscounts.length === 0 && (
                                     <tr>
                                         <td colSpan={5} className="px-6 py-12 text-center text-gray-400 text-sm">

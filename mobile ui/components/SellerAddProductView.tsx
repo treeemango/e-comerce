@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import {
@@ -11,7 +12,7 @@ import {
 } from '../../lib/api';
 import { MediaService } from '../../lib/media';
 import { aiService } from '../../lib/ai-service';
-import { SUPPORTED_CURRENCIES, getCurrencySymbol } from '../../lib/currency';
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, autoDetectCurrency, useCurrencyConverter } from '../../lib/currency';
 import {
     ShopifyVertical,
     ShopifyCategory,
@@ -35,7 +36,150 @@ function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
 }
 
-const STEPS = ['Basics', 'Attributes', 'Pricing & Variants', 'Media', 'SEO'];
+const STEPS = ['Basics', 'Attributes', 'Pricing & Variants', 'Pricing & Delivery', 'Media', 'SEO'];
+
+const FieldHelp: React.FC<{ text: string; align?: 'left' | 'right' }> = ({ text, align = 'right' }) => {
+    const [isPinned, setIsPinned] = useState(false);
+    const [isHovering, setIsHovering] = useState(false);
+    const isOpen = isPinned || isHovering;
+
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+
+    const [pos, setPos] = useState<{ top: number; left: number; arrowLeft: number; placement: 'below' | 'above' }>(
+        { top: 0, left: 0, arrowLeft: 16, placement: 'below' }
+    );
+
+    const close = () => {
+        setIsPinned(false);
+        setIsHovering(false);
+    };
+
+    const computePosition = () => {
+        const btn = buttonRef.current;
+        if (!btn) return;
+
+        const rect = btn.getBoundingClientRect();
+        const margin = 8;
+        const idealWidth = 256; // tailwind w-64
+        const maxWidth = Math.max(180, Math.min(idealWidth, window.innerWidth - margin * 2));
+
+        let left = align === 'right' ? rect.right - maxWidth : rect.left;
+        left = Math.max(margin, Math.min(left, window.innerWidth - maxWidth - margin));
+
+        // First pass: assume below
+        let top = rect.bottom + 8;
+        let placement: 'below' | 'above' = 'below';
+
+        const tip = tooltipRef.current;
+        const tipHeight = tip?.offsetHeight ?? 0;
+        if (tipHeight > 0) {
+            const belowBottom = top + tipHeight + margin;
+            if (belowBottom > window.innerHeight) {
+                const aboveTop = rect.top - 8 - tipHeight;
+                if (aboveTop >= margin) {
+                    top = aboveTop;
+                    placement = 'above';
+                }
+            }
+        }
+
+        const centerX = rect.left + rect.width / 2;
+        let arrowLeft = centerX - left;
+        arrowLeft = Math.max(12, Math.min(arrowLeft, maxWidth - 12));
+
+        setPos({ top, left, arrowLeft, placement });
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const raf = requestAnimationFrame(computePosition);
+
+        const onPointerDown = (e: PointerEvent) => {
+            const t = e.target as Node;
+            if (buttonRef.current?.contains(t)) return;
+            if (tooltipRef.current?.contains(t)) return;
+            close();
+        };
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') close();
+        };
+
+        const onReflow = () => computePosition();
+
+        document.addEventListener('pointerdown', onPointerDown);
+        document.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', onReflow);
+        // capture scroll from any scroll container
+        window.addEventListener('scroll', onReflow, true);
+
+        return () => {
+            cancelAnimationFrame(raf);
+            document.removeEventListener('pointerdown', onPointerDown);
+            document.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('resize', onReflow);
+            window.removeEventListener('scroll', onReflow, true);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, text, align]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const raf = requestAnimationFrame(computePosition);
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
+
+    const tooltipNode = isOpen
+        ? createPortal(
+            <div
+                ref={tooltipRef}
+                className="fixed z-[9999] rounded-xl border border-gray-200 bg-white shadow-lg p-3 text-[11px] leading-relaxed text-gray-700"
+                style={{
+                    top: pos.top,
+                    left: pos.left,
+                    width: Math.max(180, Math.min(256, window.innerWidth - 16))
+                }}
+                role="tooltip"
+            >
+                {text}
+                <div
+                    className={cn(
+                        "absolute h-2 w-2 rotate-45 bg-white border-gray-200",
+                        pos.placement === 'below'
+                            ? "-top-1 border-l border-t"
+                            : "-bottom-1 border-r border-b"
+                    )}
+                    style={{ left: pos.arrowLeft - 4 }}
+                />
+            </div>,
+            document.body
+        )
+        : null;
+
+    return (
+        <span className="inline-flex items-center">
+            <button
+                ref={buttonRef}
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsPinned(v => !v);
+                }}
+                onMouseEnter={() => setIsHovering(true)}
+                onMouseLeave={() => setIsHovering(false)}
+                className="p-1 rounded-full text-gray-400 hover:text-gray-600 active:scale-95 transition"
+                aria-label="Help"
+                aria-expanded={isOpen}
+            >
+                <span className="material-icons text-[16px]">info_outline</span>
+            </button>
+            {tooltipNode}
+        </span>
+    );
+};
 
 const DELIVERY_SCOPE_OPTIONS = [
     { value: 'nationwide', label: 'Nationwide', detail: 'Across the whole country' },
@@ -287,6 +431,54 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [currentStep, setCurrentStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // First-time walkthrough (mobile)
+    const walkthroughStorageKey = 'sellerAddProductWalkthroughSeen.mobile.v1';
+    const walkthroughSteps = useMemo(() => ([
+        {
+            step: 0,
+            title: 'Basics',
+            text: 'Pick the right classification/category first. A good title helps buyers find your listing.'
+        },
+        {
+            step: 1,
+            title: 'Attributes',
+            text: 'Fill the key specs for better search and fewer customer questions.'
+        },
+        {
+            step: 2,
+            title: 'Variants',
+            text: 'Add options like Size/Color. You can set per-variant price, original price and stock.'
+        },
+        {
+            step: 3,
+            title: 'Pricing & Delivery',
+            text: 'Choose currency + unit, enter price/stock, and optionally add wholesale tiers and delivery details.'
+        },
+        {
+            step: 4,
+            title: 'Media',
+            text: 'Add clear photos (and optional YouTube). Better media improves conversions.'
+        },
+        {
+            step: 5,
+            title: 'SEO',
+            text: 'Optional: help Google/social previews. You can use AI to generate SEO fields.'
+        }
+    ]), []);
+    const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(false);
+    const [walkthroughStep, setWalkthroughStep] = useState(0);
+
+    useEffect(() => {
+        try {
+            const seen = localStorage.getItem(walkthroughStorageKey);
+            if (seen === '1') return;
+            setIsWalkthroughOpen(true);
+            setWalkthroughStep(0);
+        } catch {
+            // ignore storage failures
+        }
+    }, []);
+
     // --- Dynamic Data State ---
     const [verticals, setVerticals] = useState<ShopifyVertical[]>([]);
     const [categories, setCategories] = useState<ShopifyCategory[]>([]);
@@ -334,7 +526,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [deliveryScope, setDeliveryScope] = useState('nationwide');
     const [deliveryCost, setDeliveryCost] = useState('');
     const [deliveryTime, setDeliveryTime] = useState('');
-    const [deliveryTimeDays, setDeliveryTimeDays] = useState(1);
+    const [deliveryTimeDaysInput, setDeliveryTimeDaysInput] = useState('1');
     const [isExpressDelivery, setIsExpressDelivery] = useState(false);
     const [delayCredit, setDelayCredit] = useState('0');
     const [freeDelivery, setFreeDelivery] = useState(false);
@@ -348,6 +540,54 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [listingType, setListingType] = useState<'direct_purchase' | 'inquiry' | 'reservation'>('direct_purchase');
     const [condition, setCondition] = useState<ProductCondition>('new');
     const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
+
+    // Auto-detect seller currency from location (best-effort)
+    const didAutoSetCurrency = useRef(false);
+    useEffect(() => {
+        if (didAutoSetCurrency.current) return;
+        didAutoSetCurrency.current = true;
+
+        autoDetectCurrency()
+            .then((detected) => {
+                if (!detected) return;
+                const supported = SUPPORTED_CURRENCIES.some(c => c.code === detected);
+                if (!supported) return;
+
+                // Only auto-set if user hasn't changed from default
+                setCurrency(prev => (prev === 'USD' ? detected : prev));
+            })
+            .catch(() => {
+                // ignore detection failures
+            });
+    }, []);
+
+    // Live conversion preview for seller inputs (to USD)
+    const conversionTargetCurrency = 'USD';
+    const sellerInputConversionValues = useMemo(() => {
+        const values: { amount: number; currency: string; id: string }[] = [];
+
+        const basePrice = price ? parseFloat(price) : 0;
+        const baseCompare = compareAtPrice ? parseFloat(compareAtPrice) : 0;
+
+        values.push({ id: 'base-price', amount: isNaN(basePrice) ? 0 : basePrice, currency });
+        values.push({ id: 'base-compare', amount: isNaN(baseCompare) ? 0 : baseCompare, currency });
+
+        quantityDiscounts.forEach((tier, idx) => {
+            values.push({ id: `tier-${idx}`, amount: tier.unit_price || 0, currency });
+        });
+
+        variants.forEach((variant, idx) => {
+            values.push({ id: `variant-${idx}-price`, amount: variant.price || 0, currency });
+            values.push({ id: `variant-${idx}-compare`, amount: typeof variant.compare_at_price === 'number' ? variant.compare_at_price : 0, currency });
+        });
+
+        return values;
+    }, [price, compareAtPrice, quantityDiscounts, variants, currency]);
+
+    const { convertedValues: sellerConvertedInputs } = useCurrencyConverter(
+        sellerInputConversionValues,
+        conversionTargetCurrency
+    );
 
 
     // Step 4: Media & SEO
@@ -364,6 +604,8 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [isGeneratingTags, setIsGeneratingTags] = useState(false);
     const [isGeneratingUseCaseTags, setIsGeneratingUseCaseTags] = useState(false);
     const [isGeneratingOccasionTags, setIsGeneratingOccasionTags] = useState(false);
+
+
 
     // --- SEO Metadata State ---
     const [seoTitle, setSeoTitle] = useState('');
@@ -529,10 +771,27 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     // --- AI Handlers ---
     const handleImproveTitle = async () => {
         if (!title.trim()) return;
+        const cat = categories.find(c => c.id === categoryId)?.name;
+
+        const isAmbiguousCategory = (name?: string) => {
+            if (!name) return false;
+            return name.includes('&') || /\band\b/i.test(name);
+        };
+
+        const inferTitleFocus = (t: string) => {
+            const lower = t.toLowerCase();
+            const looksLikeAccessory = /\b(mount|wall\s*mount|bracket|holder|stand|rack|arm)\b/i.test(lower);
+            if (!looksLikeAccessory) return '';
+            return `${t}. This is an accessory/mount/bracket (NOT the TV/monitor itself). Improve the title for the mount/accessory only.`;
+        };
+
+        const inferred = inferTitleFocus(title);
+
+
         setIsImprovingTitle(true);
         try {
-            const cat = categories.find(c => c.id === categoryId)?.name;
-            const res = await aiService.improveTitle(title, cat);
+            const focus = inferred || (isAmbiguousCategory(cat) ? title : undefined);
+            const res = await aiService.improveTitle(title, cat, focus);
             if (res) setTitle(res);
         } finally {
             setIsImprovingTitle(false);
@@ -541,10 +800,25 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
     const handleGenerateDescription = async () => {
         if (!title.trim()) return;
+        const cat = categories.find(c => c.id === categoryId)?.name;
+
+        const isAmbiguousCategory = (name?: string) => {
+            if (!name) return false;
+            return name.includes('&') || /\band\b/i.test(name);
+        };
+
+        const inferDescriptionFocus = (t: string) => {
+            const lower = t.toLowerCase();
+            const looksLikeAccessory = /\b(mount|wall\s*mount|bracket|holder|stand|rack|arm)\b/i.test(lower);
+            if (!looksLikeAccessory) return '';
+            return `${t}. This is an accessory/mount/bracket (NOT the TV/monitor itself). Write the description for the mount/accessory only.`;
+        };
+
         setIsGeneratingDescription(true);
         try {
-            const cat = categories.find(c => c.id === categoryId)?.name;
-            const res = await aiService.generateDescription(title, cat, attributes);
+            const inferred = inferDescriptionFocus(title);
+            const focus = inferred || (isAmbiguousCategory(cat) ? title : undefined);
+            const res = await aiService.generateDescription(title, cat, attributes, focus);
             if (res) {
                 setDescription(res);
                 // Also default the meta description
@@ -839,6 +1113,11 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
             // Delivery locations are stored separately in the delivery_locations field
             const fullDeliveryTime = deliveryTime;
 
+            const deliveryTimeDaysParsed = (() => {
+                const parsed = parseInt(deliveryTimeDaysInput, 10);
+                return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+            })();
+
             const payload = {
                 title,
                 description,
@@ -859,7 +1138,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 delivery_scope: deliveryScope,
                 delivery_cost: parseFloat(deliveryCost) || 0,
                 delivery_time_estimate: fullDeliveryTime,
-                delivery_time_days: Number.isFinite(deliveryTimeDays) ? deliveryTimeDays : 1,
+                delivery_time_days: deliveryTimeDaysParsed,
                 is_express_delivery: isExpressDelivery,
                 delay_credit: parseFloat(delayCredit) || 0,
                 free_delivery: freeDelivery,
@@ -910,6 +1189,53 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 ))}
             </div>
 
+            {/* Walkthrough Banner */}
+            {isWalkthroughOpen && walkthroughSteps[walkthroughStep] && (
+                <div className="px-4 py-3 border-b bg-white">
+                    <div className="flex gap-3 items-start">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                            <span className="material-icons text-gray-600 text-sm">tips_and_updates</span>
+                        </div>
+                        <div className="flex-1">
+                            <div className="text-xs font-black uppercase tracking-wider text-gray-900">
+                                {walkthroughSteps[walkthroughStep].title}
+                            </div>
+                            <div className="text-[11px] text-gray-600 mt-0.5">
+                                {walkthroughSteps[walkthroughStep].text}
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsWalkthroughOpen(false);
+                                        try { localStorage.setItem(walkthroughStorageKey, '1'); } catch { /* ignore */ }
+                                    }}
+                                    className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gray-100 text-gray-700 active:scale-95 transition"
+                                >
+                                    Skip
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const next = walkthroughStep + 1;
+                                        if (next >= walkthroughSteps.length) {
+                                            setIsWalkthroughOpen(false);
+                                            try { localStorage.setItem(walkthroughStorageKey, '1'); } catch { /* ignore */ }
+                                            return;
+                                        }
+                                        setWalkthroughStep(next);
+                                        setCurrentStep(walkthroughSteps[next].step);
+                                    }}
+                                    className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-sm active:scale-95 transition"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex-1 overflow-y-auto p-5 pb-24">
 
                 {/* Step 0: Basics */}
@@ -955,6 +1281,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                         </div>
 
                         <div className="space-y-1">
+
                             <div className="flex justify-between items-center mb-1">
                                 <label className="text-xs font-bold uppercase text-gray-500">Details</label>
                                 <button
@@ -968,7 +1295,21 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     {isImprovingTitle ? 'IMPROVING...' : 'AI IMPROVE'}
                                 </button>
                             </div>
-                            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Product Title" className="w-full border p-3 rounded-lg" />
+                            <div className="relative">
+                                <input
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    maxLength={100}
+                                    placeholder="Product Title"
+                                    className="w-full border p-3 rounded-lg pr-16"
+                                />
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                    <span className={`text-[10px] font-bold ${title.length > 90 ? 'text-red-500' : 'text-gray-400'}`}>
+                                        {title.length}/100
+                                    </span>
+                                </div>
+                            </div>
+
                             <div className="flex justify-between items-center mt-3 mb-1">
                                 <label className="text-xs font-bold uppercase text-gray-500">Description</label>
                                 <button
@@ -982,7 +1323,21 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     {isGeneratingDescription ? 'WRITING...' : 'AI WRITE'}
                                 </button>
                             </div>
-                            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description..." className="w-full border p-3 rounded-lg h-24" />
+                            <div className="relative">
+                                <textarea
+                                    value={description}
+                                    onChange={e => setDescription(e.target.value)}
+                                    maxLength={3000}
+                                    placeholder="Description..."
+                                    className="w-full border p-3 rounded-lg h-32 pr-4 pb-8"
+                                />
+                                <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 border rounded-full">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${description.length >= 3000 ? 'bg-red-500' : description.length > 2500 ? 'bg-orange-500' : 'bg-blue-500'}`} />
+                                    <span className={`text-[10px] font-bold ${description.length >= 3000 ? 'text-red-600' : 'text-gray-500'}`}>
+                                        {description.length}/3k
+                                    </span>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="space-y-1">
@@ -1284,7 +1639,12 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                             <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing Unit & Currency</h3>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="flex flex-col justify-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Currency</label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Currency</label>
+                                        <FieldHelp
+                                            text="Choose the currency you will enter prices in. We show an approximate USD conversion under your prices."
+                                        />
+                                    </div>
                                     <select
                                         value={currency}
                                         onChange={e => setCurrency(e.target.value)}
@@ -1296,7 +1656,12 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     </select>
                                 </div>
                                 <div className="flex flex-col justify-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Unit</label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Unit</label>
+                                        <FieldHelp
+                                            text="This is the sale unit shown to buyers (e.g. per piece, per kg)."
+                                        />
+                                    </div>
                                     <select
                                         value={pricingUnit}
                                         onChange={e => setPricingUnit(e.target.value)}
@@ -1494,6 +1859,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                             <div className="space-y-1">
                                                 <div className="flex justify-between items-center px-1">
                                                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Price</label>
+                                                    <FieldHelp text="Variant selling price for this option (e.g. Size M / Blue)." />
                                                 </div>
                                                 <div className="relative">
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">{getCurrencySymbol(currency)}</span>
@@ -1510,10 +1876,16 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                                         placeholder="Price"
                                                     />
                                                 </div>
+                                                {currency !== conversionTargetCurrency && v.price > 0 && sellerConvertedInputs[`variant-${i}-price`]?.converted && (
+                                                    <div className="text-[9px] text-gray-500 mt-1 px-1">≈ {sellerConvertedInputs[`variant-${i}-price`].converted}</div>
+                                                )}
                                             </div>
 
                                             <div className="space-y-1">
-                                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Original Price</label>
+                                                <div className="flex justify-between items-center px-1">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Original Price</label>
+                                                    <FieldHelp text="Optional anchor/compare price for this variant (used to show discounts)." />
+                                                </div>
                                                 <div className="relative">
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">{getCurrencySymbol(currency)}</span>
                                                     <input
@@ -1530,10 +1902,16 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                                         placeholder="Anchor"
                                                     />
                                                 </div>
+                                                {currency !== conversionTargetCurrency && typeof v.compare_at_price === 'number' && v.compare_at_price > 0 && sellerConvertedInputs[`variant-${i}-compare`]?.converted && (
+                                                    <div className="text-[9px] text-gray-500 mt-1 px-1">≈ {sellerConvertedInputs[`variant-${i}-compare`].converted}</div>
+                                                )}
                                             </div>
 
                                             <div className="space-y-1">
-                                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Stock Qty</label>
+                                                <div className="flex justify-between items-center px-1">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Stock Qty</label>
+                                                    <FieldHelp text="Stock available for this specific variant." />
+                                                </div>
                                                 <div className="relative">
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold"><span className="material-icons text-[14px]">inventory_2</span></span>
                                                     <input
@@ -1567,7 +1945,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                 <>
                                     <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                         <div>
-                                            <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Currency</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Currency</h3>
+                                                <FieldHelp text="Choose the currency you will enter prices in. We show an approximate USD conversion under your prices." />
+                                            </div>
                                             <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">Choose your local currency</p>
                                         </div>
                                         <select
@@ -1583,7 +1964,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
                                     <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                         <div>
-                                            <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing Unit</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing Unit</h3>
+                                                <FieldHelp text="This is the sale unit shown to buyers (e.g. per piece, per kg)." />
+                                            </div>
                                             <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">Sale unit (e.g. per kg, per piece)</p>
                                         </div>
                                         <select
@@ -1604,24 +1988,39 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     <h3 className="text-sm font-bold uppercase text-gray-500 tracking-wider">Pricing & Inventory</h3>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Selling Price *</label>
+                                            <div className="flex justify-between items-center px-1">
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Selling Price *</label>
+                                                <FieldHelp text="The price buyers pay per unit. You'll see an approximate USD conversion under the field." />
+                                            </div>
                                             <div className="relative">
                                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
                                                 <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-12 pr-16 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg" />
                                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold uppercase">/ {pricingUnit}</span>
                                             </div>
+                                            {currency !== conversionTargetCurrency && sellerConvertedInputs['base-price']?.converted && price && parseFloat(price) > 0 && (
+                                                <div className="text-[10px] text-gray-500 px-1 mt-1">≈ {sellerConvertedInputs['base-price'].converted}</div>
+                                            )}
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Original RRP (for discount)</label>
+                                            <div className="flex justify-between items-center px-1">
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Original RRP (for discount)</label>
+                                                <FieldHelp text="Optional. If higher than selling price, buyers will see a discount/strikethrough." />
+                                            </div>
                                             <div className="relative">
                                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
                                                 <input type="number" value={compareAtPrice} onChange={e => setCompareAtPrice(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-12 pr-16 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold text-lg text-gray-500" />
                                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold uppercase">/ {pricingUnit}</span>
                                             </div>
+                                            {currency !== conversionTargetCurrency && sellerConvertedInputs['base-compare']?.converted && compareAtPrice && parseFloat(compareAtPrice) > 0 && (
+                                                <div className="text-[10px] text-gray-500 px-1 mt-1">≈ {sellerConvertedInputs['base-compare'].converted}</div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Base Stock</label>
+                                        <div className="flex justify-between items-center px-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Base Stock</label>
+                                            <FieldHelp text="How many units you have available for sale." />
+                                        </div>
                                         <div className="relative">
                                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">inventory_2</span></span>
                                             <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full border p-3 pl-12 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none font-bold" />
@@ -1634,7 +2033,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                             <div className="pt-6 border-t border-gray-100">
                                 <div className="flex items-center justify-between mb-4">
                                     <div>
-                                        <h3 className="text-sm font-bold uppercase text-gray-900 tracking-wider">Wholesale Tiers</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-sm font-bold uppercase text-gray-900 tracking-wider">Wholesale Tiers</h3>
+                                            <FieldHelp text="Optional bulk pricing. Buyers get a lower unit price when they order at least the minimum quantity." />
+                                        </div>
                                         <p className="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Bulk discounts for large orders</p>
                                     </div>
                                     <button
@@ -1666,7 +2068,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                                         />
                                                     </div>
                                                     <div className="flex-1 space-y-1">
-                                                        <label className="text-[9px] font-black text-gray-400 uppercase">Unit Price ({getCurrencySymbol(currency)})</label>
+                                                        <div className="flex justify-between items-center">
+                                                            <label className="text-[9px] font-black text-gray-400 uppercase">Unit Price ({getCurrencySymbol(currency)})</label>
+                                                            <FieldHelp text="Unit price a buyer pays when they purchase at least the minimum quantity." />
+                                                        </div>
                                                         <input
                                                             type="number"
                                                             value={tier.unit_price}
@@ -1678,6 +2083,9 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                                             placeholder="0.00"
                                                             className="w-full bg-gray-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 text-orange-600"
                                                         />
+                                                        {currency !== conversionTargetCurrency && tier.unit_price > 0 && sellerConvertedInputs[`tier-${idx}`]?.converted && (
+                                                            <div className="text-[9px] text-gray-500 mt-1">≈ {sellerConvertedInputs[`tier-${idx}`].converted}</div>
+                                                        )}
                                                     </div>
                                                     <button
                                                         type="button"
@@ -1717,7 +2125,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                         <div className="space-y-3 pt-6 border-t">
                             <h3 className="text-sm font-bold uppercase text-gray-500">Delivery</h3>
                             <div className="space-y-3 mt-2">
-                                <label className="text-xs font-bold text-gray-800 uppercase tracking-wider">Delivery Scope</label>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-gray-800 uppercase tracking-wider">Delivery Scope</label>
+                                    <FieldHelp text="Where you can deliver: nationwide, selected regions, or specific cities/radius." />
+                                </div>
                                 <div className="grid grid-cols-1 gap-2">
                                     {DELIVERY_SCOPE_OPTIONS.map(opt => (
                                         <button
@@ -1759,9 +2170,17 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
                                 {deliveryScope !== 'nationwide' && (
                                     <div className="space-y-2 mt-4 animate-in fade-in slide-in-from-top-2">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">
-                                            {deliveryScope === 'regional' ? 'Target Regions' : 'Specific Locations / Radius'}
-                                        </label>
+                                        <div className="flex items-center justify-between px-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                                {deliveryScope === 'regional' ? 'Target Regions' : 'Specific Locations / Radius'}
+                                            </label>
+                                            <FieldHelp
+                                                text={deliveryScope === 'regional'
+                                                    ? 'Pick the regions/states you can deliver to.'
+                                                    : 'Add cities or delivery radius (e.g. Kilimani, 10km).'
+                                                }
+                                            />
+                                        </div>
 
                                         {deliveryScope === 'regional' ? (
                                             /* Modern searchable region multi-select for regional scope */
@@ -1823,7 +2242,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                         <span className="material-icons text-xl">{freeDelivery ? 'redeem' : 'local_shipping'}</span>
                                     </div>
                                     <div>
-                                        <div className="font-bold text-sm">Free Delivery?</div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="font-bold text-sm">Free Delivery?</div>
+                                            <FieldHelp text="When enabled, buyers can get free shipping (typically above your free-delivery threshold)." />
+                                        </div>
                                         <div className="text-[10px] text-gray-500 uppercase font-medium">Toggle free shipping for customers</div>
                                     </div>
                                 </div>
@@ -1855,7 +2277,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
                             {!freeDelivery && (
                                 <div className="space-y-1 mt-4">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Delivery Cost</label>
+                                    <div className="flex items-center justify-between px-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Delivery Cost</label>
+                                        <FieldHelp text="Shipping fee the buyer pays (if free delivery is off)." />
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
                                         <input type="number" value={deliveryCost} onChange={e => setDeliveryCost(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
@@ -1865,7 +2290,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
                             {/* Credit for Delay */}
                             <div className="space-y-1 mt-4">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Credit for Delay</label>
+                                <div className="flex items-center justify-between px-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Credit for Delay</label>
+                                    <FieldHelp text="Optional credit offered if delivery is delayed." />
+                                </div>
                                 <p className="text-[9px] text-gray-400 px-1 mb-1">Credit amount offered if delivery is delayed</p>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{getCurrencySymbol(currency)}</span>
@@ -1881,7 +2309,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
                             <div className="grid grid-cols-2 gap-4 mt-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Time Estimate</label>
+                                    <div className="flex items-center justify-between px-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Time Estimate</label>
+                                        <FieldHelp text="A quick label shown to buyers (e.g. 3–5 days)." />
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold z-10"><span className="material-icons text-sm">schedule</span></span>
                                         <select
@@ -1899,10 +2330,21 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Delivery Time (Days)</label>
+                                    <div className="flex items-center justify-between px-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Delivery Time (Days)</label>
+                                        <FieldHelp text="Numeric delivery days used for sorting/estimation." />
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold"><span className="material-icons text-sm">event</span></span>
-                                        <input type="number" value={deliveryTimeDays} onChange={e => setDeliveryTimeDays(parseInt(e.target.value) || 1)} placeholder="1" className="w-full border p-3 pl-10 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            value={deliveryTimeDaysInput}
+                                            onChange={e => setDeliveryTimeDaysInput(e.target.value)}
+                                            placeholder="1"
+                                            className="w-full border p-3 pl-10 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1913,7 +2355,10 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                         <span className="material-icons text-xl">bolt</span>
                                     </div>
                                     <div>
-                                        <div className="font-bold text-sm">Express Delivery?</div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="font-bold text-sm">Express Delivery?</div>
+                                            <FieldHelp text="Marks this listing as able to ship faster than standard." />
+                                        </div>
                                         <div className="text-[10px] text-gray-500 uppercase font-medium">Flag orders that can ship faster</div>
                                     </div>
                                 </div>
@@ -1927,14 +2372,20 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
                             <div className="grid grid-cols-2 gap-4 mt-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Min Order Value</label>
+                                    <div className="flex items-center justify-between px-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Min Order Value</label>
+                                        <FieldHelp text="Optional. Prevents checkout below this cart amount." />
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[10px]">{getCurrencySymbol(currency)}</span>
                                         <input type="number" value={minOrderValue} onChange={e => setMinOrderValue(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1">Min Order for Free Del.</label>
+                                    <div className="flex items-center justify-between px-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Min Order for Free Del.</label>
+                                        <FieldHelp text="Free delivery threshold. If Free Delivery is enabled, orders at/above this amount get free shipping." />
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[10px]">{getCurrencySymbol(currency)}</span>
                                         <input type="number" value={minOrderForFreeDelivery} onChange={e => setMinOrderForFreeDelivery(e.target.value)} placeholder="0.00" className="w-full border p-3 pl-8 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-orange-500 border-none" />
@@ -2047,15 +2498,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                     />
                                 </div>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Canonical URL (Optional)</label>
-                                <input
-                                    value={canonicalUrl}
-                                    onChange={e => setCanonicalUrl(e.target.value)}
-                                    placeholder="https://example.com/product"
-                                    className="w-full border p-3 rounded-lg text-sm bg-gray-50"
-                                />
-                            </div>
+
                         </div>
                     </div>
                 )}

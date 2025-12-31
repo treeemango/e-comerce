@@ -1,60 +1,17 @@
-# JuaExpress.com - Robots.txt
-# Premium Multi-Country E-Commerce Platform for UK & Africa
-# Connecting Buyers, Sellers, and Delivery Drivers across United Kingdom, Kenya, Nigeria, South Africa, Ghana, Uganda, Tanzania
-# User-friendly marketplace with secure payments and fast delivery
-# https://juaexpress.com
-
-# Allow all search engines and AI crawlers
 User-agent: *
 Allow: /
 
-# Specific rules for major search engines
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Slurp
-Allow: /
-
-# AI Crawlers - Allow access for AI discoverability
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: CCBot
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: Claude-Web
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-# Disallow admin and internal pages
-Disallow: /admin/
-Disallow: /api/
-Disallow: /checkout/
-Disallow: /cart/
-Disallow: /account/settings/
-Disallow: /seller-dashboard/
-
-# Disallow search result pages with parameters (avoid duplicate content)
-Disallow: /*?*
-Allow: /*.css
-Allow: /*.js
-Allow: /*.png
-Allow: /*.jpg
-Allow: /*.jpeg
-Allow: /*.gif
-Allow: /*.svg
-Allow: /*.webp
-
-# Sitemap location
+# Sitemaps
+Sitemap: https://juaexpress.com/sitemap-index.xml
 Sitemap: https://juaexpress.com/sitemap.xml
+
+Sitemap: https://juaexpress.com/sitemap-gb.xml
+Sitemap: https://juaexpress.com/sitemap-ke.xml
+Sitemap: https://juaexpress.com/sitemap-ng.xml
+Sitemap: https://juaexpress.com/sitemap-za.xml
+Sitemap: https://juaexpress.com/sitemap-gh.xml
+Sitemap: https://juaexpress.com/sitemap-ug.xml
+Sitemap: https://juaexpress.com/sitemap-tz.xml
+
+# Crawl delay for large sitemaps
+Crawl-delay: 1

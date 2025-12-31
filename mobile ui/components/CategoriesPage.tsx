@@ -55,6 +55,9 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
 
     const selectedSubcategories = categories.filter(c => c.parent_category_id === selectedParentId);
 
+    const sidebarSkeletons = React.useMemo(() => Array.from({ length: 10 }), []);
+    const gridSkeletons = React.useMemo(() => Array.from({ length: 24 }), []);
+
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-black">
 
@@ -65,36 +68,46 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
                     <div className="p-3">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Departments</span>
                     </div>
-                    {parentCategories.map((parent) => {
-                        const isSelected = selectedParentId === parent.id;
-                        return (
-                            <button
-                                key={parent.id}
-                                onClick={() => setSelectedParentId(parent.id)}
-                                className={`w-full text-left py-4 px-4 text-[13px] leading-tight transition-all duration-300 relative group ${isSelected
-                                    ? 'bg-primary/5 dark:bg-primary/10 text-primary font-black'
-                                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 font-medium'
-                                    }`}
-                            >
-                                {isSelected && (
-                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full shadow-lg shadow-primary/30"></span>
-                                )}
-                                <span className={`${isSelected ? 'ml-2' : ''} transition-all`}>{parent.name}</span>
-                            </button>
-                        );
-                    })}
+                    {loading
+                        ? sidebarSkeletons.map((_, idx) => (
+                            <div key={idx} className="px-4 py-4">
+                                <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-800 animate-pulse" />
+                            </div>
+                        ))
+                        : parentCategories.map((parent) => {
+                            const isSelected = selectedParentId === parent.id;
+                            return (
+                                <button
+                                    key={parent.id}
+                                    onClick={() => setSelectedParentId(parent.id)}
+                                    className={`w-full text-left py-4 px-4 text-[13px] leading-tight transition-all duration-300 relative group ${isSelected
+                                        ? 'bg-primary/5 dark:bg-primary/10 text-primary font-black'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 font-medium'
+                                        }`}
+                                >
+                                    {isSelected && (
+                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full shadow-lg shadow-primary/30"></span>
+                                    )}
+                                    <span className={`${isSelected ? 'ml-2' : ''} transition-all`}>{parent.name}</span>
+                                </button>
+                            );
+                        })}
                 </aside>
 
                 {/* Main Grid Content */}
                 <main className="flex-1 overflow-y-auto pb-24 bg-gray-50 dark:bg-black px-4 py-4">
                     <div className="flex items-center justify-between mb-5">
                         <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.15em]">Browse Categories</h2>
-                        <span className="text-[10px] font-bold text-gray-300">{selectedSubcategories.length} items</span>
+                        {loading ? (
+                            <span className="block h-3 w-14 rounded bg-gray-200 dark:bg-gray-800 animate-pulse" />
+                        ) : (
+                            <span className="text-[10px] font-bold text-gray-300">{selectedSubcategories.length} items</span>
+                        )}
                     </div>
 
                     {loading ? (
-                        <div className="grid grid-cols-3 gap-4">
-                            {[...Array(9)].map((_, idx) => (
+                        <div className="grid grid-cols-3 gap-y-6 gap-x-3 min-h-full">
+                            {gridSkeletons.map((_, idx) => (
                                 <div key={idx} className="flex flex-col items-center gap-3">
                                     <div className="w-20 h-20 rounded-2xl bg-gray-200 dark:bg-gray-800 animate-pulse" />
                                     <div className="w-14 h-3 rounded bg-gray-200 dark:bg-gray-800 animate-pulse" />

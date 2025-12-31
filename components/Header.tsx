@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import LoyaltyTierBadge from './LoyaltyTierBadge';
 import { CATEGORIES, FEATURED_CATEGORIES, PRODUCTS } from '../constants';
 import { fetchSuggestions, trackSearch, SearchSuggestion, fetchTrendingCategoriesOverlay, TrendingCategoryOverlay, fetchRecentViews, RecentViewProduct, fetchPopularSearches, fetchRecentSearches, SearchKeywordEntry } from '../lib/api';
-import { Product, User, LoyaltyProfile, VisualCategory } from '../types';
+import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb } from '../types';
 import { getCurrencySymbol, SUPPORTED_CURRENCIES, getUserCurrency, setUserCurrency, useCurrencyConverter, formatPrice } from '@/lib/currency';
 import { detectUserCurrency } from '@/lib/currency-service';
 import { useNotifications } from './NotificationContext';
@@ -15,7 +15,7 @@ interface HeaderProps {
   onBestSellingClick?: () => void;
   onSearch?: (query: string) => void;
   onCameraClick?: () => void;
-  onCategoryClick?: (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: string[]) => void;
+  onCategoryClick?: (categoryIds: string[], title: string, subcategories?: VisualCategory[], newBreadcrumbs?: Breadcrumb[]) => void;
   onAccountPageClick?: (pageTitle: string) => void;
   onProductClick?: (product: Product) => void;
   onCheckoutClick?: () => void;
@@ -331,8 +331,28 @@ const Header: React.FC<HeaderProps> = ({
                     <h3 className="font-bold text-gray-900 dark:text-white text-lg">
                       {parentCategories.find(c => c.id === activeParentCategoryId)?.name}
                     </h3>
-                    <a href="#" className="text-xs text-primary hover:underline flex items-center">
-                      View all <span className="material-icons text-xs ml-0.5">arrow_forward</span>
+                    <a
+                      href="#"
+                      className="text-xs text-primary font-bold hover:underline flex items-center group/viewall"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const activeCat = parentCategories.find(c => c.id === activeParentCategoryId);
+                        if (activeCat && onCategoryClick) {
+                          const childIds = getSubcategoryIdsForParent(activeCat.id);
+                          const visualSubcats = getVisualSubcategoriesForParent(activeCat.id);
+                          const homeCrumb = { label: 'Home', type: 'home' } as const;
+                          const categoryCrumb = {
+                            label: activeCat.name,
+                            type: 'category',
+                            id: activeCat.id,
+                            data: { title: activeCat.name, categoryIds: childIds, visualCategories: visualSubcats }
+                          } as const;
+                          onCategoryClick(childIds, activeCat.name, visualSubcats, [homeCrumb, categoryCrumb]);
+                          setIsTopCategoriesOverlayOpen(false); // Close overlay on click
+                        }
+                      }}
+                    >
+                      View all <span className="material-icons text-xs ml-0.5 group-hover/viewall:translate-x-1 transition-transform">arrow_forward</span>
                     </a>
                   </div>
 

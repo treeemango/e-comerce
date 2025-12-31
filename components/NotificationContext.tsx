@@ -1,5 +1,6 @@
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { playNotificationSound } from '../lib/sounds';
 
 export type NotificationType = 'success' | 'info' | 'warning' | 'error';
@@ -19,12 +20,13 @@ export interface Notification {
     onClick?: () => void;
     action?: NotificationAction;
     timestamp?: string;
+    is_read?: boolean;
 }
 
 interface NotificationContextType {
     notifications: Notification[];
     history: Notification[];
-    showNotification: (message: string, type: NotificationType, duration?: number, onClick?: () => void, action?: NotificationAction) => void;
+    showNotification: (message: string, type: NotificationType, duration?: number, onClick?: () => void, action?: NotificationAction, id?: string) => void;
     dismissNotification: (id: string) => void;
     markAllAsRead: () => void;
     clearHistory: () => void;
@@ -43,18 +45,79 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         }
     });
 
+    // Load improved notifications from DB
+    useEffect(() => {
+        let subscription: any;
+
+        const setupNotifications = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            // Fetch initial
+            const { data } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (data) {
+                const dbNotes: Notification[] = data.map(n => ({
+                    id: n.id,
+                    message: n.message,
+                    type: n.type as NotificationType,
+                    timestamp: n.created_at,
+                    action: n.action_payload,
+                    is_read: n.is_read
+                }));
+                // Merge with local history - prioritizing DB
+                setHistory(prev => {
+                    const combined = [...dbNotes, ...prev.filter(p => !dbNotes.find(d => d.id === p.id))];
+                    return combined.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()).slice(0, 50);
+                });
+            }
+
+            // Realtime subscription
+            subscription = supabase
+                .channel('public:notifications')
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                }, payload => {
+                    const newNote = payload.new;
+                    showNotification(
+                        newNote.message,
+                        newNote.type as NotificationType,
+                        5000,
+                        undefined,
+                        newNote.action_payload,
+                        newNote.id
+                    );
+                })
+                .subscribe();
+        };
+
+        setupNotifications();
+
+        return () => {
+            if (subscription) supabase.removeChannel(subscription);
+        };
+    }, []);
+
     const dismissNotification = useCallback((id: string) => {
         setNotifications((prev) => prev.filter((n) => n.id !== id));
     }, []);
 
-    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void, action?: NotificationAction) => {
-        const id = Math.random().toString(36).substring(2, 9);
+    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void, action?: NotificationAction, customId?: string) => {
+        const id = customId || Math.random().toString(36).substring(2, 9);
         const timestamp = new Date().toISOString();
         const newNotification: Notification = { id, message, type, duration, timestamp, onClick, action };
 
         setNotifications((prev) => [...prev, newNotification]);
         setHistory((prev) => {
-            const updated = [newNotification, ...prev].slice(0, 50); // Keep last 50
+            const updated = [newNotification, ...prev].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).slice(0, 50);
             localStorage.setItem('notification_history', JSON.stringify(updated));
             return updated;
         });

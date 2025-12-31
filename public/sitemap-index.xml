@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Default/Global Sitemap -->
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-gb.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-ke.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-ng.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-za.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-gh.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-ug.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://juaexpress.com/sitemap-tz.xml</loc>
+    <lastmod>2025-12-30</lastmod>
+  </sitemap>
+</sitemapindex>

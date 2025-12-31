@@ -82,6 +82,9 @@ export interface Product {
     coupon_discount_percent?: number;
     is_lightning_deal?: boolean;
     lightning_ends_at?: string;
+    is_flash_sale?: boolean;
+    flash_sale_start?: string;
+    flash_sale_end?: string;
     score?: number; // Overall product score
     personalization_score?: number; // 0.0-1.0 personalization match
     in_stock?: boolean; // Inventory availability flag
@@ -129,6 +132,9 @@ export interface ProductVariant {
     id: string;
     title: string;
     price: number;
+    originalPrice?: number;
+    compare_at_price?: number;
+    discountPercent?: number;
     image?: string;
     sku?: string;
     stock?: number;
@@ -460,6 +466,8 @@ export interface User {
     avatar_url?: string;
     role?: 'buyer' | 'seller' | 'admin';
     created_at?: string;
+    account_status?: string;
+    banned_until?: string;
 }
 
 export interface AuthError {
@@ -826,6 +834,12 @@ export interface SellerOrder {
         phone?: string;
     } | null;
     delivery_otp?: string | null;
+    logistics_meta?: {
+        provider: string;
+        service_id: string;
+        rate_id: string;
+        cost: number;
+    } | null;
     items: {
         product_title: string;
         variant_sku: string | null;
@@ -853,6 +867,7 @@ export interface BuyerOrder {
     status: string;
     total_amount: number;
     currency?: string;
+    customer_email?: string | null;
     tracking_code?: string; // legacy or used for trackings
     tracking_number?: string;
     carrier?: string;
@@ -868,6 +883,14 @@ export interface BuyerOrder {
         phone?: string;
     } | null;
     delivery_otp?: string | null;
+    logistics_meta?: {
+        provider: string;
+        service_id: string;
+        rate_id: string;
+        cost: number;
+        confirmed_transport_fee?: number;
+        payment_details?: string;
+    } | null;
     items: BuyerOrderItem[];
 }
 

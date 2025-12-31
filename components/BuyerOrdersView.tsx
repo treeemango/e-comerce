@@ -19,6 +19,11 @@ const statusLabels: Record<string, string> = {
     refunded: 'Refunded'
 };
 
+const isDeliveredLike = (status?: string) => {
+    const normalized = status?.toLowerCase();
+    return normalized === 'delivered' || normalized === 'completed';
+};
+
 const TrackingTimeline: React.FC<{ order: BuyerOrder }> = ({ order }) => {
     const [events, setEvents] = useState<OrderTrackingEvent[]>([]);
     const [loading, setLoading] = useState(true);
@@ -41,7 +46,7 @@ const TrackingTimeline: React.FC<{ order: BuyerOrder }> = ({ order }) => {
                 });
 
                 // Step 2: Confirmed (if not pending)
-                if (['processing', 'shipped', 'delivered'].includes(order.status.toLowerCase())) {
+                if (['processing', 'shipped', 'delivered', 'completed'].includes(order.status.toLowerCase())) {
                     synthetic.push({
                         id: 'synthetic-confirmed',
                         order_id: order.id,
@@ -52,7 +57,7 @@ const TrackingTimeline: React.FC<{ order: BuyerOrder }> = ({ order }) => {
                 }
 
                 // Step 3: Shipped (if shipped or delivered)
-                if (['shipped', 'delivered'].includes(order.status.toLowerCase())) {
+                if (['shipped', 'delivered', 'completed'].includes(order.status.toLowerCase())) {
                     synthetic.push({
                         id: 'synthetic-shipped',
                         order_id: order.id,
@@ -63,7 +68,7 @@ const TrackingTimeline: React.FC<{ order: BuyerOrder }> = ({ order }) => {
                 }
 
                 // Step 4: Delivered (if delivered)
-                if (order.status.toLowerCase() === 'delivered') {
+                if (isDeliveredLike(order.status)) {
                     synthetic.push({
                         id: 'synthetic-delivered',
                         order_id: order.id,
@@ -104,12 +109,37 @@ const TrackingTimeline: React.FC<{ order: BuyerOrder }> = ({ order }) => {
                             </div>
                             <p className="text-[10px] text-slate-400 font-medium">
                                 {new Date(event.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                                {event.location && ` • ${event.location}`}
+                                {(event.location || event.location_name) && ` • ${event.location_name || event.location}`}
                             </p>
                         </div>
                     </div>
                 ))}
             </div>
+
+            {/* Local Parcel Transport Fee Highlight */}
+            {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel') && (
+                <div className="mt-8 bg-orange-50 dark:bg-orange-900/20 p-6 rounded-3xl border border-orange-100 dark:border-orange-800/50">
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-500/30">
+                            <span className="material-icons text-2xl">payments</span>
+                        </div>
+                        <div>
+                            <p className="text-base font-black text-orange-900 dark:text-orange-100">Transport Fee</p>
+                            <p className="text-xs text-orange-700 dark:text-orange-300 font-medium italic">Payable on collection</p>
+                        </div>
+                    </div>
+                    <div className="bg-white dark:bg-black/40 rounded-2xl p-6 text-center shadow-inner">
+                        <p className="text-4xl font-black text-orange-600 tracking-tighter">
+                            {order.logistics_meta?.confirmed_transport_fee
+                                ? `KSh ${order.logistics_meta.confirmed_transport_fee.toLocaleString()}`
+                                : 'TBD'}
+                        </p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-2">
+                            Amount payable to carrier
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -135,6 +165,14 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
         try {
             const data = await fetchBuyerOrders(user.id);
             setOrders(data);
+            console.log('[BuyerOrdersView] Orders loaded:', data);
+            data.forEach(o => {
+                if (o.logistics_meta) {
+                    console.log(`[BuyerOrdersView] Order ${o.id} meta:`, o.logistics_meta);
+                } else {
+                    console.log(`[BuyerOrdersView] Order ${o.id} MISSING meta (fulfillment: ${o.fulfillment_type})`);
+                }
+            });
         } catch (err) {
             console.error('Error loading buyer orders:', err);
             setError('Failed to load orders.');
@@ -153,13 +191,14 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
 
     const filtered = useMemo(() => {
         if (status === 'all') return orders;
+        if (status === 'delivered') return orders.filter(o => isDeliveredLike(o.status));
         return orders.filter(o => o.status?.toLowerCase() === status);
     }, [orders, status]);
 
     const stats = useMemo(() => ({
         total: orders.length,
         shipped: orders.filter(o => o.status?.toLowerCase() === 'shipped').length,
-        delivered: orders.filter(o => o.status?.toLowerCase() === 'delivered').length,
+        delivered: orders.filter(o => isDeliveredLike(o.status)).length,
     }), [orders]);
 
     const formatDate = (iso?: string) => iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) : '—';
@@ -180,7 +219,7 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
     const statusTone = (value: string): 'blue' | 'green' | 'amber' | 'gray' | 'red' => {
         const s = value?.toLowerCase();
         if (s === 'shipped' || s === 'processing') return 'blue';
-        if (s === 'delivered') return 'green';
+        if (s === 'delivered' || s === 'completed') return 'green';
         if (s === 'pending') return 'amber';
         if (s === 'cancelled' || s === 'refunded') return 'red';
         return 'gray';
@@ -213,7 +252,16 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
         try {
             const res = await confirmOrderReceiptBuyer(orderId);
             if (res.success) {
-                alert('Delivery confirmed! You can now review your items.');
+                const confirmedOrder = orders.find(o => o.id === orderId);
+                const firstProductId = confirmedOrder?.items?.[0]?.product_id;
+
+                if (user?.id && firstProductId) {
+                    setReviewingProductId(firstProductId);
+                    setReviewingOrderId(orderId);
+                } else {
+                    alert('Delivery confirmed! You can now review your items.');
+                }
+
                 load();
             } else {
                 alert(res.message || 'Failed to confirm receipt.');
@@ -337,7 +385,7 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                                                 <p className="text-sm font-black text-slate-900">
                                                     <OrderPrice amount={item.unit_price * item.quantity} currency={order.currency || 'USD'} />
                                                 </p>
-                                                {order.status?.toLowerCase() === 'delivered' && (
+                                                {isDeliveredLike(order.status) && (
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
@@ -483,13 +531,44 @@ const BuyerOrdersView: React.FC<BuyerOrdersViewProps> = ({ user }) => {
                                                     </p>
                                                 </div>
                                             </div>
+
+                                            {/* Transport Fee Highlight */}
+                                            {(order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel' || order.logistics_meta?.confirmed_transport_fee !== undefined || order.logistics_meta?.provider === 'local_parcel') && (
+                                                <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-5 text-white mt-4 shadow-lg shadow-orange-500/20">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div>
+                                                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-100 mb-1">Collect & Pay</p>
+                                                            <p className="text-2xl font-black">
+                                                                {order.logistics_meta?.confirmed_transport_fee !== undefined
+                                                                    ? `KSh ${order.logistics_meta.confirmed_transport_fee.toLocaleString()}`
+                                                                    : 'Fee TBD'}
+                                                            </p>
+                                                            <p className="text-xs text-orange-100 mt-1">Transport fee payable to carrier</p>
+                                                        </div>
+                                                        <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
+                                                            <span className="material-icons text-white text-2xl">payments</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Payment Details from Seller */}
+                                                    {order.logistics_meta?.payment_details && (
+                                                        <div className="bg-white/10 backdrop-blur rounded-xl p-3 mt-2 border border-white/20">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="material-icons text-white text-sm">account_balance_wallet</span>
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-orange-100">Payment Info</span>
+                                                            </div>
+                                                            <p className="text-sm font-bold text-white">{order.logistics_meta.payment_details}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
 
                                 {/* Standard Actions (Track & View Details) */}
                                 <div className="mt-8 pt-6 flex items-center justify-between border-t border-slate-50">
-                                    {order.status?.toLowerCase() === 'shipped' || order.status?.toLowerCase() === 'delivered' ? (
+                                    {order.status?.toLowerCase() === 'shipped' || isDeliveredLike(order.status) ? (
                                         <button
                                             onClick={() => setExpandedOrder(order.id)}
                                             className="flex items-center gap-2 text-orange-600 hover:text-orange-700 transition-colors"

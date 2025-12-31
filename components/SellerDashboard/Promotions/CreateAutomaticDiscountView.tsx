@@ -1,7 +1,33 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createAutomaticDiscount } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
+import { getCurrencySymbol, getSellerCurrency } from '../../../lib/seller-currency';
+
+const FieldHelp: React.FC<{ text: string }> = ({ text }) => {
+    const [open, setOpen] = React.useState(false);
+    return (
+        <span
+            className="relative inline-flex"
+            onMouseEnter={() => setOpen(true)}
+            onMouseLeave={() => setOpen(false)}
+        >
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                aria-label="Help"
+                className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+            >
+                <span className="material-icons text-[14px]">help_outline</span>
+            </button>
+            {open && (
+                <span className="absolute z-50 top-full mt-2 left-1/2 -translate-x-1/2 w-72 rounded-lg bg-gray-900 text-white text-xs leading-relaxed px-3 py-2 shadow-lg">
+                    {text}
+                </span>
+            )}
+        </span>
+    );
+};
 
 interface CreateAutomaticDiscountViewProps {
     sellerId: string;
@@ -14,20 +40,62 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
     onCancel,
     onSuccess
 }) => {
+    const [sellerCurrency, setSellerCurrency] = useState<string>('USD');
+    const currencySymbol = getCurrencySymbol(sellerCurrency);
+    const currencyLeftPadClass = currencySymbol.length <= 1
+        ? 'pl-8'
+        : currencySymbol.length === 2
+            ? 'pl-10'
+            : currencySymbol.length === 3
+                ? 'pl-12'
+                : 'pl-14';
+    const currencyRightPadClass = currencySymbol.length <= 1
+        ? 'pr-10'
+        : currencySymbol.length === 2
+            ? 'pr-12'
+            : currencySymbol.length === 3
+                ? 'pr-14'
+                : 'pr-16';
+
     const [name, setName] = useState('');
     const [discountType, setDiscountType] = useState<'percentage' | 'fixed_amount' | 'buy_x_get_y'>('percentage');
-    const [discountValue, setDiscountValue] = useState<number>(10);
-    const [buyQty, setBuyQty] = useState<number>(2);
-    const [getQty, setGetQty] = useState<number>(1);
-    const [minRequirementValue, setMinRequirementValue] = useState<number>(0);
+    const [discountValueInput, setDiscountValueInput] = useState<string>('10');
+    const [buyQtyInput, setBuyQtyInput] = useState<string>('2');
+    const [getQtyInput, setGetQtyInput] = useState<string>('1');
+    const [minRequirementValueInput, setMinRequirementValueInput] = useState<string>('0');
     const [startsAt, setStartsAt] = useState(new Date().toISOString().split('T')[0]);
     const [endsAt, setEndsAt] = useState(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadCurrency = async () => {
+            if (!sellerId) return;
+            const currency = await getSellerCurrency(sellerId);
+            if (!cancelled) setSellerCurrency(currency || 'USD');
+        };
+        loadCurrency();
+        return () => {
+            cancelled = true;
+        };
+    }, [sellerId]);
+
+    const toNumberOrZero = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return 0;
+        const n = Number(trimmed);
+        return Number.isFinite(n) ? Math.max(0, n) : 0;
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
+            const discountValue = toNumberOrZero(discountValueInput);
+            const minRequirementValue = toNumberOrZero(minRequirementValueInput);
+            const buyQty = Math.floor(toNumberOrZero(buyQtyInput));
+            const getQty = Math.floor(toNumberOrZero(getQtyInput));
+
             const success = await createAutomaticDiscount({
                 seller_id: sellerId,
                 name,
@@ -66,7 +134,10 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                     {/* Left Column: Basic Info */}
                     <div className="space-y-6">
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Discount Name</label>
+                            <div className="flex items-center mb-2">
+                                <label className="block text-sm font-bold text-gray-700">Discount Name</label>
+                                <FieldHelp text="Shown to customers at checkout. Use a clear name like 'Black Friday 10% OFF'." />
+                            </div>
                             <input
                                 type="text"
                                 required
@@ -79,7 +150,10 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                         </div>
 
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Discount Type</label>
+                            <div className="flex items-center mb-2">
+                                <label className="block text-sm font-bold text-gray-700">Discount Type</label>
+                                <FieldHelp text="Percentage: % off. Fixed: money off. Buy X Get Y: buy a quantity and get extra units free." />
+                            </div>
                             <div className="grid grid-cols-3 gap-3">
                                 {(['percentage', 'fixed_amount', 'buy_x_get_y'] as const).map(type => (
                                     <button
@@ -103,38 +177,53 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                             {discountType === 'buy_x_get_y' ? (
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Buy Quantity</label>
+                                        <div className="flex items-center">
+                                            <label className="text-xs font-bold text-gray-600 uppercase">Buy Quantity</label>
+                                            <FieldHelp text="How many items the buyer must purchase to trigger the offer." />
+                                        </div>
                                         <input
                                             type="number"
-                                            value={buyQty}
-                                            onChange={(e) => setBuyQty(Number(e.target.value))}
+                                            value={buyQtyInput}
+                                            onChange={(e) => setBuyQtyInput(e.target.value)}
+                                            min={0}
                                             className="w-full border border-gray-300 rounded-lg px-4 py-2 font-bold focus:border-orange-500 outline-none"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Get Free Qty</label>
+                                        <div className="flex items-center">
+                                            <label className="text-xs font-bold text-gray-600 uppercase">Get Free Qty</label>
+                                            <FieldHelp text="How many extra units the buyer receives for free." />
+                                        </div>
                                         <input
                                             type="number"
-                                            value={getQty}
-                                            onChange={(e) => setGetQty(Number(e.target.value))}
+                                            value={getQtyInput}
+                                            onChange={(e) => setGetQtyInput(e.target.value)}
+                                            min={0}
                                             className="w-full border border-gray-300 rounded-lg px-4 py-2 font-bold focus:border-orange-500 outline-none"
                                         />
                                     </div>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">
-                                        {discountType === 'percentage' ? 'Percentage Off (%)' : 'Amount Off ($)'}
-                                    </label>
+                                    <div className="flex items-center">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">
+                                        {discountType === 'percentage' ? 'Percentage Off (%)' : `Amount Off (${sellerCurrency})`}
+                                        </label>
+                                        <FieldHelp text={discountType === 'percentage' ? 'Percent off each eligible item (e.g. 10 means 10% off).' : `Fixed amount off each eligible item (e.g. 5 means ${currencySymbol}5 off).`} />
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">
-                                            {discountType === 'percentage' ? '%' : '$'}
+                                            {discountType === 'percentage' ? '%' : currencySymbol}
                                         </span>
                                         <input
                                             type="number"
-                                            value={discountValue}
-                                            onChange={(e) => setDiscountValue(Number(e.target.value))}
-                                            className="w-full border border-gray-300 rounded-lg px-4 py-2 font-bold focus:border-orange-500 outline-none"
+                                            value={discountValueInput}
+                                            onChange={(e) => setDiscountValueInput(e.target.value)}
+                                            min={0}
+                                            className={cn(
+                                                "w-full border border-gray-300 rounded-lg pl-4 py-2 font-bold focus:border-orange-500 outline-none",
+                                                discountType === 'percentage' ? 'pr-10' : currencyRightPadClass
+                                            )}
                                         />
                                     </div>
                                 </div>
@@ -145,15 +234,22 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                     {/* Right Column: Conditions & Dates */}
                     <div className="space-y-6">
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Minimum Requirement</label>
+                            <div className="flex items-center mb-2">
+                                <label className="block text-sm font-bold text-gray-700">Minimum Requirement</label>
+                                <FieldHelp text="Optional. Set a minimum order subtotal required before the automatic discount triggers." />
+                            </div>
                             <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currencySymbol}</span>
                                 <input
                                     type="number"
-                                    value={minRequirementValue}
-                                    onChange={(e) => setMinRequirementValue(Number(e.target.value))}
+                                    value={minRequirementValueInput}
+                                    onChange={(e) => setMinRequirementValueInput(e.target.value)}
+                                    min={0}
                                     placeholder="0.00"
-                                    className="w-full border border-gray-300 rounded-lg pl-8 pr-4 py-2.5 focus:border-orange-500 outline-none"
+                                    className={cn(
+                                        "w-full border border-gray-300 rounded-lg pr-4 py-2.5 focus:border-orange-500 outline-none",
+                                        currencyLeftPadClass
+                                    )}
                                 />
                             </div>
                             <p className="text-xs text-gray-400 mt-1.5">Minimum purchase amount required to trigger the discount.</p>
@@ -161,7 +257,10 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="block text-sm font-bold text-gray-700">Start Date</label>
+                                <div className="flex items-center">
+                                    <label className="block text-sm font-bold text-gray-700">Start Date</label>
+                                    <FieldHelp text="Discount becomes active on this date (local time)." />
+                                </div>
                                 <input
                                     type="date"
                                     value={startsAt}
@@ -170,7 +269,10 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="block text-sm font-bold text-gray-700">End Date</label>
+                                <div className="flex items-center">
+                                    <label className="block text-sm font-bold text-gray-700">End Date</label>
+                                    <FieldHelp text="Discount stops applying after this date (local time)." />
+                                </div>
                                 <input
                                     type="date"
                                     value={endsAt}
@@ -187,14 +289,14 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                             </h4>
                             <p className="text-sm text-orange-800 leading-relaxed">
                                 {discountType === 'percentage' ? (
-                                    <>Customers will get <span className="font-bold">{discountValue}% off</span> products.</>
+                                    <>Customers will get <span className="font-bold">{toNumberOrZero(discountValueInput)}% off</span> products.</>
                                 ) : discountType === 'fixed_amount' ? (
-                                    <>Customers will get <span className="font-bold">${discountValue} off</span> products.</>
+                                    <>Customers will get <span className="font-bold">{currencySymbol}{toNumberOrZero(discountValueInput)} off</span> products.</>
                                 ) : (
-                                    <>Buy <span className="font-bold">{buyQty}</span>, get <span className="font-bold">{getQty}</span> free.</>
+                                    <>Buy <span className="font-bold">{Math.floor(toNumberOrZero(buyQtyInput))}</span>, get <span className="font-bold">{Math.floor(toNumberOrZero(getQtyInput))}</span> free.</>
                                 )}
-                                {minRequirementValue > 0 && (
-                                    <> Applies to orders over <span className="font-bold">${minRequirementValue}</span>.</>
+                                {toNumberOrZero(minRequirementValueInput) > 0 && (
+                                    <> Applies to orders over <span className="font-bold">{currencySymbol}{toNumberOrZero(minRequirementValueInput)}</span>.</>
                                 )}
                             </p>
                         </div>

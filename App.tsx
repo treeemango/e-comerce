@@ -10,7 +10,7 @@ import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
 import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, ensureSupportConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById } from '@/lib/api';
-import { getCurrentUser, onAuthStateChange, signOut } from './lib/auth';
+import { getCurrentUser, getUserProfile, isAccountBanned, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
 import { useCountrySEO } from './hooks/useCountrySEO';
@@ -200,6 +200,7 @@ const App: React.FC = () => {
     'info-page'
   ].includes(view);
   const [showBuyerAuthModal, setShowBuyerAuthModal] = useState(false);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const dedupeCategories = useCallback((items: DealCategoryNavItem[]) => {
     const unique = new Map<string, DealCategoryNavItem>();
@@ -323,8 +324,16 @@ const App: React.FC = () => {
     const viewParam = params.get('view');
     const productId = params.get('product_id');
     const orderId = params.get('order_id');
+    const chatId = params.get('chat_id');
+    const tabParam = params.get('tab');
+    const sectionParam = params.get('section');
 
-    if (viewParam === 'platform-reviews') {
+    if (chatId) {
+      setAccountPageTitle('Messages');
+      setCurrentView('account-page');
+      setActiveConversationId(chatId === 'inbox' ? null : chatId);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (viewParam === 'platform-reviews') {
       setCurrentView('platform-reviews');
       // Fetch reviews immediately if they are for this page
       const loadPlatformReviews = async () => {
@@ -338,12 +347,20 @@ const App: React.FC = () => {
       setCurrentView('seller-onboarding');
     } else if (viewParam === 'wishlist') {
       setCurrentView('wishlist');
+    } else if (viewParam === 'deals') {
+      setCurrentView('deals');
     } else if (viewParam === 'vendor-store') {
       const vendorId = params.get('vendorId');
       if (vendorId) {
         setActiveVendorStoreId(vendorId);
         setCurrentView('vendor-store');
       }
+    } else if (viewParam === 'seller-dashboard') {
+      setCurrentView('seller-dashboard');
+      if (tabParam) setDashboardTab(tabParam as any);
+    } else if (viewParam === 'account-page') {
+      setCurrentView('account-page');
+      if (sectionParam) setAccountPageTitle(sectionParam);
     } else if (productId) {
       const loadDeepLinkProduct = async () => {
         try {
@@ -358,7 +375,7 @@ const App: React.FC = () => {
       };
       loadDeepLinkProduct();
     } else if (orderId) {
-      setAccountPageTitle('Orders');
+      setAccountPageTitle('Your orders');
       setCurrentView('account-page');
     }
   }, []);
@@ -401,7 +418,7 @@ const App: React.FC = () => {
       }
 
       if (orderId) {
-        setAccountPageTitle('Orders');
+        setAccountPageTitle('Your orders'); // Correct title for BuyerOrdersView
         setCurrentView('account-page');
         return;
       }
@@ -434,7 +451,7 @@ const App: React.FC = () => {
         console.error('Error handling in-app deep link (product):', err);
       }
     } else if (type === 'order') {
-      setAccountPageTitle('Orders');
+      setAccountPageTitle('Your orders'); // Correct title for BuyerOrdersView
       setCurrentView('account-page');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (type === 'chat') {
@@ -496,7 +513,7 @@ const App: React.FC = () => {
       if (action.target === 'seller-orders') {
         console.log('[App.tsx] Navigating to Seller Dashboard Orders tab');
         setCurrentView('seller-dashboard');
-        setDashboardTab('orders');
+        setDashboardTab('manage-orders'); // Use manage-orders for modern view with Pending/Shipped tabs
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -521,6 +538,14 @@ const App: React.FC = () => {
     const checkAuth = async () => {
       const currentUser = await getCurrentUser();
       if (currentUser) {
+        const profile = await getUserProfile(currentUser.id);
+        if (isAccountBanned(profile)) {
+          setAuthNotice('Your account has been banned. Please contact support.');
+          await signOut();
+          setAuthLoading(false);
+          return;
+        }
+
         let role = currentUser.user_metadata?.role || 'buyer';
 
         // Additional check for sellers logging in via Google who might have a profile but no metadata
@@ -592,6 +617,15 @@ const App: React.FC = () => {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
         console.log('Auth event:', event, session.user.id);
         console.log('Initial metadata role:', session.user.user_metadata?.role);
+
+        setAuthNotice(null);
+
+        const profile = await getUserProfile(session.user.id);
+        if (isAccountBanned(profile)) {
+          setAuthNotice('Your account has been banned. Please contact support.');
+          await signOut();
+          return;
+        }
 
         // Determine role - trust metadata first, but verify if not "seller" (e.g. Google login)
         let role = session.user.user_metadata?.role || 'buyer';
@@ -986,12 +1020,14 @@ const App: React.FC = () => {
   };
 
   const handleSignOutClick = async () => {
+    setAuthNotice(null);
     await signOut();
     setUser(null);
     handleHomeClick();
   };
 
   const handleAuthSuccess = () => {
+    setAuthNotice(null);
     if (showBuyerAuthModal) {
       setShowBuyerAuthModal(false);
     } else {
@@ -1369,6 +1405,7 @@ const App: React.FC = () => {
           <BuyerAuthView
             onAuthSuccess={handleAuthSuccess}
             authContext={previousView === 'seller-login' ? { view: 'seller-onboarding' } : undefined}
+            externalError={authNotice || undefined}
           />
         )}
         {currentView === 'seller-login' && (
@@ -1553,9 +1590,16 @@ const App: React.FC = () => {
           <BuyerAuthView
             isModal
             variant="compactPopover"
-            onAuthSuccess={() => setShowBuyerAuthModal(false)}
-            onClose={() => setShowBuyerAuthModal(false)}
+            onAuthSuccess={() => {
+              setAuthNotice(null);
+              setShowBuyerAuthModal(false);
+            }}
+            onClose={() => {
+              setAuthNotice(null);
+              setShowBuyerAuthModal(false);
+            }}
             authContext={previousView === 'seller-login' ? { view: 'seller-onboarding' } : undefined}
+            externalError={authNotice || undefined}
           />
         </div>
       )}

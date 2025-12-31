@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchAllUsers, hasResourcePermission } from '@/lib/api';
+import { fetchAllUsers, hasResourcePermission, setUserBanStatus } from '@/lib/api';
 import type { User, AdminPermissions } from '@/types';
 
 interface UserManagementViewProps {
@@ -11,6 +11,7 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ permissions }) 
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
+    const [actionUserId, setActionUserId] = useState<string | null>(null);
 
     useEffect(() => {
         loadUsers();
@@ -31,6 +32,34 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ permissions }) 
     const canEdit = hasResourcePermission(permissions?.permissions, 'users', 'update');
     const canBan = hasResourcePermission(permissions?.permissions, 'users', 'delete') ||
         hasResourcePermission(permissions?.permissions, 'users', 'manage');
+
+    const isUserBanned = (user: User) => {
+        if (user.account_status === 'banned') return true;
+        if (!user.banned_until) return false;
+        const bannedUntilMs = Date.parse(user.banned_until);
+        return Number.isFinite(bannedUntilMs) && bannedUntilMs > Date.now();
+    };
+
+    const handleToggleBan = async (user: User) => {
+        if (!canBan) return;
+        if (actionUserId) return;
+
+        const nextBanned = !isUserBanned(user);
+        try {
+            setActionUserId(user.id);
+            const updated = await setUserBanStatus(user.id, nextBanned);
+            if (!updated) {
+                window.alert('Failed to update user status. Check console for details.');
+                return;
+            }
+            await loadUsers();
+        } catch (e) {
+            console.error('Error toggling ban:', e);
+            window.alert('Failed to update user status. Check console for details.');
+        } finally {
+            setActionUserId(null);
+        }
+    };
 
     const filteredUsers = users.filter(user =>
     (user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -135,16 +164,30 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ permissions }) 
                                             {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                Active
-                                            </span>
+                                            {isUserBanned(user) ? (
+                                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                                    Banned
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                    Active
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             {canEdit && (
                                                 <button className="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
                                             )}
                                             {canBan && (
-                                                <button className="text-red-600 hover:text-red-900">Ban</button>
+                                                <button
+                                                    className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                                                    disabled={actionUserId === user.id}
+                                                    onClick={() => handleToggleBan(user)}
+                                                >
+                                                    {actionUserId === user.id
+                                                        ? 'Updating...'
+                                                        : (isUserBanned(user) ? 'Unban' : 'Ban')}
+                                                </button>
                                             )}
                                             {!canEdit && !canBan && (
                                                 <span className="text-gray-400 text-xs text-center block">Read Only</span>

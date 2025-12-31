@@ -13,7 +13,18 @@ export interface AuthUser {
     name?: string;
     avatar_url?: string;
     role?: string;
+    account_status?: string;
+    banned_until?: string;
 }
+
+export const isAccountBanned = (profile: { account_status?: string; banned_until?: string } | null): boolean => {
+    if (!profile) return false;
+    if (profile.account_status === 'banned') return true;
+    if (!profile.banned_until) return false;
+
+    const bannedUntilMs = Date.parse(profile.banned_until);
+    return Number.isFinite(bannedUntilMs) && bannedUntilMs > Date.now();
+};
 
 // --- Google One Tap helpers ---
 let googleScriptPromise: Promise<void> | null = null;
@@ -221,7 +232,7 @@ export const onAuthStateChange = (
 export const getUserProfile = async (userId: string): Promise<AuthUser | null> => {
     const { data, error } = await supabase
         .from('users')
-        .select('id, email, name, avatar_url, role')
+        .select('id, email, name, avatar_url, role, account_status, banned_until')
         .eq('id', userId)
         .single();
 
