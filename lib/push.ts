@@ -71,6 +71,10 @@ export function serializePushSubscription(subscription: PushSubscription) {
 
 export async function savePushSubscriptionToBackend(subscription: PushSubscription) {
   const { supabase } = await import('./supabase');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Please sign in to enable push notifications.');
+  }
   const payload = serializePushSubscription(subscription) as PushSubscriptionJSONShape;
 
   const { error } = await supabase.functions.invoke('push', {
@@ -87,6 +91,10 @@ export async function savePushSubscriptionToBackend(subscription: PushSubscripti
 export async function removePushSubscriptionFromBackend(endpoint: string) {
   const { supabase } = await import('./supabase');
 
+  // Backend cleanup is user-scoped; skip if signed out to avoid expected 401s.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return;
+
   const { error } = await supabase.functions.invoke('push', {
     body: {
       action: 'remove',
@@ -99,6 +107,11 @@ export async function removePushSubscriptionFromBackend(endpoint: string) {
 
 export async function sendTestPushToMe(options?: { title?: string; body?: string; url?: string }) {
   const { supabase } = await import('./supabase');
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Please sign in to send a test notification.');
+  }
 
   const { error } = await supabase.functions.invoke('push', {
     body: {

@@ -1267,8 +1267,24 @@ const App: React.FC = () => {
                                         if (existing) {
                                             const endpoint = existing.endpoint;
                                             await unsubscribeFromPush();
-                                            await removePushSubscriptionFromBackend(endpoint);
+                                            // If the user is signed out, we can still remove the subscription locally.
+                                            // Backend cleanup requires auth, so skip it for guests.
+                                            if (userProfile?.id) {
+                                                await removePushSubscriptionFromBackend(endpoint);
+                                            }
                                             alert('Push notifications disabled on this device.');
+                                            return;
+                                        }
+
+                                        // Saving the subscription is user-scoped in the backend.
+                                        // If the user is a guest, launch sign-in and continue if successful.
+                                        if (!userProfile?.id) {
+                                            await signInWithGoogle({ view: 'buyer-auth' });
+                                            await refreshUserProfile();
+                                        }
+
+                                        if (!userProfile?.id) {
+                                            alert('Please sign in to enable push notifications.');
                                             return;
                                         }
 
@@ -1277,7 +1293,19 @@ const App: React.FC = () => {
                                         alert('Push notifications enabled on this device.');
                                     } catch (e: any) {
                                         const message = e?.message || 'Unable to update push notifications.';
-                                        alert(message.includes('VAPID') ? 'Push notifications are not configured for this project.' : message);
+
+                                        // Supabase Functions returns a generic message for any non-2xx response.
+                                        // Common cause here is missing auth (guest user), so map to a friendlier prompt.
+                                        if (message.includes('non-2xx status code')) {
+                                            alert(userProfile?.id
+                                                ? 'Unable to update push notifications right now. Please try again.'
+                                                : 'Please sign in to enable push notifications.');
+                                            return;
+                                        }
+
+                                        alert(message.includes('VAPID')
+                                            ? 'Push notifications are not configured for this project.'
+                                            : message);
                                     }
                                 };
 
