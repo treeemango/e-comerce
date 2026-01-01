@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
     registerSeller,
+    checkShopNameAvailability,
     createBusinessProfile,
     addVendorBankAccount,
     uploadVendorMediaToStorage,
@@ -28,6 +29,41 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
     const [compressing, setCompressing] = useState<string | null>(null);
     const [compressionStats, setCompressionStats] = useState<{ [key: string]: CompressionStats }>({});
 
+    const PRIMARY_CATEGORIES = [
+        'Animals & Pet Supplies',
+        'Apparel & Accessories',
+        'Arts & Entertainment',
+        'Baby & Toddler',
+        'Bundles',
+        'Business & Industrial',
+        'Cameras & Optics',
+        'Electronics',
+        'Food, Beverages & Tobacco',
+        'Furniture',
+        'Gift Cards',
+        'Hardware',
+        'Health & Beauty',
+        'Home & Garden',
+        'Luggage & Bags',
+        'Mature',
+        'Media',
+        'Office Supplies',
+        'Product Add-Ons',
+        'Religious & Ceremonial',
+        'Services',
+        'Software',
+        'Sporting Goods',
+        'Toys & Games',
+        'Uncategorized',
+        'Vehicles & Parts',
+    ] as const;
+
+    const makeBusinessSlug = (shopName: string) =>
+        shopName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+
     // Form State
     const [formData, setFormData] = useState({
         // Step 1: Account (if userId not provided)
@@ -36,27 +72,34 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
         shopName: '',
         // Step 2: Business Info
         businessName: '',
-        businessType: 'Individual',
+        businessType: '',
         businessEmail: '',
         businessPhone: '',
+        website: '',
         description: '',
         categoryId: '',
-        // Step 3: Financials
+        categoryDescription: '',
+        yearsInBusiness: '',
+        // Step 3: Financials & Credentials
         taxId: '',
+        registrationNumber: '',
+        businessLicenseNumber: '',
+        monthlyRevenue: '',
         bankName: '',
         accountHolder: '',
         accountNumber: '',
         routingNumber: '',
-        monthlyRevenue: '',
         // Step 4: Address
         addressStreet: '',
         addressCity: '',
         addressState: '',
         addressPostalCode: '',
-        // Step 5: Media & Policies
+        addressCountry: 'Kenya',
+        // Step 5: Assets & Policies
         logoFile: null as File | null,
         bannerFile: null as File | null,
-        licenseFile: null as File | null,
+        businessLicenseFile: null as File | null,
+        otherDocumentsFiles: [] as File[],
         returnPolicy: 'Standard 30-day return policy. Buyer pays return shipping.',
         shippingPolicy: 'Licensed courier. Delivery in 3-5 business days.',
     });
@@ -110,11 +153,104 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
         }
     };
 
-    const handleNext = () => {
-        if (step === 1 && !formData.shopName) {
-            setError("Shop name is required");
-            return;
+    const handleNext = async () => {
+        if (isLoading) return;
+
+        if (step === 1) {
+            if (!formData.shopName.trim()) {
+                setError('Shop name is required');
+                return;
+            }
+            if (!userId) {
+                if (!formData.email.trim()) {
+                    setError('Email address is required');
+                    return;
+                }
+                if (!formData.password) {
+                    setError('Password is required');
+                    return;
+                }
+            }
         }
+
+        if (step === 2) {
+            if (!formData.businessName.trim()) {
+                setError('Business name is required');
+                return;
+            }
+            if (!formData.businessEmail.trim() && !formData.email.trim()) {
+                setError('Business email is required');
+                return;
+            }
+            if (!formData.description.trim()) {
+                setError('Business description is required');
+                return;
+            }
+            if (!formData.categoryId.trim()) {
+                setError('Primary category is required');
+                return;
+            }
+            if (!formData.businessType.trim()) {
+                setError('Business type is required');
+                return;
+            }
+
+            try {
+                const available = await checkShopNameAvailability(formData.shopName.trim());
+                if (!available) {
+                    setError('This shop name is already taken. Please choose another.');
+                    return;
+                }
+            } catch {
+                // If the availability check fails (network, etc.), don't hard-block onboarding.
+            }
+        }
+
+        if (step === 3) {
+            if (!formData.bankName.trim()) {
+                setError('Bank name is required');
+                return;
+            }
+            if (!formData.accountHolder.trim()) {
+                setError('Account holder name is required');
+                return;
+            }
+            if (!formData.accountNumber.trim()) {
+                setError('Account number is required');
+                return;
+            }
+            if (!formData.monthlyRevenue.trim()) {
+                setError('Expected monthly revenue is required');
+                return;
+            }
+        }
+
+        if (step === 4) {
+            if (!formData.addressStreet.trim()) {
+                setError('Street address is required');
+                return;
+            }
+            if (!formData.addressCity.trim()) {
+                setError('City is required');
+                return;
+            }
+        }
+
+        if (step === 5) {
+            if (!formData.logoFile) {
+                setError('Store logo is required');
+                return;
+            }
+            if (!formData.shippingPolicy.trim()) {
+                setError('Shipping policy is required');
+                return;
+            }
+            if (!formData.returnPolicy.trim()) {
+                setError('Return policy is required');
+                return;
+            }
+        }
+
         setError(null);
         setStep(prev => prev + 1);
     };
@@ -138,15 +274,36 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
             }
 
             // 2. Upload Media
-            let logoUrl, logoPath, bannerUrl, bannerPath;
+            let logoUrl: string | null = null;
+            let logoPath: string | null = null;
+            let bannerUrl: string | null = null;
+            let bannerPath: string | null = null;
+            let licenseUrl: string | null = null;
+            let licensePath: string | null = null;
+            const otherDocsData: { url: string, path: string, file: File }[] = [];
 
             if (formData.logoFile) {
-                const res = await uploadVendorMediaToStorage(formData.logoFile, `vendors/${currentUserId}/logo`);
-                logoUrl = res.url; logoPath = res.path;
+                const res = await uploadVendorMediaToStorage(formData.logoFile, `business/logo/${currentUserId}`);
+                logoUrl = res.url || null;
+                logoPath = res.path || null;
             }
             if (formData.bannerFile) {
-                const res = await uploadVendorMediaToStorage(formData.bannerFile, `vendors/${currentUserId}/banner`);
-                bannerUrl = res.url; bannerPath = res.path;
+                const res = await uploadVendorMediaToStorage(formData.bannerFile, `business/banner/${currentUserId}`);
+                bannerUrl = res.url || null;
+                bannerPath = res.path || null;
+            }
+            if (formData.businessLicenseFile) {
+                const res = await uploadVendorMediaToStorage(formData.businessLicenseFile, `business/license/${currentUserId}`);
+                licenseUrl = res.url || null;
+                licensePath = res.path || null;
+            }
+            if (Array.isArray(formData.otherDocumentsFiles) && formData.otherDocumentsFiles.length > 0) {
+                for (const file of formData.otherDocumentsFiles) {
+                    const res = await uploadVendorMediaToStorage(file, `business/docs/${currentUserId}`);
+                    if (res.url && res.path) {
+                        otherDocsData.push({ url: res.url, path: res.path, file });
+                    }
+                }
             }
 
             // 3. Create Profile
@@ -154,19 +311,23 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                 user_id: currentUserId,
                 shop_name: formData.shopName,
                 business_name: formData.businessName || formData.shopName,
-                business_slug: formData.shopName.toLowerCase().replace(/\s+/g, '-'),
+                business_slug: makeBusinessSlug(formData.shopName),
                 business_description: formData.description,
                 business_type: formData.businessType,
-                primary_category: formData.categoryId || 'General',
-                primary_category_description: formData.description,
-                business_email: formData.businessEmail || formData.email,
+                primary_category: formData.categoryId,
+                primary_category_description: formData.categoryDescription || undefined,
+                business_email: (formData.businessEmail || formData.email) || undefined,
                 business_phone: formData.businessPhone,
-                tax_id: formData.taxId,
+                website_url: formData.website || undefined,
+                years_in_business: formData.yearsInBusiness ? Number(formData.yearsInBusiness) : null,
+                tax_id: formData.taxId || undefined,
+                registration_number: formData.registrationNumber || undefined,
+                business_license_number: formData.businessLicenseNumber || undefined,
                 address_street: formData.addressStreet,
                 address_city: formData.addressCity,
                 address_state: formData.addressState,
                 address_postal_code: formData.addressPostalCode,
-                address_country: 'Kenya',
+                address_country: formData.addressCountry || 'Kenya',
                 monthly_revenue: formData.monthlyRevenue,
                 return_policy: formData.returnPolicy,
                 shipping_policy: formData.shippingPolicy,
@@ -185,11 +346,17 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
             if (!business) throw new Error("Failed to create profile");
 
             // 4. Create Media Records
-            if (logoUrl && logoPath) {
-                await createVendorMediaRecord(business.id, logoUrl, logoPath, 'logo', formData.logoFile!.type, formData.logoFile!.size, formData.logoFile!.name, currentUserId);
+            if (logoUrl && logoPath && formData.logoFile) {
+                await createVendorMediaRecord(business.id, logoUrl, logoPath, 'logo', formData.logoFile.type, formData.logoFile.size, formData.logoFile.name, currentUserId);
             }
-            if (bannerUrl && bannerPath) {
-                await createVendorMediaRecord(business.id, bannerUrl, bannerPath, 'banner', formData.bannerFile!.type, formData.bannerFile!.size, formData.bannerFile!.name, currentUserId);
+            if (bannerUrl && bannerPath && formData.bannerFile) {
+                await createVendorMediaRecord(business.id, bannerUrl, bannerPath, 'banner', formData.bannerFile.type, formData.bannerFile.size, formData.bannerFile.name, currentUserId);
+            }
+            if (licenseUrl && licensePath && formData.businessLicenseFile) {
+                await createVendorMediaRecord(business.id, licenseUrl, licensePath, 'license', formData.businessLicenseFile.type, formData.businessLicenseFile.size, formData.businessLicenseFile.name, currentUserId);
+            }
+            for (const docData of otherDocsData) {
+                await createVendorMediaRecord(business.id, docData.url, docData.path, 'other_document', docData.file.type, docData.file.size, docData.file.name, currentUserId);
             }
 
             // 5. Add Bank Account
@@ -215,9 +382,9 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
     const STEPS = [
         { title: 'Account', icon: 'person' },
         { title: 'Business', icon: 'business' },
-        { title: 'Legal', icon: 'gavel' },
+        { title: 'Financial', icon: 'payment' },
         { title: 'Address', icon: 'location_on' },
-        { title: 'Assets', icon: 'image' }
+        { title: 'Finalize', icon: 'check_circle' }
     ];
 
     return (
@@ -333,10 +500,24 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                 onChange={e => updateFormData({ businessType: e.target.value })}
                                 className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none appearance-none"
                             >
-                                <option>Individual</option>
-                                <option>Registered Business</option>
-                                <option>Corporation</option>
+                                <option value="">Select business type</option>
+                                <option value="sole_proprietor">Sole Proprietor</option>
+                                <option value="partnership">Partnership</option>
+                                <option value="limited_company">Limited Company</option>
+                                <option value="cooperative">Cooperative</option>
+                                <option value="ngo">NGO</option>
+                                <option value="other">Other</option>
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Business Email</label>
+                            <input
+                                type="email"
+                                placeholder="business@email.com"
+                                value={formData.businessEmail}
+                                onChange={e => updateFormData({ businessEmail: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
                         </div>
                         <div>
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Primary Category</label>
@@ -346,13 +527,20 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                 className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none appearance-none"
                             >
                                 <option value="">Select a category</option>
-                                <option value="Electronics">Electronics</option>
-                                <option value="Fashion">Fashion</option>
-                                <option value="Home & Garden">Home & Garden</option>
-                                <option value="Beauty">Beauty</option>
-                                <option value="Automotive">Automotive</option>
-                                <option value="Other">Other</option>
+                                {PRIMARY_CATEGORIES.map((c) => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Category Description</label>
+                            <textarea
+                                rows={3}
+                                placeholder="What will you sell in this category?"
+                                value={formData.categoryDescription}
+                                onChange={e => updateFormData({ categoryDescription: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none resize-none"
+                            />
                         </div>
                         <div>
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Business Phone</label>
@@ -361,6 +549,28 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                 placeholder="+254 ..."
                                 value={formData.businessPhone}
                                 onChange={e => updateFormData({ businessPhone: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Website (Optional)</label>
+                            <input
+                                type="url"
+                                placeholder="https://www.example.com"
+                                value={formData.website}
+                                onChange={e => updateFormData({ website: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Years in Business (Optional)</label>
+                            <input
+                                type="number"
+                                min={0}
+                                max={99}
+                                placeholder="e.g. 5"
+                                value={formData.yearsInBusiness}
+                                onChange={e => updateFormData({ yearsInBusiness: e.target.value })}
                                 className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
                             />
                         </div>
@@ -389,6 +599,44 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                 className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
                             />
                         </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Registration Number (Optional)</label>
+                            <input
+                                type="text"
+                                placeholder="Business registration number"
+                                value={formData.registrationNumber}
+                                onChange={e => updateFormData({ registrationNumber: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Business License Number (Optional)</label>
+                            <input
+                                type="text"
+                                placeholder="License number"
+                                value={formData.businessLicenseNumber}
+                                onChange={e => updateFormData({ businessLicenseNumber: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Expected Monthly Revenue</label>
+                            <select
+                                value={formData.monthlyRevenue}
+                                onChange={e => updateFormData({ monthlyRevenue: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none appearance-none"
+                            >
+                                <option value="">Select revenue range</option>
+                                <option value="under_10k">Under 10,000</option>
+                                <option value="10k_50k">10,000 - 50,000</option>
+                                <option value="50k_100k">50,000 - 100,000</option>
+                                <option value="over_100k">Over 100,000</option>
+                            </select>
+                        </div>
+
                         <div className="mt-6">
                             <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-4 ml-1">Settlement Account (KES)</h4>
                             <div className="space-y-4">
@@ -413,6 +661,13 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                     onChange={e => updateFormData({ accountNumber: e.target.value })}
                                     className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
                                 />
+                                <input
+                                    type="text"
+                                    placeholder="Routing / Branch Code (Optional)"
+                                    value={formData.routingNumber}
+                                    onChange={e => updateFormData({ routingNumber: e.target.value })}
+                                    className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                                />
                             </div>
                         </div>
                     </div>
@@ -420,6 +675,15 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
 
                 {step === 4 && (
                     <div className="space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Country</label>
+                            <input
+                                type="text"
+                                value={formData.addressCountry}
+                                readOnly
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold text-gray-500 outline-none"
+                            />
+                        </div>
                         <div>
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Street Address</label>
                             <input
@@ -451,6 +715,16 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                     className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
                                 />
                             </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">State / Region (Optional)</label>
+                            <input
+                                type="text"
+                                placeholder="Region"
+                                value={formData.addressState}
+                                onChange={e => updateFormData({ addressState: e.target.value })}
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
                         </div>
                     </div>
                 )}
@@ -533,6 +807,83 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                         {(compressionStats.bannerFile.originalSize / 1024).toFixed(0)}KB → {(compressionStats.bannerFile.compressedSize / 1024).toFixed(0)}KB
                                         <span className="text-green-500 ml-1">(-{compressionStats.bannerFile.ratio}%)</span>
                                     </p>
+                                )}
+                            </div>
+
+                            {/* Business License Upload */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Business License (Optional)</label>
+                                <input
+                                    type="file"
+                                    id="license-upload"
+                                    hidden
+                                    accept="image/*,.pdf"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        if (file.size > 10 * 1024 * 1024) {
+                                            setError('Business license must be less than 10MB');
+                                            return;
+                                        }
+                                        updateFormData({ businessLicenseFile: file });
+                                    }}
+                                />
+                                <label htmlFor="license-upload" className="block py-3 px-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xs font-black uppercase tracking-widest active:scale-95 transition-all">
+                                    {formData.businessLicenseFile ? 'Change License File' : 'Upload License File'}
+                                </label>
+                                {formData.businessLicenseFile && (
+                                    <div className="mt-2 flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3">
+                                        <p className="text-[10px] font-black text-emerald-700 truncate">✓ {formData.businessLicenseFile.name}</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateFormData({ businessLicenseFile: null })}
+                                            className="text-[10px] font-black text-red-500 uppercase"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Supporting Documents Upload */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Supporting Documents (Optional)</label>
+                                <input
+                                    type="file"
+                                    id="docs-upload"
+                                    hidden
+                                    accept="image/*,.pdf"
+                                    multiple
+                                    onChange={(e) => {
+                                        const files = e.target.files ? Array.from(e.target.files) : [];
+                                        if (files.length === 0) return;
+
+                                        const validFiles = files.filter((f) => f.size <= 10 * 1024 * 1024);
+                                        if (validFiles.length !== files.length) {
+                                            setError('Some files exceed 10MB and were not added');
+                                        }
+                                        updateFormData({ otherDocumentsFiles: [...formData.otherDocumentsFiles, ...validFiles] });
+                                    }}
+                                />
+                                <label htmlFor="docs-upload" className="block py-3 px-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xs font-black uppercase tracking-widest active:scale-95 transition-all">
+                                    Upload Documents
+                                </label>
+
+                                {formData.otherDocumentsFiles.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                        {formData.otherDocumentsFiles.map((file, idx) => (
+                                            <div key={`${file.name}-${idx}`} className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
+                                                <p className="text-[10px] font-black text-gray-700 truncate">✓ {file.name}</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateFormData({ otherDocumentsFiles: formData.otherDocumentsFiles.filter((_, i) => i !== idx) })}
+                                                    className="text-[10px] font-black text-red-500 uppercase"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
 

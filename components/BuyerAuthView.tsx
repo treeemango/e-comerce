@@ -8,9 +8,10 @@ interface BuyerAuthViewProps {
     isModal?: boolean;
     variant?: 'modal' | 'compactPopover';
     externalError?: string;
+    onCreateAccountClick?: () => void; // Custom handler for seller onboarding
 }
 
-const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, authContext, isModal = false, variant = 'modal', externalError }) => {
+const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, authContext, isModal = false, variant = 'modal', externalError, onCreateAccountClick }) => {
     const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -416,9 +417,14 @@ const BuyerAuthView: React.FC<BuyerAuthViewProps> = ({ onAuthSuccess, onClose, a
                                 {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
                                 <button
                                     onClick={() => {
-                                        setMode(mode === 'signin' ? 'signup' : 'signin');
-                                        setError('');
-                                        setSuccess('');
+                                        if (mode === 'signin' && onCreateAccountClick) {
+                                            // Use custom handler if provided (e.g., for seller onboarding)
+                                            onCreateAccountClick();
+                                        } else {
+                                            setMode(mode === 'signin' ? 'signup' : 'signin');
+                                            setError('');
+                                            setSuccess('');
+                                        }
                                     }}
                                     className="text-primary hover:text-orange-600 font-black"
                                 >

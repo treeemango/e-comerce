@@ -1408,6 +1408,10 @@ const App: React.FC = () => {
             onAuthSuccess={handleAuthSuccess}
             authContext={previousView === 'seller-login' ? { view: 'seller-onboarding' } : undefined}
             externalError={authNotice || undefined}
+            onCreateAccountClick={previousView === 'seller-login' ? () => {
+              setCurrentView('seller-onboarding');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } : undefined}
           />
         )}
         {currentView === 'seller-login' && (
