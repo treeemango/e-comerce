@@ -7,6 +7,7 @@ import {
     createVendorMediaRecord,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { processImageForUpload, validateImageFile } from '@/lib/image-utils';
 
 interface SellerOnboardingViewProps {
     userId?: string;
@@ -14,10 +15,18 @@ interface SellerOnboardingViewProps {
     onCancel: () => void;
 }
 
+interface CompressionStats {
+    originalSize: number;
+    compressedSize: number;
+    ratio: number;
+}
+
 export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ userId, onComplete, onCancel }) => {
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [compressing, setCompressing] = useState<string | null>(null);
+    const [compressionStats, setCompressionStats] = useState<{ [key: string]: CompressionStats }>({});
 
     // Form State
     const [formData, setFormData] = useState({
@@ -54,6 +63,51 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
 
     const updateFormData = (updates: Partial<typeof formData>) => {
         setFormData(prev => ({ ...prev, ...updates }));
+    };
+
+    // Compress images before storing
+    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: 'logoFile' | 'bannerFile') => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+            setError(validation.error || 'Invalid image file');
+            return;
+        }
+
+        setCompressing(fieldName);
+        setError(null);
+
+        try {
+            // Compress the image
+            const variant = fieldName === 'logoFile' ? 'grid' : 'detail';
+            const compressed = await processImageForUpload(file, variant);
+
+            // Create a new File from the compressed blob
+            const compressedFile = new File(
+                [compressed.blob],
+                file.name.replace(/\.[^.]+$/, `.${compressed.format}`),
+                { type: `image/${compressed.format}` }
+            );
+
+            // Store compression stats
+            setCompressionStats(prev => ({
+                ...prev,
+                [fieldName]: {
+                    originalSize: file.size,
+                    compressedSize: compressed.size,
+                    ratio: compressed.compressionRatio
+                }
+            }));
+
+            updateFormData({ [fieldName]: compressedFile });
+        } catch (err: any) {
+            setError(err.message || 'Failed to process image');
+        } finally {
+            setCompressing(null);
+        }
     };
 
     const handleNext = () => {
@@ -425,19 +479,39 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                         id="logo-upload"
                                         hidden
                                         accept="image/*"
-                                        onChange={e => updateFormData({ logoFile: e.target.files?.[0] || null })}
+                                        onChange={e => handleImageChange(e, 'logoFile')}
                                     />
-                                    <label htmlFor="logo-upload" className="flex-1 py-3 px-4 bg-gray-900 text-white rounded-xl text-center text-xs font-black uppercase tracking-widest active:scale-95 transition-all">
-                                        Choose Logo
-                                    </label>
+                                    <div className="flex-1">
+                                        {compressing === 'logoFile' ? (
+                                            <div className="flex items-center justify-center gap-2 py-3 px-4 bg-orange-100 text-orange-600 rounded-xl text-xs font-black uppercase">
+                                                <span className="w-4 h-4 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></span>
+                                                Compressing...
+                                            </div>
+                                        ) : (
+                                            <label htmlFor="logo-upload" className="block py-3 px-4 bg-gray-900 text-white rounded-xl text-center text-xs font-black uppercase tracking-widest active:scale-95 transition-all">
+                                                Choose Logo
+                                            </label>
+                                        )}
+                                        {compressionStats.logoFile && (
+                                            <p className="text-[10px] text-gray-500 mt-2 text-center">
+                                                {(compressionStats.logoFile.originalSize / 1024).toFixed(0)}KB → {(compressionStats.logoFile.compressedSize / 1024).toFixed(0)}KB
+                                                <span className="text-green-500 ml-1">(-{compressionStats.logoFile.ratio}%)</span>
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Banner Upload */}
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Store Banner (16:9)</label>
-                                <div className="w-full aspect-video rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden mb-3">
-                                    {formData.bannerFile ? (
+                                <div className="w-full aspect-video rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden mb-3 relative">
+                                    {compressing === 'bannerFile' ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <span className="w-6 h-6 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></span>
+                                            <span className="text-[10px] font-black text-orange-600 uppercase">Compressing...</span>
+                                        </div>
+                                    ) : formData.bannerFile ? (
                                         <img src={URL.createObjectURL(formData.bannerFile)} className="w-full h-full object-cover" />
                                     ) : (
                                         <>
@@ -450,10 +524,16 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                         id="banner-upload"
                                         hidden
                                         accept="image/*"
-                                        onChange={e => updateFormData({ bannerFile: e.target.files?.[0] || null })}
+                                        onChange={e => handleImageChange(e, 'bannerFile')}
                                     />
                                     <label htmlFor="banner-upload" className="absolute inset-0 cursor-pointer" />
                                 </div>
+                                {compressionStats.bannerFile && (
+                                    <p className="text-[10px] text-gray-500 text-center">
+                                        {(compressionStats.bannerFile.originalSize / 1024).toFixed(0)}KB → {(compressionStats.bannerFile.compressedSize / 1024).toFixed(0)}KB
+                                        <span className="text-green-500 ml-1">(-{compressionStats.bannerFile.ratio}%)</span>
+                                    </p>
+                                )}
                             </div>
 
                             {/* Policies */}

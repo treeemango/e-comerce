@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { OnboardingState } from '@/types';
+import { processImageForUpload, validateImageFile } from '@/lib/image-utils';
 
 interface Step4Props {
     data: OnboardingState;
@@ -8,23 +9,66 @@ interface Step4Props {
     onBack: () => void;
 }
 
+// Track compression stats for display
+interface CompressionStats {
+    originalSize: number;
+    compressedSize: number;
+    ratio: number;
+}
+
 const Step4Assets: React.FC<Step4Props> = ({ data, updateData, onSubmit, onBack }) => {
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [compressing, setCompressing] = useState<string | null>(null);
+    const [compressionStats, setCompressionStats] = useState<{ [key: string]: CompressionStats }>({});
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: 'logoFile' | 'bannerFile') => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: 'logoFile' | 'bannerFile') => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            // Validate file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                setErrors(prev => ({ ...prev, [fieldName]: 'File size must be less than 5MB' }));
+
+            // Validate file type
+            const validation = validateImageFile(file);
+            if (!validation.valid) {
+                setErrors(prev => ({ ...prev, [fieldName]: validation.error || 'Invalid file' }));
                 return;
             }
-            updateData({ [fieldName]: file });
-            if (errors[fieldName]) {
-                const newErrors = { ...errors };
-                delete newErrors[fieldName];
-                setErrors(newErrors);
+
+            // Show compression indicator
+            setCompressing(fieldName);
+
+            try {
+                // Compress the image
+                const variant = fieldName === 'logoFile' ? 'grid' : 'detail';
+                const compressed = await processImageForUpload(file, variant);
+
+                // Create a new File from the compressed blob
+                const compressedFile = new File(
+                    [compressed.blob],
+                    file.name.replace(/\.[^.]+$/, `.${compressed.format}`),
+                    { type: `image/${compressed.format}` }
+                );
+
+                // Store compression stats
+                setCompressionStats(prev => ({
+                    ...prev,
+                    [fieldName]: {
+                        originalSize: file.size,
+                        compressedSize: compressed.size,
+                        ratio: compressed.compressionRatio
+                    }
+                }));
+
+                updateData({ [fieldName]: compressedFile });
+
+                if (errors[fieldName]) {
+                    const newErrors = { ...errors };
+                    delete newErrors[fieldName];
+                    setErrors(newErrors);
+                }
+            } catch (err: any) {
+                setErrors(prev => ({ ...prev, [fieldName]: err.message || 'Failed to process image' }));
+            } finally {
+                setCompressing(null);
             }
         }
     };
@@ -101,10 +145,22 @@ const Step4Assets: React.FC<Step4Props> = ({ data, updateData, onSubmit, onBack 
                                     PNG, JPG or GIF • Max 5MB • Recommended 500x500px square
                                 </p>
                                 {errors.logoFile && <p className="text-red-500 text-xs mt-2">{errors.logoFile}</p>}
-                                {data.logoFile && (
-                                    <p className="text-xs text-green-600 mt-2">
-                                        ✓ {data.logoFile.name}
-                                    </p>
+                                {compressing === 'logoFile' && (
+                                    <div className="flex items-center gap-2 text-xs text-orange-500 mt-2">
+                                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-orange-500 border-t-transparent"></span>
+                                        Compressing image...
+                                    </div>
+                                )}
+                                {data.logoFile && !compressing && (
+                                    <div className="text-xs mt-2">
+                                        <p className="text-green-600 font-medium">✓ {data.logoFile.name}</p>
+                                        {compressionStats.logoFile && (
+                                            <p className="text-gray-500">
+                                                {(compressionStats.logoFile.originalSize / 1024).toFixed(0)}KB → {(compressionStats.logoFile.compressedSize / 1024).toFixed(0)}KB
+                                                <span className="text-green-500 ml-1">({compressionStats.logoFile.ratio}% smaller)</span>
+                                            </p>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>
