@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Product } from '@/types';
 import { playCartAddSound } from '@/lib/sounds';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
+import ResponsiveImage from '@/components/ResponsiveImage';
 
 interface ProductCardProps {
     product: Product;
@@ -154,11 +155,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
         >
             {/* Image Container */}
             <div className="aspect-[4/5] overflow-hidden bg-gray-50 dark:bg-gray-900 relative">
-                <img
+                <ResponsiveImage
                     src={images[activeImageIndex] || 'https://images.unsplash.com/photo-1560393464-5c69a73c5770?auto=format&fit=crop&q=80&w=400'}
                     alt={product.title}
                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
+                    sizes="50vw"
+                    aspectRatio="square"
+                    showBlurPlaceholder
                 />
 
                 {/* Image Selector (<>), only when multiple images exist */}

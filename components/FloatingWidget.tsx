@@ -40,7 +40,10 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
 
-  const totalAlerts = history.length + userCoupons.length;
+  const unreadNotificationCount = user ? history.filter((n) => !n.is_read).length : 0;
+  const latestUnreadNotification = history.find((n) => !n.is_read);
+
+  const totalAlerts = user ? unreadNotificationCount + userCoupons.length : 0;
 
   const isMessagesOpen = propsIsOpen !== undefined ? propsIsOpen : internalIsOpen;
   const activePane = propsActivePane !== undefined ? propsActivePane : internalActivePane;
@@ -364,16 +367,16 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">Activity</p>
                         <span className="text-[10px] text-gray-400">
-                          {history.length > 0 ? 'Recently updated' : 'All quiet'}
+                          {unreadNotificationCount > 0 ? 'Recently updated' : 'All quiet'}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 line-clamp-1">
-                        {history.length > 0 ? history[0].message : 'No new notifications'}
+                        {unreadNotificationCount > 0 ? (latestUnreadNotification?.message || 'No new notifications') : 'No new notifications'}
                       </p>
                     </div>
-                    {history.length > 0 && (
+                    {unreadNotificationCount > 0 && (
                       <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full">
-                        {history.length}
+                        {unreadNotificationCount}
                       </span>
                     )}
                   </button>

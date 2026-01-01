@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as webpush from "https://esm.sh/web-push@3.6.7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -126,6 +125,8 @@ serve(async (req: Request) => {
       if (error) return json(400, { error: error.message });
       if (!subs || subs.length === 0) return json(400, { error: "No subscriptions found for user" });
 
+      // Lazy-load to avoid breaking CORS preflight/cold starts if the module fails to initialize.
+      const webpush = (await import("npm:web-push@3.6.7")).default;
       webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
       const pushPayload = JSON.stringify({ title, body, url });

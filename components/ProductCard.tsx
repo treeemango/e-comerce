@@ -4,6 +4,7 @@ import PreviewModal from './PreviewModal';
 import SimilarItemsModal from './SimilarItemsModal';
 import { formatPriceParts, getCurrencySymbol, formatPriceWithConversion, formatPrice, useCurrencyConverter } from '@/lib/currency';
 import { useMemo } from 'react';
+import ResponsiveImage from './ResponsiveImage';
 
 interface ProductCardProps {
   product: Product;
@@ -207,11 +208,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
               />
             )
           ) : (
-            <img
+            <ResponsiveImage
+              src={isHovered && !isVideoPlaying && imageUrls.length ? imageUrls[activeImageIndex] : primaryImage}
               alt={product.title}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 mix-blend-multiply dark:mix-blend-normal"
-              src={isHovered && !isVideoPlaying && imageUrls.length ? imageUrls[activeImageIndex] : primaryImage}
-              loading="lazy"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 250px"
+              aspectRatio="square"
+              showBlurPlaceholder
             />
           )}
 

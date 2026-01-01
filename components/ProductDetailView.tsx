@@ -14,6 +14,8 @@ import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SIT
 import { formatPrice, getCurrencySymbol, useCurrencyConverter } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
 import ProductQuestions from './ProductDetails/ProductQuestions';
+import { getOptimizedImageUrl } from '../lib/image-utils';
+import ResponsiveImage from './ResponsiveImage';
 
 function cn(...inputs: ClassValue[]) {
    return twMerge(clsx(inputs));
@@ -901,7 +903,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         }}
                      >
                         <img
-                           src={media.thumbnail_url || media.image_url}
+                           src={getOptimizedImageUrl(media.thumbnail_url || media.image_url!, 'thumb')}
                            alt={media.alt_text || `Product thumbnail ${i + 1}`}
                            className="w-full h-full object-cover"
                            loading="lazy"
@@ -1223,7 +1225,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     >
                                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 border border-slate-100 dark:border-slate-600">
                                           {previewVariant?.image || variant.image ? (
-                                             <img src={previewVariant?.image || variant.image!} alt={label} className="w-full h-full object-cover" />
+                                             <img src={getOptimizedImageUrl(previewVariant?.image || variant.image!, 'thumb')} alt={label} className="w-full h-full object-cover" />
                                           ) : (
                                              <div
                                                 className="w-full h-full"
@@ -1448,7 +1450,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            {/* Header with Logo */}
                            <div className="flex items-center gap-4 mb-4">
                               {vendor.logo_url ? (
-                                 <img src={vendor.logo_url} alt={vendor.business_name} className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700" />
+                                 <img src={getOptimizedImageUrl(vendor.logo_url, 'thumb')} alt={vendor.business_name} className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700" />
                               ) : (
                                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-black text-xl uppercase">
                                     {vendor.business_name?.charAt(0) || '?'}
@@ -1814,7 +1816,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  <video src={effectiveActiveMedia.video_url} autoPlay muted playsInline loop className="w-full h-full object-contain" />
                               ) : (
                                  <img
-                                    src={effectiveActiveMedia.image_url || product.image}
+                                    src={getOptimizedImageUrl(effectiveActiveMedia.image_url || product.image, 'detail')}
                                     alt={product.title}
                                     className="w-full h-full object-contain max-h-full"
                                  />
@@ -1943,7 +1945,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                           >
                                              <div className="flex items-center gap-3">
                                                 <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                                                   <img src={variant?.image || product.image} className="w-full h-full object-cover" alt={val} />
+                                                   <img src={getOptimizedImageUrl(variant?.image || product.image, 'thumb')} className="w-full h-full object-cover" alt={val} />
                                                 </div>
                                                 <div>
                                                    <p className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-tight">{val}</p>
@@ -2050,7 +2052,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                      <div className="p-4 space-y-4">
                         <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                           <img src={product.image} alt="" className="w-12 h-12 rounded object-cover border border-gray-200" />
+                           <img src={getOptimizedImageUrl(product.image, 'thumb')} alt="" className="w-12 h-12 rounded object-cover border border-gray-200" />
                            <div>
                               <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-1">{product.title}</p>
                               <p className="text-xs text-gray-500">{vendor?.shop_name || 'Seller'}</p>

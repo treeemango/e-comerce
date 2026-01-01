@@ -58,6 +58,10 @@ const Header: React.FC<HeaderProps> = ({
   const [currentCurrency, setCurrentCurrency] = useState<string>(getUserCurrency());
   const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
   const { history } = useNotifications();
+  const unreadNotificationCount = useMemo(
+    () => (user ? history.filter((n) => !n.is_read).length : 0),
+    [user, history]
+  );
   const [isMobileCategoriesOpen, setIsMobileCategoriesOpen] = useState(false);
   const [isTopCategoriesOverlayOpen, setIsTopCategoriesOverlayOpen] = useState(false);
   const [selectedOverlayDepartmentId, setSelectedOverlayDepartmentId] = useState<string | null>(null);
@@ -244,15 +248,17 @@ const Header: React.FC<HeaderProps> = ({
           <span className="material-icons">menu</span>
         </button>
 
-        <span
-          className="text-xl font-bold cursor-pointer hover:text-gray-200 transition-colors"
-          onClick={(e) => {
-            e.preventDefault();
-            if (onHomeClick) onHomeClick();
-          }}
-        >
-          JuaExpress
-        </span>
+        <h1 className="text-xl">
+          <span
+            className="font-bold cursor-pointer hover:text-gray-200 transition-colors"
+            onClick={(e) => {
+              e.preventDefault();
+              if (onHomeClick) onHomeClick();
+            }}
+          >
+            JuaExpress
+          </span>
+        </h1>
 
         {/* Desktop Links - Hidden below 1340px */}
         <div className="hidden min-[1340px]:flex items-center space-x-4">
@@ -800,9 +806,9 @@ const Header: React.FC<HeaderProps> = ({
             }}
           >
             <span className="material-icons text-2xl">notifications</span>
-            {history.length > 0 && (
+            {unreadNotificationCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-black h-4 w-4 flex items-center justify-center rounded-full border-2 border-primary animate-pulse">
-                {history.length}
+                {unreadNotificationCount}
               </span>
             )}
           </button>

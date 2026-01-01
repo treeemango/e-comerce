@@ -234,8 +234,7 @@ const App: React.FC = () => {
       return {
         title: 'JuaExpress - Premium Multi-Country E-Commerce Marketplace',
         description: 'Shop JuaExpress for premium electronics, fashion, and home goods across UK and Africa. Experience seamless multi-country shopping with secure payments and ultra-fast delivery.',
-        keywords: 'JuaExpress, online shopping Africa, UK marketplace, Kenya e-commerce, electronics Nairobi, fashion Lagos',
-        noindex: true,
+        keywords: 'jua, jua express, JuaExpress, online shopping Africa, UK marketplace, Kenya e-commerce, electronics Nairobi, fashion Lagos',
 
 
       };

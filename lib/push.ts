@@ -42,7 +42,7 @@ export async function getExistingPushSubscription(): Promise<PushSubscription | 
 export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubscription> {
   const support = getPushSupportStatus();
   if (support.supported === false) throw new Error(support.reason);
-  if (!vapidPublicKey) throw new Error('Missing VAPID public key (VITE_VAPID_PUBLIC_KEY).');
+  if (!vapidPublicKey) throw new Error('Push notifications are not configured for this project.');
 
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {

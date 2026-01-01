@@ -8,6 +8,8 @@ import ProductQuestions from '../../components/ProductDetails/ProductQuestions';
 import { ReviewSection } from '../../components/ReviewSection';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 import { trackProductViewAuto } from '@/lib/tracking';
+import ResponsiveImage from '@/components/ResponsiveImage';
+import { getOptimizedImageUrl } from '@/lib/image-utils';
 
 interface ProductDetailsProps {
     product: Product;
@@ -550,12 +552,16 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 }}
             >
                 {images[0] && (
-                    <img
+                    <ResponsiveImage
                         src={images[currentImage % images.length]}
                         alt={product.title}
                         className={`w-full h-full object-cover transition-all duration-500 ${isTransitioning ? 'opacity-40 scale-105' : 'opacity-100 scale-100'
                             }`}
-                        loading="eager"
+                        priority={true}
+                        defaultVariant="detail"
+                        sizes="100vw"
+                        aspectRatio="4:5"
+                        showBlurPlaceholder
                     />
                 )}
 
@@ -846,7 +852,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                             ? 'border-primary ring-2 ring-primary/20 scale-105'
                                             : 'border-gray-50 dark:border-white/5 opacity-80 group-hover:opacity-100'
                                             }`}>
-                                            <img src={v.image!} className="w-full h-full object-cover" alt="" />
+                                            <img src={getOptimizedImageUrl(v.image!, 'thumb')} className="w-full h-full object-cover" alt="" />
                                         </div>
                                         <div className="flex flex-col items-center">
                                             <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
@@ -1122,7 +1128,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 rounded-full border-4 border-gray-50 dark:border-white/5 overflow-hidden bg-gray-100 dark:bg-gray-900 flex items-center justify-center text-xs font-black shadow-inner">
                                     {(vendorInfo?.logo_url || product.vendor?.logo_url) ? (
-                                        <img src={vendorInfo?.logo_url || product.vendor?.logo_url} alt="" className="w-full h-full object-cover" />
+                                        <img src={getOptimizedImageUrl(vendorInfo?.logo_url || product.vendor?.logo_url!, 'thumb')} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                         (vendorInfo?.business_name || product.vendor?.business_name || 'Vendor').slice(0, 2).toUpperCase()
                                     )}
@@ -1472,10 +1478,12 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
                             // Regular image
                             return (
-                                <img
+                                <ResponsiveImage
                                     src={images[currentImage]}
                                     className="w-full h-auto max-h-screen object-contain"
                                     alt="Full view"
+                                    defaultVariant="detail"
+                                    sizes="100vw"
                                 />
                             );
                         })()}
@@ -1573,7 +1581,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
                         <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl mb-6 border border-gray-100 dark:border-gray-700">
                             <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0">
-                                <img src={product.image} alt="" className="w-full h-full object-cover" />
+                                <img src={getOptimizedImageUrl(product.image, 'thumb')} alt="" className="w-full h-full object-cover" />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-0.5">Inquiry About</div>
@@ -1649,7 +1657,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             {/* Product Info & Pricing Tiers */}
                             <div className="p-5 flex gap-5">
                                 <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100 dark:border-gray-800 shadow-sm transition-all duration-300">
-                                    <img src={sheetPreviewVariant?.image || currentVariant?.image || product.image} className="w-full h-full object-cover" alt="" />
+                                    <img src={getOptimizedImageUrl(sheetPreviewVariant?.image || currentVariant?.image || product.image, 'thumb')} className="w-full h-full object-cover" alt="" />
                                 </div>
                                 <div className="flex-1 min-w-0 py-1">
                                     <div className="flex gap-6 overflow-x-auto hide-scrollbar pb-2">
@@ -1720,7 +1728,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                         >
                                                             <div className="flex items-center gap-4 min-w-0 flex-1">
                                                                 <div className={`w-14 h-14 rounded-xl overflow-hidden border flex-shrink-0 transition-all ${sheetPreviewVariant?.id === variant?.id ? 'border-orange-500 shadow-orange-100 dark:shadow-none scale-105' : 'border-gray-100 dark:border-gray-800 shadow-sm'}`}>
-                                                                    <img src={repImg || product.image} className="w-full h-full object-cover" alt="" />
+                                                                    <img src={getOptimizedImageUrl(repImg || product.image, 'thumb')} className="w-full h-full object-cover" alt="" />
                                                                 </div>
                                                                 <div className="flex flex-col gap-0.5 min-w-0">
                                                                     <span className={`text-sm font-black uppercase tracking-tight truncate transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{val}</span>

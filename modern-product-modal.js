@@ -8062,6 +8062,8 @@ class ModernProductModal {
       if (video) {
         video.srcObject = stream;
         document.getElementById('modern-camera-modal').classList.remove('hidden');
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
       }
     } catch (error) {
       console.error('Camera access failed:', error);
@@ -8078,6 +8080,11 @@ class ModernProductModal {
       this.modernCameraStream = null;
     }
     document.getElementById('modern-camera-modal').classList.add('hidden');
+    const video = document.getElementById('modern-camera-video');
+    if (video) {
+      try { video.pause(); } catch (e) {}
+      video.srcObject = null;
+    }
   }
 
   /**
@@ -8119,6 +8126,8 @@ class ModernProductModal {
       const video = document.getElementById('modern-camera-video');
       if (video) {
         video.srcObject = stream;
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
       }
     } catch (error) {
       console.error('Failed to switch camera:', error);
@@ -8554,6 +8563,8 @@ class ModernProductModal {
         video.srcObject = stream;
         console.log('[CAMERA_MODAL_DEBUG] Showing camera modal');
         document.getElementById('camera-modal-modern').classList.remove('hidden');
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
         console.log('[CAMERA_MODAL_DEBUG] Camera opened successfully for modern modal');
       } else {
         console.error('[CAMERA_MODAL_DEBUG] Video element not found!');
@@ -8573,7 +8584,11 @@ class ModernProductModal {
     }
 
     document.getElementById('camera-modal-modern').classList.add('hidden');
-    document.getElementById('camera-video-modern').srcObject = null;
+    const video = document.getElementById('camera-video-modern');
+    if (video) {
+      try { video.pause(); } catch (e) {}
+      video.srcObject = null;
+    }
   }
 
   capturePhotoForModern() {
@@ -8617,6 +8632,8 @@ class ModernProductModal {
       const video = document.getElementById('camera-video-modern');
       if (video) {
         video.srcObject = stream;
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
       }
     } catch (error) {
       console.error('[CAMERA_MODAL_DEBUG] Failed to switch camera:', error);
@@ -9072,6 +9089,8 @@ class ModernProductModal {
       if (video) {
         video.srcObject = stream;
         document.getElementById('camera-modal').classList.remove('hidden');
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
         console.log('[CAMERA_DEBUG] Camera opened successfully');
       }
     } catch (error) {
@@ -9092,7 +9111,11 @@ class ModernProductModal {
     }
 
     document.getElementById('camera-modal').classList.add('hidden');
-    document.getElementById('camera-video').srcObject = null;
+    const video = document.getElementById('camera-video');
+    if (video) {
+      try { video.pause(); } catch (e) {}
+      video.srcObject = null;
+    }
   }
 
   /**
@@ -9142,6 +9165,8 @@ class ModernProductModal {
       const video = document.getElementById('camera-video');
       if (video) {
         video.srcObject = stream;
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
       }
     } catch (error) {
       console.error('[CAMERA_DEBUG] Failed to switch camera:', error);
@@ -12776,6 +12801,8 @@ class ModernProductModal {
       const video = modal.querySelector('#image-camera-video');
       if (video) {
         video.srcObject = stream;
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
       }
     } catch (error) {
       console.error('Camera access failed:', error);
@@ -12836,6 +12863,11 @@ class ModernProductModal {
     const modal = document.getElementById('image-camera-modal');
     if (modal) {
       modal.classList.add('hidden');
+    }
+    const video = document.getElementById('image-camera-video');
+    if (video) {
+      try { video.pause(); } catch (e) {}
+      video.srcObject = null;
     }
   }
 

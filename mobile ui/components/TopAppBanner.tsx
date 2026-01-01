@@ -41,7 +41,7 @@ export const TopAppBanner: React.FC = () => {
             JuaExpress
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-gray-900 dark:text-white">JuaExpress: Shop Like a Billionaire</span>
+            <h1 className="text-sm font-bold text-gray-900 dark:text-white">JuaExpress: Shop Like a Billionaire</h1>
             <span className="text-xs text-gray-500 dark:text-gray-400">Add to Home Screen for faster access.</span>
           </div>
         </div>

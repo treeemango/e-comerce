@@ -799,8 +799,12 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
     const handleNext = () => {
         // Step 0: Basic Info validation
         if (currentStep === 0) {
-            if (!title?.trim()) {
-                alert('Product title is required.');
+            if (!title?.trim() || title.trim().length < 3) {
+                alert('Product title must be at least 3 characters long.');
+                return;
+            }
+            if (!description?.trim() || description.trim().length < 10) {
+                alert('Description is too short. Please provide at least 10 characters.');
                 return;
             }
             if (!categoryId?.trim()) {
@@ -821,8 +825,17 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             }
         }
 
+        // Step 2: Attributes - warning (optional but recommended)
+        if (currentStep === 2) {
+            if (attributes.length === 0 && availableAttributes.length > 0) {
+                const proceed = confirm('Providing product attributes (like size/color) makes your product 40% more discoverable. Continue without adding any?');
+                if (!proceed) return;
+            }
+        }
+
         // Step 3: Pricing & Delivery validation
         if (currentStep === 3) {
+            // Pricing Validation
             if (hasVariants) {
                 // Validate all variants have valid prices
                 const variantsWithoutPrice = variants.filter(v => typeof v.price !== 'number' || v.price <= 0);
@@ -854,6 +867,37 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                         return;
                     }
                 }
+            }
+
+            // Delivery Validation
+            if (!deliveryTime) {
+                alert('Please select an estimated delivery time.');
+                return;
+            }
+
+            if (deliveryScope === 'regional' || deliveryScope === 'local') {
+                if (deliveryLocations.length === 0) {
+                    alert(`Please add at least one ${deliveryScope === 'regional' ? 'region' : 'location/city'} for your selected delivery scope.`);
+                    return;
+                }
+            }
+
+            if (deliveryCost < 0) {
+                alert('Delivery cost cannot be negative.');
+                return;
+            }
+        }
+
+        // Step 4: SEO validation
+        if (currentStep === 4) {
+            if (!slug?.trim()) {
+                alert('URL Slug is required for your product.');
+                return;
+            }
+            // Basic slug format check: only lowercase letters, numbers, and hyphens
+            if (!/^[a-z0-9-]+$/.test(slug)) {
+                alert('URL Slug can only contain lowercase letters, numbers, and hyphens.');
+                return;
             }
         }
 
@@ -1261,7 +1305,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
     // Final Submission
     const handleSubmit = async () => {
-        // More robust validation
+        // Aggregate Validation
         if (!categoryId || !categoryId.trim()) {
             alert('Please select a category for your product.');
             return;
@@ -1272,21 +1316,21 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             return;
         }
 
-        // Check for simple product pricing
-        if (!hasVariants && (basePrice === undefined || basePrice === null || basePrice < 0)) {
-            alert('Please set a valid price for your product.');
-            return;
-        }
-
-        // Check for variant pricing (at least one variant must have a price)
-        if (hasVariants && (!variants || variants.length === 0 || !variants.some(v => v.price > 0))) {
-            alert('Please set prices for at least one product variant.');
-            return;
-        }
-
-        if (typeof baseCompareAtPrice === 'number' && baseCompareAtPrice < basePrice) {
-            alert('Original/compare-at price should be greater than or equal to the selling price to show a valid discount.');
-            return;
+        // Final Price Checks
+        if (!hasVariants) {
+            if (typeof basePrice !== 'number' || basePrice <= 0) {
+                alert('Please set a valid price for your product.');
+                return;
+            }
+            if (typeof baseCompareAtPrice === 'number' && baseCompareAtPrice < basePrice) {
+                alert('Original/compare-at price should be greater than or equal to the selling price.');
+                return;
+            }
+        } else {
+            if (!variants || variants.length === 0 || !variants.every(v => v.price > 0)) {
+                alert('Please set prices for all product variants.');
+                return;
+            }
         }
 
         setIsSubmitting(true);
@@ -1295,8 +1339,8 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             // Merge uploaded media with YouTube URLs
             const youtubeMedia: MediaUploadData[] = youtubeUrls.map((url, idx) => ({
                 url,
-                storage_path: '', // No storage path for YouTube
-                media_type: 'youtube', // Type update we just made
+                storage_path: '',
+                media_type: 'youtube',
                 is_main: false,
                 position: uploadedMedia.length + idx,
                 alt_text: title
@@ -1309,30 +1353,36 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             const safeOccasions = occasionTags.map(t => t.trim()).filter(Boolean);
             const joinedSeoKeywords = seoKeywords.map(k => k.trim()).filter(Boolean).join(', ');
 
-            const preparedVariants = (variants.length > 0 ? variants : [{
+            // Sanitize numeric fields and calculate discounts
+            const preparedVariants = (hasVariants ? variants : [{
                 sku: `${title.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`,
                 price: basePrice,
-                compare_at_price: baseCompareAtPrice ?? basePrice,
-                original_price: baseCompareAtPrice ?? basePrice,
+                compare_at_price: baseCompareAtPrice || basePrice,
+                original_price: baseCompareAtPrice || basePrice,
                 stock: baseStock,
                 options: {},
                 is_default: true
             }]).map(variant => {
-                const rrp = typeof variant.compare_at_price === 'number' ? variant.compare_at_price : variant.price;
-                const discountPercent = rrp && variant.price ? Math.max(0, Math.round(((rrp - variant.price) / rrp) * 100)) : undefined;
+                const price = Number(variant.price) || 0;
+                const rrp = Number(variant.compare_at_price || variant.original_price || price);
+                const discountPercent = rrp > price ? Math.round(((rrp - price) / rrp) * 100) : 0;
+
                 return {
                     ...variant,
+                    price,
                     rrp,
+                    original_price: rrp,
+                    compare_at_price: rrp,
+                    stock: Number(variant.stock) || 0,
                     discount_percent: discountPercent
                 };
             });
 
-            // Dynamically look up Pricing Unit attribute UUID to avoid syntax errors
+            // Dynamically look up Pricing Unit attribute
             const pricingUnitAttr = availableAttributes.find(a => a.name.toLowerCase().includes('unit'));
             const finalAttributes = [...attributes];
 
             if (pricingUnitAttr) {
-                // Only add if we have a valid UUID-based attribute from the category
                 const existingIdx = finalAttributes.findIndex(a => a.attribute_id === pricingUnitAttr.id);
                 const attrObj = {
                     attribute_id: pricingUnitAttr.id,
@@ -1348,31 +1398,28 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                 }
             }
 
-            const deliveryTimeDaysParsed = (() => {
-                const parsed = parseInt(deliveryTimeDaysInput, 10);
-                return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-            })();
+            const deliveryTimeDaysParsed = parseInt(deliveryTimeDaysInput, 10) || 1;
 
             const payload = {
-                title,
-                description,
+                title: title.trim(),
+                description: description.trim(),
                 category_id: categoryId,
                 brand_id: brandId || undefined,
                 currency: currency,
                 sale_unit: pricingUnit,
-                free_delivery: freeDelivery,
+                free_delivery: !!freeDelivery,
                 delivery_scope: deliveryScope,
                 delivery_locations: deliveryLocations,
-                min_order_value: Number.isFinite(minOrderValue) ? minOrderValue : 0,
-                min_order_for_free_delivery: Number.isFinite(minOrderForFreeDelivery) ? minOrderForFreeDelivery : 0,
-                is_express_delivery: isExpressDelivery,
-                delay_credit: Number.isFinite(delayCredit) ? delayCredit : 0,
-                seo_title: seoTitle,
-                meta_description: metaDescription,
-                url_slug: slug,
-                canonical_url: canonicalUrl || undefined,
+                min_order_value: Number(minOrderValue) || 0,
+                min_order_for_free_delivery: Number(minOrderForFreeDelivery) || 0,
+                is_express_delivery: !!isExpressDelivery,
+                delay_credit: Number(delayCredit) || 0,
+                seo_title: seoTitle.trim() || title.trim(),
+                meta_description: metaDescription.trim() || description.substring(0, 160).trim(),
+                url_slug: slug.trim(),
+                canonical_url: canonicalUrl?.trim() || undefined,
                 seo_keywords: joinedSeoKeywords || undefined,
-                delivery_cost: Number.isFinite(deliveryCost) ? deliveryCost : 0,
+                delivery_cost: Number(deliveryCost) || 0,
                 delivery_time_estimate: deliveryTime,
                 delivery_time_days: deliveryTimeDaysParsed,
                 tags: safeTags,
@@ -1395,16 +1442,15 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
             );
 
             if (pid) {
-
                 alert('Product published successfully. It is now pending approval.');
                 onSuccess();
             } else {
                 throw new Error('Failed to create product record.');
             }
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Submission failed:', error);
-            alert('Failed to publish product. Please try again.');
+            alert(`Failed to publish product: ${error.message || 'Please try again.'}`);
         } finally {
             setIsSubmitting(false);
         }

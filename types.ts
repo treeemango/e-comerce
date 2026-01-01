@@ -148,6 +148,12 @@ export interface MediaItem {
     thumbnail?: string;
     isMain?: boolean;
     name?: string; // For document names
+    // Optimized image variants
+    url_thumb?: string;
+    url_grid?: string;
+    url_detail?: string;
+    url_zoom?: string;
+    blurhash?: string;
 }
 
 export interface GalleryMediaItem {
@@ -158,6 +164,12 @@ export interface GalleryMediaItem {
     type: 'image' | 'video' | 'youtube';
     video_url?: string;
     alt_text?: string;
+    // Optimized image variants
+    url_thumb?: string;
+    url_grid?: string;
+    url_detail?: string;
+    url_zoom?: string;
+    blurhash?: string;
 }
 
 export interface VendorInfo {

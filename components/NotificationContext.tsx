@@ -1,6 +1,6 @@
 
 import { supabase } from '@/lib/supabase';
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
 import { playNotificationSound } from '../lib/sounds';
 
 export type NotificationType = 'success' | 'info' | 'warning' | 'error';
@@ -36,24 +36,67 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [history, setHistory] = useState<Notification[]>(() => {
-        try {
-            const saved = localStorage.getItem('notification_history');
-            return saved ? JSON.parse(saved) : [];
-        } catch {
-            return [];
-        }
-    });
+    const [history, setHistory] = useState<Notification[]>([]); // Initialize empty, load in useEffect
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-    // Load improved notifications from DB
+    const dismissNotification = useCallback((id: string) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, []);
+
+    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void, action?: NotificationAction, customId?: string) => {
+        const id = customId || Math.random().toString(36).substring(2, 9);
+        const timestamp = new Date().toISOString();
+        const newNotification: Notification = { id, message, type, duration, timestamp, onClick, action };
+
+        setNotifications((prev) => [...prev, newNotification]);
+        setHistory((prev) => {
+            const updated = [newNotification, ...prev].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).slice(0, 50);
+            if (currentUserId) {
+                localStorage.setItem(`notification_history_${currentUserId}`, JSON.stringify(updated));
+            }
+            return updated;
+        });
+
+        playNotificationSound();
+
+        if (duration !== Infinity) {
+            setTimeout(() => {
+                dismissNotification(id);
+            }, duration);
+        }
+    }, [dismissNotification, currentUserId]);
+
+    const showNotificationRef = useRef(showNotification);
+
+    useEffect(() => {
+        showNotificationRef.current = showNotification;
+    }, [showNotification]);
+
+    // Load history and setup notifications on auth change
     useEffect(() => {
         let subscription: any;
 
-        const setupNotifications = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+        const setupNotifications = async (user: any) => {
+            if (!user) {
+                setHistory([]);
+                setCurrentUserId(null);
+                return;
+            }
 
-            // Fetch initial
+            // Important: reset history when switching users so one user's notifications
+            // never appear in another user's session (even if the new user has no saved/DB notifications).
+            setHistory([]);
+            setCurrentUserId(user.id);
+
+            // Load from local storage (user-specific key)
+            try {
+                const saved = localStorage.getItem(`notification_history_${user.id}`);
+                if (saved) setHistory(JSON.parse(saved));
+            } catch (e) {
+                console.warn('[NotificationContext] Failed to load local history:', e);
+            }
+
+            // Fetch initial from DB
             const { data } = await supabase
                 .from('notifications')
                 .select('*')
@@ -70,16 +113,19 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
                     action: n.action_payload,
                     is_read: n.is_read
                 }));
-                // Merge with local history - prioritizing DB
+
                 setHistory(prev => {
                     const combined = [...dbNotes, ...prev.filter(p => !dbNotes.find(d => d.id === p.id))];
-                    return combined.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()).slice(0, 50);
+                    const sorted = combined.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()).slice(0, 50);
+                    // Save merged history back to user-specific localStorage
+                    localStorage.setItem(`notification_history_${user.id}`, JSON.stringify(sorted));
+                    return sorted;
                 });
             }
 
-            // Realtime subscription
+            // Realtime subscription for the current user
             subscription = supabase
-                .channel('public:notifications')
+                .channel(`notifications:${user.id}`) // User-specific channel
                 .on('postgres_changes', {
                     event: 'INSERT',
                     schema: 'public',
@@ -87,7 +133,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
                     filter: `user_id=eq.${user.id}`
                 }, payload => {
                     const newNote = payload.new;
-                    showNotification(
+                    showNotificationRef.current(
                         newNote.message,
                         newNote.type as NotificationType,
                         5000,
@@ -99,37 +145,25 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
                 .subscribe();
         };
 
-        setupNotifications();
+        // Listen for auth state changes
+        const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (subscription) {
+                supabase.removeChannel(subscription);
+                subscription = null;
+            }
+            setupNotifications(session?.user || null);
+        });
+
+        // Initial setup
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            setupNotifications(user);
+        });
 
         return () => {
+            authSub.unsubscribe();
             if (subscription) supabase.removeChannel(subscription);
         };
     }, []);
-
-    const dismissNotification = useCallback((id: string) => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, []);
-
-    const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void, action?: NotificationAction, customId?: string) => {
-        const id = customId || Math.random().toString(36).substring(2, 9);
-        const timestamp = new Date().toISOString();
-        const newNotification: Notification = { id, message, type, duration, timestamp, onClick, action };
-
-        setNotifications((prev) => [...prev, newNotification]);
-        setHistory((prev) => {
-            const updated = [newNotification, ...prev].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).slice(0, 50);
-            localStorage.setItem('notification_history', JSON.stringify(updated));
-            return updated;
-        });
-
-        playNotificationSound();
-
-        if (duration !== Infinity) {
-            setTimeout(() => {
-                dismissNotification(id);
-            }, duration);
-        }
-    }, [dismissNotification]);
 
     const markAllAsRead = useCallback(() => {
         // Since we don't have an "unread" state yet, we can clear the active toasts
@@ -138,8 +172,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     const clearHistory = useCallback(() => {
         setHistory([]);
-        localStorage.removeItem('notification_history');
-    }, []);
+        if (currentUserId) {
+            localStorage.removeItem(`notification_history_${currentUserId}`);
+        }
+    }, [currentUserId]);
 
     return (
         <NotificationContext.Provider value={{ notifications, history, showNotification, dismissNotification, markAllAsRead, clearHistory }}>

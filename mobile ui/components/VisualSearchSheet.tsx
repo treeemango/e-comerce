@@ -38,34 +38,95 @@ const VisualSearchSheet: React.FC<VisualSearchSheetProps> = ({ onClose, onSearch
 
     const startCamera = async () => {
         try {
+            if (!window.isSecureContext) {
+                alert('Camera requires HTTPS (or localhost). Please open the site over https://');
+                return;
+            }
+            if (!navigator.mediaDevices?.getUserMedia) {
+                alert('Camera is not supported in this browser.');
+                return;
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment' },
                 audio: false
             });
+
             setCameraStream(stream);
             setIsCapturing(true);
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.play();
-            }
         } catch (err) {
             console.error('Camera access denied:', err);
-            alert('Camera access is required for visual search. Please allow camera permissions.');
+            alert('Unable to access camera. Please allow camera permissions and try again.');
         }
     };
 
     const stopCamera = () => {
+        const video = videoRef.current;
+        if (video) {
+            try {
+                video.pause();
+            } catch {
+                // ignore
+            }
+            video.srcObject = null;
+        }
+
         if (cameraStream) {
             cameraStream.getTracks().forEach(track => track.stop());
             setCameraStream(null);
         }
+
         setIsCapturing(false);
     };
+
+    // Attach the stream after the <video> element mounts.
+    // (The video is conditionally rendered, so refs are null during startCamera.)
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (isCapturing && cameraStream) {
+            if (video.srcObject !== cameraStream) {
+                video.srcObject = cameraStream;
+            }
+
+            const playWhenReady = () => {
+                const p = video.play();
+                if (p && typeof (p as Promise<void>).catch === 'function') {
+                    (p as Promise<void>).catch(() => {
+                        // autoplay can be blocked in some environments; user can retry.
+                    });
+                }
+            };
+
+            if (video.readyState >= 1) {
+                playWhenReady();
+            } else {
+                video.onloadedmetadata = () => playWhenReady();
+            }
+
+            return;
+        }
+
+        if (video.srcObject) {
+            video.srcObject = null;
+        }
+    }, [cameraStream, isCapturing]);
+
+    // Ensure we stop tracks if the sheet unmounts.
+    useEffect(() => {
+        return () => {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [cameraStream]);
 
     const capturePhoto = () => {
         if (videoRef.current && canvasRef.current) {
             const video = videoRef.current;
             const canvas = canvasRef.current;
+            if (!video.videoWidth || !video.videoHeight) return;
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');

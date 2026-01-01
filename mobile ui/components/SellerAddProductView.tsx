@@ -909,6 +909,14 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 alert('Product title is required.');
                 return;
             }
+            if (title.trim().length < 3) {
+                alert('Title is too short. Please provide at least 3 characters.');
+                return;
+            }
+            if (description && description.trim().length < 10) {
+                alert('Description is too short. Please provide at least 10 characters.');
+                return;
+            }
             if (!categoryId?.trim()) {
                 alert('Please select a category for your product.');
                 return;
@@ -919,9 +927,21 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
             }
         }
 
+        // Step 1: Attributes - warn but don't block
+        if (currentStep === 1) {
+            if (attributes.length === 0) {
+                const proceed = confirm('You haven\'t added any specific attributes (e.g., Color, Material). Attributes help buyers find your products faster. Continue anyway?');
+                if (!proceed) return;
+            }
+        }
+
         // Step 2: Pricing & Variants validation
         if (currentStep === 2) {
             if (hasVariants) {
+                if (variantOptions.length === 0 || variants.length === 0) {
+                    alert('Please add at least one variant option and values if "Has Variants" is enabled.');
+                    return;
+                }
                 // Validate all variants have valid prices
                 const variantsWithoutPrice = variants.filter(v => typeof v.price !== 'number' || v.price <= 0);
                 if (variantsWithoutPrice.length > 0) {
@@ -934,7 +954,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                     if (typeof variant.compare_at_price === 'number' && variant.compare_at_price > 0) {
                         if (variant.price > variant.compare_at_price) {
                             const variantName = Object.values(variant.options || {}).join(' / ') || 'Unnamed';
-                            alert(`Selling price for "${variantName}" cannot be greater than the original price.\n\nSelling: ${getCurrencySymbol(currency)}${variant.price}\nOriginal: ${getCurrencySymbol(currency)}${variant.compare_at_price}`);
+                            alert(`Selling price for "${variantName}" (${getCurrencySymbol(currency)}${variant.price}) cannot be greater than the original price (${getCurrencySymbol(currency)}${variant.compare_at_price}).`);
                             return;
                         }
                     }
@@ -942,7 +962,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
             }
         }
 
-        // Step 3: Pricing & Delivery validation for simple products
+        // Step 3: Pricing & Delivery validation
         if (currentStep === 3) {
             if (!hasVariants) {
                 const numPrice = parseFloat(price);
@@ -960,6 +980,24 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                     }
                 }
             }
+
+            // Delivery Validation
+            if (!deliveryTime) {
+                alert('Please select an estimated delivery time.');
+                return;
+            }
+
+            if (deliveryScope === 'regional' || deliveryScope === 'local') {
+                if (deliveryLocations.length === 0) {
+                    alert(`Please add at least one ${deliveryScope === 'regional' ? 'region' : 'location/city'} for your selected delivery scope.`);
+                    return;
+                }
+            }
+
+            if (parseFloat(deliveryCost) < 0) {
+                alert('Delivery cost cannot be negative.');
+                return;
+            }
         }
 
         // Step 4: Media - warn but don't block
@@ -967,6 +1005,14 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
             if (uploadedMedia.length === 0 && youtubeUrls.length === 0) {
                 const proceed = confirm('You haven\'t added any images. Products with images sell better. Continue anyway?');
                 if (!proceed) return;
+            }
+        }
+
+        // Step 5: SEO validation before final move (not strictly necessary for next but good for consistency)
+        if (currentStep === 5) {
+            if (urlSlug && !/^[a-z0-9-]+$/.test(urlSlug)) {
+                alert('Slug should only contain lowercase letters, numbers, and hyphens.');
+                return;
             }
         }
 
@@ -1060,24 +1106,46 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     };
 
     const handleSubmit = async () => {
-        if (!categoryId || !title) {
-            alert('Please fill in required fields: Title and Category.');
+        // Aggregate Validation
+        if (!categoryId || !categoryId.trim()) {
+            alert('Please select a category for your product.');
             return;
         }
 
-        // Price Validation Logic
-        if (!hasVariants && !price) {
-            alert('Please set a Selling Price.');
+        if (!title || !title.trim()) {
+            alert('Please enter a product title.');
+            return;
+        }
+
+        const numPrice = parseFloat(price) || 0;
+        const numCompare = compareAtPrice ? parseFloat(compareAtPrice) : 0;
+        const numStock = parseInt(stock) || 0;
+
+        // Final Price Checks
+        if (!hasVariants) {
+            if (numPrice <= 0) {
+                alert('Please set a valid selling price greater than 0.');
+                return;
+            }
+            if (numCompare > 0 && numPrice > numCompare) {
+                alert('Original/compare-at price should be higher than or equal to the selling price.');
+                return;
+            }
+        } else {
+            if (!variants || variants.length === 0 || !variants.every(v => typeof v.price === 'number' && v.price > 0)) {
+                alert('Please set prices for all product variants.');
+                return;
+            }
+        }
+
+        if (!deliveryTime) {
+            alert('Please select a delivery time estimate.');
             return;
         }
 
         setIsSubmitting(true);
         try {
-            const numPrice = parseFloat(price);
-            const numCompare = compareAtPrice ? parseFloat(compareAtPrice) : undefined;
-            const numStock = parseInt(stock) || 0;
-
-            // Merge uploaded media with YouTube URLs (matching web logic)
+            // Merge uploaded media with YouTube URLs
             const youtubeMedia = youtubeUrls.map((url, idx) => ({
                 url,
                 storage_path: '',
@@ -1089,67 +1157,47 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
 
             const allMedia = [...uploadedMedia, ...youtubeMedia];
 
+            const safeTags = tags.map(t => t.trim()).filter(Boolean);
+            const safeUseCases = useCaseTags.map(t => t.trim()).filter(Boolean);
+            const safeOccasions = occasionTags.map(t => t.trim()).filter(Boolean);
             const joinedSeoKeywords = seoKeywords.map(k => k.trim()).filter(Boolean).join(', ');
 
+            // Sanitize numeric fields and calculate discounts
             const preparedVariants = (hasVariants ? variants : [{
                 sku: `${title.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`,
                 price: numPrice,
-                compare_at_price: numCompare,
-                original_price: numCompare,
+                compare_at_price: numCompare || numPrice,
+                original_price: numCompare || numPrice,
                 stock: numStock,
                 options: {},
                 is_default: true
             }]).map(v => {
-                // If variant price is 0 AND base price is set, use base price (user hasn't edited this variant)
-                // If variant price is set to a non-zero value, preserve it
-                // If both are 0, that's an error state - require price input
-                const variantHasCustomPrice = (typeof v.price === 'number' && !isNaN(v.price) && v.price > 0);
-                const safePrice = variantHasCustomPrice ? v.price : (numPrice > 0 ? numPrice : 0);
-
-                const safeStock = (typeof v.stock === 'number' && !isNaN(v.stock)) ? v.stock : numStock;
-                const safeCompare = (typeof v.compare_at_price === 'number' && !isNaN(v.compare_at_price)) ? v.compare_at_price : undefined;
-
-                const rrp = (typeof safeCompare === 'number' && safeCompare > safePrice)
-                    ? safeCompare
-                    : safePrice;
-                const discountPercent = (rrp > safePrice)
-                    ? Math.round(((rrp - safePrice) / rrp) * 100)
-                    : 0;
+                const p = Number(v.price) || 0;
+                const rrp = Number(v.compare_at_price || v.original_price || p);
+                const discountPercent = rrp > p ? Math.round(((rrp - p) / rrp) * 100) : 0;
 
                 return {
                     ...v,
-                    price: safePrice,
-                    stock: safeStock,
-                    compare_at_price: safeCompare || rrp,
-                    original_price: safeCompare || rrp,
+                    price: p,
+                    stock: Number(v.stock) || 0,
+                    compare_at_price: rrp,
+                    original_price: rrp,
                     rrp,
                     discount_percent: discountPercent
                 };
             });
 
-            // Validate that all variants have a valid price
-            const invalidVariants = preparedVariants.filter(v => v.price <= 0);
-            if (invalidVariants.length > 0) {
-                alert(`Please set a price for all variants (or provide a default price).\n\nMissing price for: ${invalidVariants.map(v => Object.values(v.options).join('/')).join(', ')}`);
-                setIsSubmitting(false);
-                return;
-            }
-
-            // DEBUG: Log variant data to console
-            console.log('🔍 Prepared Variants:', JSON.stringify(preparedVariants, null, 2));
-            console.log('🔍 Delivery Locations:', deliveryLocations);
-
-            // Dynamically look up Pricing Unit attribute UUID to avoid syntax errors
+            // Dynamically look up Pricing Unit attribute
             const pricingUnitAttr = availableAttributes.find(a => a.name.toLowerCase().includes('unit'));
             const finalAttributes = [...attributes];
 
             if (pricingUnitAttr) {
-                // Only add if we have a valid UUID-based attribute from the category
                 const existingIdx = finalAttributes.findIndex(a => a.attribute_id === pricingUnitAttr.id);
                 const attrObj = {
                     attribute_id: pricingUnitAttr.id,
                     name: pricingUnitAttr.name,
                     value: pricingUnit,
+                    value_text: pricingUnit,
                     is_custom: false
                 };
                 if (existingIdx > -1) {
@@ -1159,41 +1207,35 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 }
             }
 
-            // Delivery locations are stored separately in the delivery_locations field
-            const fullDeliveryTime = deliveryTime;
-
-            const deliveryTimeDaysParsed = (() => {
-                const parsed = parseInt(deliveryTimeDaysInput, 10);
-                return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-            })();
+            const deliveryTimeDaysParsed = parseInt(deliveryTimeDaysInput, 10) || 1;
 
             const payload = {
-                title,
-                description,
+                title: title.trim(),
+                description: description.trim(),
                 category_id: categoryId,
                 brand_id: brandId || undefined,
                 currency: currency,
                 variants: preparedVariants,
                 media: allMedia.map((m, i) => ({ ...m, position: i })),
-                tags: tags,
-                use_case_tags: useCaseTags,
-                occasion_tags: occasionTags,
+                tags: safeTags,
+                use_case_tags: safeUseCases,
+                occasion_tags: safeOccasions,
                 attributes: finalAttributes,
-                seo_title: seoTitle || title,
-                meta_description: metaDescriptionState || description,
-                url_slug: urlSlug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-                canonical_url: canonicalUrl || undefined,
+                seo_title: seoTitle.trim() || title.trim(),
+                meta_description: metaDescriptionState.trim() || description.substring(0, 160).trim(),
+                url_slug: urlSlug.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                canonical_url: canonicalUrl?.trim() || undefined,
                 seo_keywords: joinedSeoKeywords || undefined,
                 delivery_scope: deliveryScope,
-                delivery_cost: parseFloat(deliveryCost) || 0,
-                delivery_time_estimate: fullDeliveryTime,
+                delivery_cost: Number(deliveryCost) || 0,
+                delivery_time_estimate: deliveryTime,
                 delivery_time_days: deliveryTimeDaysParsed,
-                is_express_delivery: isExpressDelivery,
-                delay_credit: parseFloat(delayCredit) || 0,
-                free_delivery: freeDelivery,
-                min_order_value: parseFloat(minOrderValue) || 0,
-                min_order_for_free_delivery: parseFloat(minOrderForFreeDelivery) || 0,
-                is_choice: isChoice,
+                is_express_delivery: !!isExpressDelivery,
+                delay_credit: Number(delayCredit) || 0,
+                free_delivery: !!freeDelivery,
+                min_order_value: Number(minOrderValue) || 0,
+                min_order_for_free_delivery: Number(minOrderForFreeDelivery) || 0,
+                is_choice: !!isChoice,
                 delivery_locations: deliveryLocations,
                 sale_unit: pricingUnit,
                 is_active: true,
@@ -1207,11 +1249,11 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 alert("Published! Your product is now pending approval.");
                 onSuccess();
             } else {
-                throw new Error("Failed to create product.");
+                throw new Error("Failed to create product record.");
             }
-        } catch (e) {
-            console.error(e);
-            alert("Failed to publish product.");
+        } catch (error: any) {
+            console.error('Mobile submission failed:', error);
+            alert(`Failed to publish product: ${error.message || 'Please try again.'}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -2349,10 +2391,35 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                         <div className="bg-orange-50 border border-orange-100 p-6 rounded-xl text-center space-y-3">
                             <span className="material-icons text-orange-500 text-3xl">add_a_photo</span>
                             <div className="font-bold">Add Photos</div>
-                            <label className="block w-full">
-                                <span className="bg-orange-500 text-white font-bold py-2.5 px-6 rounded-full shadow-md inline-block">Select Images</span>
-                                <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileChange} disabled={isUploading} />
-                            </label>
+                            <div className="flex flex-col gap-2">
+                                <label className="block w-full">
+                                    <span className="bg-orange-500 text-white font-bold py-2.5 px-6 rounded-full shadow-md inline-block w-full">
+                                        Take Photo
+                                    </span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="hidden"
+                                        onChange={handleFileChange}
+                                        disabled={isUploading}
+                                    />
+                                </label>
+
+                                <label className="block w-full">
+                                    <span className="bg-white text-orange-600 font-bold py-2.5 px-6 rounded-full shadow-sm inline-block w-full border border-orange-200">
+                                        Select Images
+                                    </span>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleFileChange}
+                                        disabled={isUploading}
+                                    />
+                                </label>
+                            </div>
                         </div>
 
                         {/* YouTube */}

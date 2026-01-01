@@ -6,6 +6,7 @@ import { slugify } from './utils';
 // Base configuration for your e-commerce site
 export const SITE_CONFIG = {
     name: 'JuaExpress',
+    alternateNames: ['Jua', 'Jua Express', 'JuaExpress'],
     fullName: 'JuaExpress Marketplace',
     description: 'Your African shopping destination - Modern e-commerce with personalized recommendations, fast delivery, and exceptional customer service',
     url: typeof window !== 'undefined' ? window.location.origin : 'https://juaexpress.com',
@@ -34,7 +35,7 @@ export function generateOrganizationSchema() {
         '@context': 'https://schema.org',
         '@type': 'Organization',
         name: SITE_CONFIG.fullName,
-        alternateName: SITE_CONFIG.name,
+        alternateName: SITE_CONFIG.alternateNames,
         url: SITE_CONFIG.url,
         logo: `${SITE_CONFIG.url}${SITE_CONFIG.logo}`,
         description: SITE_CONFIG.description,

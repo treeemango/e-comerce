@@ -52,9 +52,9 @@ import { fetchTopPlatformReviews } from '@/lib/api';
 import OrderTrackingTimeline from './components/OrderTrackingTimeline';
 import {
     getExistingPushSubscription,
+    getPushSupportStatus,
     removePushSubscriptionFromBackend,
     savePushSubscriptionToBackend,
-    sendTestPushToMe,
     subscribeToPush,
     unsubscribeFromPush,
 } from '@/lib/push';
@@ -64,6 +64,7 @@ import VisualSearchSheet from './components/VisualSearchSheet';
 import { OrderPrice } from '@/components/OrderPrice';
 import { detectUserCurrency } from '@/lib/currency-service';
 import { trackProductViewAuto } from '@/lib/tracking';
+import { useSwipeGesture } from './hooks/useSwipeGesture';
 
 type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications' | 'profile';
 
@@ -118,6 +119,11 @@ const App: React.FC = () => {
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [, setPreferredCurrency] = useState(getUserCurrency());
 
+    const { history: notificationHistory } = useNotifications();
+    const notificationCount = userProfile?.id
+        ? notificationHistory.filter((n) => n.is_read === false || n.is_read === undefined).length
+        : 0;
+
     // Modern Notification & Data Sync State
     const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
     const [recentOrders, setRecentOrders] = useState<BuyerOrder[]>([]);
@@ -127,6 +133,22 @@ const App: React.FC = () => {
     const [hasPlatformReviews, setHasPlatformReviews] = useState(true);
     const [inspiredProducts, setInspiredProducts] = useState<RelatedProduct[]>([]);
     const [inspiredLoading, setInspiredLoading] = useState(false);
+
+    // Initial navigation pills or Categories Page toggle logic (swipe to navigate shortcut)
+    useSwipeGesture({
+        onSwipeRight: () => {
+            if (activeTab === 'home' && !selectedProduct && !isAccountOpen && !isSearchOpen && !categoryViewOpen) {
+                setActiveTab('categories');
+                window.history.pushState({ view: 'categories' }, '', window.location.href);
+            }
+        },
+        onSwipeLeft: () => {
+            if (activeTab === 'categories' && !selectedProduct && !isAccountOpen && !isSearchOpen && !categoryViewOpen) {
+                setActiveTab('home');
+                window.history.pushState({ view: 'home' }, '', window.location.href);
+            }
+        }
+    });
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
@@ -581,8 +603,8 @@ const App: React.FC = () => {
                                     key={filter}
                                     onClick={() => setActiveOrderFilter(filter as any)}
                                     className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeOrderFilter === filter
-                                            ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
-                                            : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+                                        ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
+                                        : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
                                         }`}
                                 >
                                     {filter}
@@ -1220,57 +1242,79 @@ const App: React.FC = () => {
                         accent="bg-blue-500/10 text-blue-500"
                     >
                         <div className="bg-white dark:bg-surface-dark rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <div className="text-sm font-black text-black dark:text-white">Web push notifications</div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        Enable Android push alerts (requires permission).
-                                    </div>
-                                </div>
-                                <div className="shrink-0 flex items-center gap-2">
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                const existing = await getExistingPushSubscription();
-                                                if (existing) {
-                                                    const endpoint = existing.endpoint;
-                                                    await unsubscribeFromPush();
-                                                    await removePushSubscriptionFromBackend(endpoint);
-                                                    alert('Push notifications disabled on this device.');
-                                                    return;
-                                                }
+                            {(() => {
+                                const support = getPushSupportStatus();
+                                const vapid = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
+                                const canConfigure = support.supported && !!vapid;
 
-                                                const vapid = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
-                                                const sub = await subscribeToPush(vapid || '');
-                                                await savePushSubscriptionToBackend(sub);
-                                                alert('Push notifications enabled on this device.');
-                                            } catch (e: any) {
-                                                alert(e?.message || 'Unable to update push notifications.');
+                                const ensurePushConfigured = () => {
+                                    if (support.supported === false) {
+                                        alert(support.reason);
+                                        return false;
+                                    }
+                                    if (!vapid) {
+                                        alert('Push notifications are not configured for this project.');
+                                        return false;
+                                    }
+                                    return true;
+                                };
+
+                                const handleToggle = async () => {
+                                    try {
+                                        if (!ensurePushConfigured()) return;
+
+                                        const existing = await getExistingPushSubscription();
+                                        if (existing) {
+                                            const endpoint = existing.endpoint;
+                                            await unsubscribeFromPush();
+                                            await removePushSubscriptionFromBackend(endpoint);
+                                            alert('Push notifications disabled on this device.');
+                                            return;
+                                        }
+
+                                        const sub = await subscribeToPush(vapid!);
+                                        await savePushSubscriptionToBackend(sub);
+                                        alert('Push notifications enabled on this device.');
+                                    } catch (e: any) {
+                                        const message = e?.message || 'Unable to update push notifications.';
+                                        alert(message.includes('VAPID') ? 'Push notifications are not configured for this project.' : message);
+                                    }
+                                };
+
+                                return (
+                                    <div
+                                        className="flex items-start justify-between gap-3"
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={handleToggle}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                handleToggle();
                                             }
                                         }}
-                                        className="px-4 py-2 rounded-full bg-blue-500 text-white text-[11px] font-black uppercase tracking-widest active:scale-95 transition"
                                     >
-                                        Toggle
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                await sendTestPushToMe({
-                                                    title: 'JuaExpress',
-                                                    body: 'Push notifications are working on this device.',
-                                                    url: '/',
-                                                });
-                                                alert('Test push sent (if enabled).');
-                                            } catch (e: any) {
-                                                alert(e?.message || 'Unable to send test push.');
-                                            }
-                                        }}
-                                        className="px-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 text-black dark:text-white text-[11px] font-black uppercase tracking-widest active:scale-95 transition"
-                                    >
-                                        Test
-                                    </button>
-                                </div>
-                            </div>
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-black text-black dark:text-white">Web push notifications</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                Enable Android push alerts (requires permission).
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToggle();
+                                                }}
+                                                disabled={!canConfigure}
+                                                className="px-4 py-2 rounded-full bg-blue-500 text-white text-[11px] font-black uppercase tracking-widest active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                Toggle
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         <div className="bg-white dark:bg-surface-dark rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 h-[60vh]">
@@ -1500,7 +1544,7 @@ const App: React.FC = () => {
                     onVisualSearch={setVisualSearchProduct}
                     userAvatar={userProfile?.avatar_url}
                     userName={userProfile?.name || userProfile?.email}
-                    notificationCount={history.length + userCoupons.length}
+                    notificationCount={notificationCount}
                     cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
                     isVisualSearch={isVisualSearchActive}
                 />
@@ -1806,7 +1850,7 @@ const App: React.FC = () => {
                     userName={userProfile?.name || userProfile?.email}
                     avatarUrl={userProfile?.avatar_url}
                     messageCount={userProfile ? buyerMessageCount : undefined}
-                    notificationCount={history.length}
+                    notificationCount={notificationCount}
                     userCoupons={userCoupons}
                     recentOrders={recentOrders}
                     onSignIn={async () => {
@@ -1849,7 +1893,7 @@ const App: React.FC = () => {
                         }}
                         userAvatar={userProfile?.avatar_url}
                         userName={userProfile?.name || userProfile?.email}
-                        notificationCount={history.length + userCoupons.length}
+                        notificationCount={notificationCount}
                     />
                 </div>
 
@@ -1867,13 +1911,13 @@ const App: React.FC = () => {
                     onTabChange={(tab) => {
                         setSearchQuery(null);
                         setActiveAccountSection(null);
+                        setCategoryViewOpen(null); // Reset category overlay search/results when switching tabs
 
                         // Reset category state when going to home
                         if (tab === 'home') {
                             setActiveCategoryId('all');
                             setSelectedCategoryForSubs(null);
                             setActiveSubcategoryId('all');
-                            setCategoryViewOpen(null);
                         }
 
                         setActiveTab(tab);

@@ -1,0 +1,3 @@
+# Allow unauthenticated preflight/requests to reach the function so it can return
+# proper CORS headers and a clear 401 JSON response when needed.
+verify_jwt = false
