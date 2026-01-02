@@ -113,6 +113,7 @@ export interface Product {
     bestSellingText?: string;
     cartOverlay?: boolean;
     variant_id?: string; // Track specific variation if selected
+    attributes?: ProductAttributeData[];
 }
 
 

@@ -13,6 +13,15 @@ const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
+// Helper function to compute MD5-like hash for cache detection
+async function computeHash(data: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+
 function featureKeyForAction(action: string): string | null {
     switch (action) {
         case "improve_title":
@@ -21,6 +30,7 @@ function featureKeyForAction(action: string): string | null {
         case "generate_tags":
         case "generate_use_case_tags":
         case "generate_occasion_tags":
+        case "suggest_attributes":
             return "listing_assistant";
         case "suggest_chat_reply":
             return "seller_chat_reply";
@@ -123,14 +133,306 @@ serve(async (req: Request) => {
             case "generate_occasion_tags":
                 prompt = `Generate 5-8 product "Occasion" tags for: "${params.title}"${params.category ? ` in category "${params.category}"` : ""}. These should describe events or times when the product is appropriate. Return ONLY a comma-separated list. Example: wedding, party, summer, gift, casual`;
                 break;
+            case "suggest_attributes": {
+                // params: { title, category?, brand?, description?, attributes: [{id,name,options?:string[]}] }
+                const attrs = Array.isArray(params.attributes) ? params.attributes : [];
+                const trimmedAttrs = attrs
+                    .filter((a: any) => a && (a.id || a.name))
+                    .slice(0, 60)
+                    .map((a: any) => ({
+                        id: String(a.id || '').trim(),
+                        name: String(a.name || '').trim(),
+                        options: Array.isArray(a.options)
+                            ? a.options.map((v: any) => String(v)).filter(Boolean).slice(0, 60)
+                            : undefined,
+                    }));
+
+                systemPrompt = "You are a helpful e-commerce listing assistant. Your goal is to propose realistic, non-hallucinated attribute values for a product listing. CRITICAL: Never invent brand names, model numbers, sizes, materials, or technical specs not implied by the title/description/context. If unknown, leave the value empty.";
+
+                prompt = `Suggest values for product attributes.
+
+Context:
+- Title: "${params.title}"
+${params.category ? `- Category: "${params.category}"\n` : ""}${params.brand ? `- Brand: "${params.brand}"\n` : ""}${params.description ? `- Description: "${String(params.description).slice(0, 700)}"\n` : ""}
+
+Attributes to fill (id, name, options if provided):
+${JSON.stringify(trimmedAttrs)}
+
+Rules:
+- Return ONLY valid JSON.
+- Output must be a JSON array of objects: [{"attribute_id":"...","attribute_name":"...","value":"..."}].
+- Use the provided attribute_id when possible.
+- If options are provided, prefer one of the exact option strings.
+- If unsure, set value to "" (empty string).
+`;
+                break;
+            }
             case "suggest_chat_reply":
                 systemPrompt = "You are a helpful customer service assistant for an e-commerce seller. Your goal is to draft polite, professional, and helpful replies to buyer messages. Keep replies concise (under 50 words) and friendly.";
                 prompt = `The buyer wrote: "${params.last_message}". \nContext: Selling product "${params.product_title || 'item'}". \nDraft a reply for the seller. Return ONLY the reply text.`;
                 break;
-            case "answer_product_question":
-                systemPrompt = "You are a helpful product expert assistant. Your goal is to answer buyer questions based ONLY on the provided product information. If the answer is not in the context, politely say 'I cannot find that information in the product details.' or similar. Keep answers concise (under 3 or 4 sentences).";
-                prompt = `Product: "${params.product_title}".\nMatches Context: ${params.description || ''} ${JSON.stringify(params.attributes || {})}.\n\nQuestion: "${params.question}".\n\nAnswer:`;
+            case "answer_product_question": {
+                // Fetch attributes using RPC function if product_id is provided
+                let fetchedAttributes: any[] = [];
+                if (params.product_id && supabaseAdmin) {
+                    try {
+                        const { data: attrData, error: attrError } = await supabaseAdmin
+                            .rpc('get_product_attributes', { p_product_id: params.product_id });
+
+                        if (!attrError && attrData && Array.isArray(attrData) && attrData.length > 0) {
+                            fetchedAttributes = attrData;
+                            console.log('Fetched attributes via RPC:', fetchedAttributes.length);
+                        }
+                    } catch (err) {
+                        console.warn('RPC fetch failed, trying direct query:', err);
+
+                        // Fallback: Direct table query
+                        const { data: directData } = await supabaseAdmin
+                            .from('product_attribute_values')
+                            .select('value_text, value_number, attribute_id')
+                            .eq('product_id', params.product_id);
+
+                        if (directData && directData.length > 0) {
+                            // Get attribute names
+                            const attrIds = directData.map((d: any) => d.attribute_id).filter(Boolean);
+                            const { data: attrNames } = await supabaseAdmin
+                                .from('shopify_attributes')
+                                .select('id, name')
+                                .in('id', attrIds);
+
+                            const nameMap = new Map((attrNames || []).map((a: any) => [a.id, a.name]));
+
+                            fetchedAttributes = directData.map((a: any) => ({
+                                name: nameMap.get(a.attribute_id) || 'Unknown',
+                                value: a.value_text || a.value_number?.toString() || ''
+                            }));
+                        }
+                    }
+                }
+
+                // Fetch variants to include in context
+                let variantsInfo = '';
+                if (params.product_id && supabaseAdmin) {
+                    try {
+                        const { data: variantsData, error: variantsError } = await supabaseAdmin
+                            .from('product_variants')
+                            .select('options, price, stock, is_default')
+                            .eq('product_id', params.product_id);
+
+                        if (!variantsError && variantsData && variantsData.length > 0) {
+                            const variantLines = variantsData.map((v: any) => {
+                                const optStr = Object.entries(v.options || {}).map(([k, val]) => `${k}: ${val}`).join(', ');
+                                return `- ${optStr || 'Default'}: Price ${v.price}, Stock ${v.stock}${v.is_default ? ' (Standard)' : ''}`;
+                            }).join('\n');
+                            variantsInfo = `\nAvailable Variants:\n${variantLines}`;
+                        }
+                    } catch (err) {
+                        console.warn('Failed to fetch variants:', err);
+                    }
+                }
+
+                // Use fetched attributes, or fallback to params.attributes
+                const attributesToUse = fetchedAttributes.length > 0 ? fetchedAttributes : params.attributes;
+
+                // Build comprehensive product context for accurate answers
+                let attributesInfo = '';
+                if (attributesToUse) {
+                    if (Array.isArray(attributesToUse) && attributesToUse.length > 0) {
+                        // Array format: [{name: "Storage", value: "128GB"}, ...]
+                        const attrLines = attributesToUse.map((a: any) => `- ${a.name}: ${a.value}`).join('\n');
+                        attributesInfo = `\nProduct Specifications:\n${attrLines}`;
+                    } else if (typeof attributesToUse === 'object' && Object.keys(attributesToUse).length > 0) {
+                        // Object format fallback: {Storage: "128GB", ...}
+                        attributesInfo = `\nProduct Specifications: ${JSON.stringify(attributesToUse)}`;
+                    }
+                }
+
+                const deliveryInfo = params.delivery_info
+                    ? `\nDelivery Information:
+- Estimated delivery: ${params.delivery_info.delivery_time_estimate || 'Not specified'}
+- Delivery days: ${params.delivery_info.delivery_time_days || 'Not specified'}
+- Free delivery: ${params.delivery_info.free_delivery ? 'Yes' : 'No'}
+- Delivery cost: ${params.delivery_info.delivery_cost || 'Not specified'}
+- Delivery scope: ${params.delivery_info.delivery_scope || 'Not specified'}
+- Express delivery: ${params.delivery_info.is_express_delivery ? 'Available' : 'Not available'}`
+                    : '';
+
+                const vendorInfo = params.vendor_context
+                    ? `\nSeller Information:
+- Business name: ${params.vendor_context.business_name || 'Not specified'}
+- Country: ${params.vendor_context.business_country || 'Not specified'}
+- Verified: ${params.vendor_context.is_verified ? 'Yes' : 'No'}
+- Rating: ${params.vendor_context.vendor_rating || 'Not rated'}
+- Response time: ${params.vendor_context.response_time || 'Not specified'}`
+                    : '';
+
+                const conditionInfo = params.condition ? `\nProduct Condition: ${params.condition}` : '';
+
+                systemPrompt = "You are a helpful product expert assistant. Your goal is to answer buyer questions based ONLY on the provided product information. Use the attributes, variants, delivery info, seller info, and description to give accurate answers. If the specific information is genuinely not available in any of the provided context, politely say 'This information is not specified in the listing. You can message the seller to confirm.' Stay very concise.";
+                prompt = `Product: "${params.product_title}"
+Description: ${params.description || 'No description provided'}${conditionInfo}${attributesInfo}${variantsInfo}${deliveryInfo}${vendorInfo}
+
+Buyer Question: "${params.question}"
+
+Answer based on the available product information above:`;
                 break;
+            }
+            case "explain_product": {
+                // Compute hashes for cache detection
+                const productData = `${params.product_title || ''}|${String(params.description || '').slice(0, 2500)}|${JSON.stringify(params.attributes || {})}`;
+                const vendorData = JSON.stringify(params.vendor_context || null);
+                const productHash = await computeHash(productData);
+                const vendorHash = await computeHash(vendorData);
+                const productId = params.product_id;
+                const vendorId = params.vendor_context?.vendor_id || null;
+
+                // Try to get cached insights if product_id is provided
+                if (productId && supabaseAdmin) {
+                    try {
+                        const { data: cacheResult } = await supabaseAdmin.rpc('get_cached_product_insights', {
+                            p_product_id: productId,
+                            p_product_hash: productHash,
+                            p_vendor_hash: vendorHash
+                        });
+
+                        if (cacheResult && cacheResult.length > 0 && cacheResult[0].cache_status === 'hit') {
+                            const cached = cacheResult[0];
+
+                            // Check if only vendor_highlights needs regeneration
+                            if (cached.needs_vendor_update) {
+                                // Generate only vendor_highlights
+                                const vendorPrompt = `Generate a vendor highlight for this seller.
+
+Vendor data: ${vendorData}
+
+Return ONLY a single sentence (max 180 chars) highlighting the vendor. Use ONLY the provided data. If null/empty, say 'No vendor details provided.'`;
+
+                                const vendorResponse = await fetch("https://api.x.ai/v1/chat/completions", {
+                                    method: "POST",
+                                    headers: {
+                                        "Authorization": `Bearer ${GROK_API_KEY}`,
+                                        "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                        model: "grok-4-1-fast-non-reasoning",
+                                        messages: [
+                                            { role: "system", content: "You are a helpful e-commerce assistant. Provide concise vendor descriptions." },
+                                            { role: "user", content: vendorPrompt }
+                                        ],
+                                        temperature: 0.7,
+                                    }),
+                                });
+
+                                const vendorAiData = await vendorResponse.json();
+                                const newVendorHighlights = vendorAiData.choices?.[0]?.message?.content?.trim()?.replace(/^"|"$/g, '') || cached.vendor_highlights;
+
+                                // Update cache with new vendor_highlights
+                                await supabaseAdmin.rpc('upsert_product_ai_insights', {
+                                    p_product_id: productId,
+                                    p_product_hash: productHash,
+                                    p_vendor_hash: vendorHash,
+                                    p_vendor_id: vendorId,
+                                    p_vendor_highlights: newVendorHighlights,
+                                    p_vendor_only: true
+                                });
+
+                                // Return merged result
+                                const mergedResult = {
+                                    feature_highlights: cached.feature_highlights,
+                                    vendor_highlights: newVendorHighlights,
+                                    positive_retail_outlook: cached.positive_retail_outlook,
+                                    suggested_questions: cached.suggested_questions,
+                                    knowledge_base: cached.knowledge_base
+                                };
+
+                                return new Response(JSON.stringify({ result: JSON.stringify(mergedResult), cached: true, vendor_updated: true }), {
+                                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                                });
+                            }
+
+                            // Full cache hit - return cached data
+                            const cachedResult = {
+                                feature_highlights: cached.feature_highlights,
+                                vendor_highlights: cached.vendor_highlights,
+                                positive_retail_outlook: cached.positive_retail_outlook,
+                                suggested_questions: cached.suggested_questions,
+                                knowledge_base: cached.knowledge_base
+                            };
+
+                            return new Response(JSON.stringify({ result: JSON.stringify(cachedResult), cached: true }), {
+                                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                            });
+                        }
+                    } catch (cacheError) {
+                        console.warn("Cache lookup failed, proceeding with AI generation:", cacheError);
+                    }
+                }
+
+                // Fetch attributes and variants for better lights
+                let fullAttributes = params.attributes || {};
+                let fullVariants = '';
+                if (productId && supabaseAdmin) {
+                    try {
+                        const { data: attrData } = await supabaseAdmin.rpc('get_product_attributes', { p_product_id: productId });
+                        if (attrData) fullAttributes = attrData;
+
+                        const { data: varData } = await supabaseAdmin
+                            .from('product_variants')
+                            .select('options, price, stock')
+                            .eq('product_id', productId);
+                        if (varData && varData.length > 0) {
+                            fullVariants = varData.map((v: any) => {
+                                const opts = Object.entries(v.options || {}).map(([k, val]) => `${k}: ${val}`).join(', ');
+                                return `- ${opts}: stock ${v.stock}`;
+                            }).join('\n');
+                        }
+                    } catch (e) {
+                        console.warn("Context fetch for highlights failed", e);
+                    }
+                }
+
+                // No cache hit - generate full spotlights
+                systemPrompt = "You are a helpful e-commerce product analyst. Create SHORT product spotlights that add value beyond the description. Use ONLY the provided product information (including specs and variants). Do NOT invent certs, material, or specs. If details are missing, say so briefly.";
+                prompt = `Create concise product spotlights in JSON (NOT a second description).
+
+Context:
+- Title: "${params.product_title}"
+- Description: "${String(params.description || '').slice(0, 2500)}"
+- Attributes: ${JSON.stringify(fullAttributes)}
+- Variants: ${fullVariants || 'None'}
+- Vendor (from vendor card): ${vendorData}
+
+Return ONLY valid JSON with this exact shape:
+{
+    "feature_highlights": "1-2 short sentences (max 240 chars). You MAY use **bold** to emphasize key phrases.",
+    "vendor_highlights": "1 short sentence (max 180 chars). Use ONLY the Vendor (from vendor card) data. If it is null/empty, say 'No vendor details provided.'",
+    "positive_retail_outlook": "1 short sentence (max 180 chars). Do NOT claim bestseller ranks, profit margins, or resale prices unless present in the context.",
+    "suggested_questions": ["3-6 short buyer questions (max 80 chars each)"],
+    "knowledge_base": {
+        "What is the engine size?": "Engine Capacity",
+        "How is the mileage?": "Odometer",
+        "What is it made of?": "Material/Fabric"
+    },
+    // IMPORTANT: For knowledge_base, map common questions to the exact Attribute Names provided. 
+    // Prioritize quantitative specs (like '128GB', '4000mAh', '2.0L') over boolean 'Yes/No' attributes if both exist.
+}
+
+Rules for knowledge_base:
+- It should map 5-10 likely buyer questions to the exact attribute NAME in the provided Attributes JSON.
+- Create this map based on the specific CATEGORY of the product (e.g., if it is a car, map automotive questions).
+- Only map questions that can be answered by the provided Attributes or Description.
+
+Rules:
+- Do not restate the product description or rewrite it.
+- Prefer highlighting 2-3 concrete points that are easy to scan.
+- Do not include markdown lists. No bullet points.
+- Do not wrap JSON in code fences.
+`;
+
+                // Store caching context for after AI response
+                (params as any)._cacheContext = { productId, productHash, vendorHash, vendorId };
+                break;
+            }
             case "analyze_product_image":
                 // Visual search: analyze image and extract product keywords
                 useVision = true;
@@ -197,6 +499,31 @@ serve(async (req: Request) => {
         }
 
         const result = data.choices[0].message.content.trim();
+
+        // Store in cache if this was an explain_product action
+        if (action === 'explain_product' && (params as any)._cacheContext && supabaseAdmin) {
+            try {
+                const ctx = (params as any)._cacheContext;
+                // Parse the AI result to extract fields
+                const parsed = JSON.parse(result.replace(/```json|```/g, '').trim());
+
+                await supabaseAdmin.rpc('upsert_product_ai_insights', {
+                    p_product_id: ctx.productId,
+                    p_product_hash: ctx.productHash,
+                    p_vendor_hash: ctx.vendorHash,
+                    p_vendor_id: ctx.vendorId,
+                    p_feature_highlights: parsed.feature_highlights || null,
+                    p_vendor_highlights: parsed.vendor_highlights || null,
+                    p_positive_retail_outlook: parsed.positive_retail_outlook || null,
+                    p_suggested_questions: parsed.suggested_questions || [],
+                    p_knowledge_base: parsed.knowledge_base || {},
+                    p_vendor_only: false
+                });
+                console.log('Cached AI insights for product:', ctx.productId);
+            } catch (cacheError) {
+                console.warn('Failed to cache AI insights:', cacheError);
+            }
+        }
 
         return new Response(JSON.stringify({ result }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },

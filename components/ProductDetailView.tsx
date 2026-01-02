@@ -4,7 +4,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Product, GalleryMediaItem, User, Breadcrumb, VisualCategory, ProductOption, ProductVariant, PromoCoupon, QuantityDiscountTier, RelatedProduct, ProductReviewSummary } from '../types';
 import ProductCard from './ProductCard';
-import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchProductReviewSummary, fetchRecentViews } from '../lib/api';
+import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchProductReviewSummary, fetchRecentViews, fetchProductAttributes } from '../lib/api';
 import ProductCardSkeleton from './ProductCardSkeleton';
 import { trackProductViewAuto } from '../lib/tracking';
 import { ReviewSection } from './ReviewSection';
@@ -14,6 +14,7 @@ import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SIT
 import { formatPrice, getCurrencySymbol, useCurrencyConverter } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
 import ProductQuestions from './ProductDetails/ProductQuestions';
+import { SimpleMarkdown } from './SimpleMarkdown';
 import { getOptimizedImageUrl } from '../lib/image-utils';
 import ResponsiveImage from './ResponsiveImage';
 
@@ -95,6 +96,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
    const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
+   const [productAttributes, setProductAttributes] = useState<{ name: string; value: string }[]>([]);
 
    // Variant Overlay State
    const [isVariantOverlayOpen, setIsVariantOverlayOpen] = useState(false);
@@ -133,6 +135,22 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       };
       loadQuantityDiscounts();
    }, [product.id, product.has_quantity_discount]);
+
+   // Fetch product attributes
+   useEffect(() => {
+      const loadAttributes = async () => {
+         if (product.id) {
+            // Use existing product.attributes if available, otherwise fetch
+            if (product.attributes && product.attributes.length > 0) {
+               setProductAttributes(product.attributes);
+            } else {
+               const attrs = await fetchProductAttributes(product.id.toString());
+               setProductAttributes(attrs);
+            }
+         }
+      };
+      loadAttributes();
+   }, [product.id, product.attributes]);
 
    const handleClaimCoupon = async (couponId: string) => {
       if (!user) {
@@ -285,6 +303,36 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    }, [product.id]);
 
    const vendor = resolvedVendor ?? product.vendor;
+   const vendorContextForAI = useMemo(() => {
+      if (!vendor) return null;
+      return {
+         vendor_id: vendor.vendor_id?.toString?.() ?? (vendor.vendor_id as any),
+         business_name: vendor.business_name,
+         business_country: vendor.business_country,
+         is_verified: !!vendor.is_verified,
+         vendor_rating: typeof vendor.vendor_rating === 'number' ? vendor.vendor_rating : null,
+         review_count: typeof vendor.review_count === 'number' ? vendor.review_count : null,
+         completed_orders: typeof vendor.completed_orders === 'number' ? vendor.completed_orders : null,
+         response_time: (vendor as any).response_time ?? null,
+         seller_since: (vendor as any).seller_since ?? null,
+         follower_count: typeof (vendor as any).follower_count === 'number' ? (vendor as any).follower_count : null,
+         delivery_speed: (vendor as any).delivery_speed ?? null,
+         order_completion_rate: typeof (vendor as any).order_completion_rate === 'number' ? (vendor as any).order_completion_rate : null,
+      };
+   }, [
+      (vendor as any)?.vendor_id,
+      vendor?.business_name,
+      (vendor as any)?.business_country,
+      (vendor as any)?.is_verified,
+      (vendor as any)?.vendor_rating,
+      (vendor as any)?.review_count,
+      (vendor as any)?.completed_orders,
+      (vendor as any)?.response_time,
+      (vendor as any)?.seller_since,
+      (vendor as any)?.follower_count,
+      (vendor as any)?.delivery_speed,
+      (vendor as any)?.order_completion_rate,
+   ]);
    const productReviewCount = typeof reviewSummary?.total_reviews === 'number'
       ? reviewSummary.total_reviews
       : (typeof product.reviews === 'number' ? product.reviews : 0);
@@ -904,6 +952,14 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      >
                         <img
                            src={getOptimizedImageUrl(media.thumbnail_url || media.image_url!, 'thumb')}
+                           onError={(e) => {
+                              const raw = (media.thumbnail_url || media.image_url || '').toString();
+                              const el = e.currentTarget;
+                              if (!raw) return;
+                              if ((el as any).dataset?.fallbackApplied) return;
+                              (el as any).dataset.fallbackApplied = '1';
+                              el.src = raw;
+                           }}
                            alt={media.alt_text || `Product thumbnail ${i + 1}`}
                            className="w-full h-full object-cover"
                            loading="lazy"
@@ -1225,7 +1281,19 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                     >
                                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 border border-slate-100 dark:border-slate-600">
                                           {previewVariant?.image || variant.image ? (
-                                             <img src={getOptimizedImageUrl(previewVariant?.image || variant.image!, 'thumb')} alt={label} className="w-full h-full object-cover" />
+                                             <img
+                                                src={getOptimizedImageUrl(previewVariant?.image || variant.image!, 'thumb')}
+                                                onError={(e) => {
+                                                   const raw = (previewVariant?.image || variant.image || '').toString();
+                                                   const el = e.currentTarget;
+                                                   if (!raw) return;
+                                                   if ((el as any).dataset?.fallbackApplied) return;
+                                                   (el as any).dataset.fallbackApplied = '1';
+                                                   el.src = raw;
+                                                }}
+                                                alt={label}
+                                                className="w-full h-full object-cover"
+                                             />
                                           ) : (
                                              <div
                                                 className="w-full h-full"
@@ -1379,15 +1447,15 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   <div className="lg:col-span-2 space-y-8">
                      {/* Enhanced Description */}
                      {product.description && (
-                        <div className="bg-white dark:bg-slate-800/50 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm">
+                        <div className="bg-gradient-to-br from-orange-50 via-white to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-3xl p-8 border border-orange-100 dark:border-slate-700 shadow-sm">
                            <div className="flex items-center gap-3 mb-6">
-                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary/10 to-orange-500/10 flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary/10 to-orange-500/15 flex items-center justify-center border border-orange-100 dark:border-slate-700">
                                  <span className="material-icons-round text-primary">description</span>
                               </div>
                               <h2 className="text-xl font-black text-slate-900 dark:text-white">About this product</h2>
                            </div>
                            <div className="prose dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 leading-relaxed">
-                              <p style={{ whiteSpace: 'pre-line' }}>{product.description}</p>
+                              <SimpleMarkdown text={product.description} />
                            </div>
                         </div>
                      )}
@@ -1450,7 +1518,19 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            {/* Header with Logo */}
                            <div className="flex items-center gap-4 mb-4">
                               {vendor.logo_url ? (
-                                 <img src={getOptimizedImageUrl(vendor.logo_url, 'thumb')} alt={vendor.business_name} className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700" />
+                                 <img
+                                    src={getOptimizedImageUrl(vendor.logo_url, 'thumb')}
+                                    onError={(e) => {
+                                       const raw = (vendor.logo_url || '').toString();
+                                       const el = e.currentTarget;
+                                       if (!raw) return;
+                                       if ((el as any).dataset?.fallbackApplied) return;
+                                       (el as any).dataset.fallbackApplied = '1';
+                                       el.src = raw;
+                                    }}
+                                    alt={vendor.business_name}
+                                    className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700"
+                                 />
                               ) : (
                                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-black text-xl uppercase">
                                     {vendor.business_name?.charAt(0) || '?'}
@@ -1619,6 +1699,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               </td>
                            </tr>
                         ))}
+                        {/* Custom Attributes */}
+                        {productAttributes && productAttributes.length > 0 && productAttributes.map((attr, idx) => (
+                           <tr key={`attr-${idx}`}>
+                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">{attr.name}</td>
+                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{attr.value}</td>
+                           </tr>
+                        ))}
                         {/* Weight */}
                         {product.weight && (
                            <tr>
@@ -1664,7 +1751,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          </div>
 
          {/* Product Questions */}
-         <ProductQuestions product={product} />
+         <ProductQuestions
+            product={product}
+            attributes={productAttributes}
+            vendorContext={vendorContextForAI}
+         />
 
          {/* AI Search Results: Use Case Recommendations */}
          {(isLoadingUseCase || (product.use_case_tags && product.use_case_tags.length > 0 && useCaseItems.length > 0)) && (
@@ -1817,6 +1908,14 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               ) : (
                                  <img
                                     src={getOptimizedImageUrl(effectiveActiveMedia.image_url || product.image, 'detail')}
+                                    onError={(e) => {
+                                       const raw = (effectiveActiveMedia.image_url || product.image || '').toString();
+                                       const el = e.currentTarget;
+                                       if (!raw) return;
+                                       if ((el as any).dataset?.fallbackApplied) return;
+                                       (el as any).dataset.fallbackApplied = '1';
+                                       el.src = raw;
+                                    }}
                                     alt={product.title}
                                     className="w-full h-full object-contain max-h-full"
                                  />
@@ -1945,7 +2044,19 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                           >
                                              <div className="flex items-center gap-3">
                                                 <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                                                   <img src={getOptimizedImageUrl(variant?.image || product.image, 'thumb')} className="w-full h-full object-cover" alt={val} />
+                                                   <img
+                                                      src={getOptimizedImageUrl(variant?.image || product.image, 'thumb')}
+                                                      onError={(e) => {
+                                                         const raw = (variant?.image || product.image || '').toString();
+                                                         const el = e.currentTarget;
+                                                         if (!raw) return;
+                                                         if ((el as any).dataset?.fallbackApplied) return;
+                                                         (el as any).dataset.fallbackApplied = '1';
+                                                         el.src = raw;
+                                                      }}
+                                                      className="w-full h-full object-cover"
+                                                      alt={val}
+                                                   />
                                                 </div>
                                                 <div>
                                                    <p className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-tight">{val}</p>
@@ -2052,7 +2163,19 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                      <div className="p-4 space-y-4">
                         <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                           <img src={getOptimizedImageUrl(product.image, 'thumb')} alt="" className="w-12 h-12 rounded object-cover border border-gray-200" />
+                           <img
+                              src={getOptimizedImageUrl(product.image, 'thumb')}
+                              onError={(e) => {
+                                 const raw = (product.image || '').toString();
+                                 const el = e.currentTarget;
+                                 if (!raw) return;
+                                 if ((el as any).dataset?.fallbackApplied) return;
+                                 (el as any).dataset.fallbackApplied = '1';
+                                 el.src = raw;
+                              }}
+                              alt=""
+                              className="w-12 h-12 rounded object-cover border border-gray-200"
+                           />
                            <div>
                               <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-1">{product.title}</p>
                               <p className="text-xs text-gray-500">{vendor?.shop_name || 'Seller'}</p>

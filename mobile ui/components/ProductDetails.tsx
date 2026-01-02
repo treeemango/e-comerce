@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore, fetchVendorInfo, fetchRecentViews } from '@/lib/api';
+import { fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchRelatedProducts, fetchProductVariants, getFollowStatus, toggleFollowStore, fetchVendorInfo, fetchRecentViews, fetchProductAttributes } from '@/lib/api';
 import Skeleton from './Skeleton';
 import { Product, QuantityDiscountTier, User, ProductOption, ProductVariant, RelatedProduct, VendorInfo } from '@/types';
 import { playWishlistAddSound, playWishlistRemoveSound, playFollowSound, playUnfollowSound, playCartAddSound } from '@/lib/sounds';
@@ -10,6 +10,7 @@ import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/
 import { trackProductViewAuto } from '@/lib/tracking';
 import ResponsiveImage from '@/components/ResponsiveImage';
 import { getOptimizedImageUrl } from '@/lib/image-utils';
+import { SimpleMarkdown } from '@/components/SimpleMarkdown';
 
 interface ProductDetailsProps {
     product: Product;
@@ -70,6 +71,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [activeTab, setActiveTab] = useState<'reviews' | 'description' | 'specs'>(
         product.reviews && product.reviews > 0 ? 'reviews' : 'description'
     );
+    const [productAttributes, setProductAttributes] = useState<{ name: string; value: string }[]>([]);
 
     // Track product views (recent views + analytics), same as web
     useEffect(() => {
@@ -245,6 +247,41 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         checkStatuses();
         fetchLiveVendorData();
     }, [product.id, user?.id, product.vendor?.vendor_id, product.seller_id]);
+
+    // Fetch product attributes
+    useEffect(() => {
+        const loadAttributes = async () => {
+            if (product.id) {
+                // Use existing product.attributes if available, otherwise fetch
+                if (product.attributes && product.attributes.length > 0) {
+                    setProductAttributes(product.attributes);
+                } else {
+                    const attrs = await fetchProductAttributes(product.id.toString());
+                    setProductAttributes(attrs);
+                }
+            }
+        };
+        loadAttributes();
+    }, [product.id, product.attributes]);
+
+    const vendor = vendorInfo ?? product.vendor;
+    const vendorContextForAI = useMemo(() => {
+        if (!vendor) return null;
+        return {
+            vendor_id: vendor.vendor_id?.toString?.() ?? (vendor.vendor_id as any),
+            business_name: vendor.business_name,
+            business_country: vendor.business_country,
+            is_verified: !!vendor.is_verified,
+            vendor_rating: typeof vendor.vendor_rating === 'number' ? vendor.vendor_rating : null,
+            review_count: typeof vendor.review_count === 'number' ? vendor.review_count : null,
+            completed_orders: typeof vendor.completed_orders === 'number' ? vendor.completed_orders : null,
+            response_time: (vendor as any).response_time ?? null,
+            seller_since: (vendor as any).seller_since ?? null,
+            follower_count: typeof (vendor as any).follower_count === 'number' ? (vendor as any).follower_count : null,
+            delivery_speed: (vendor as any).delivery_speed ?? null,
+            order_completion_rate: typeof (vendor as any).order_completion_rate === 'number' ? (vendor as any).order_completion_rate : null,
+        };
+    }, [vendor]);
 
     useEffect(() => {
         const loadVariants = async () => {
@@ -968,9 +1005,15 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         {activeTab === 'description' && (
                             <div className="animate-in fade-in duration-300 space-y-6">
                                 {product.description ? (
-                                    <p className="text-[13px] text-gray-600 dark:text-gray-300 leading-[1.7] font-medium">
-                                        {product.description}
-                                    </p>
+                                    <div className="bg-gradient-to-br from-orange-50 via-white to-white dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 border border-orange-100 dark:border-gray-800 rounded-2xl p-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="material-icons text-orange-500 text-base">description</span>
+                                            <div className="text-[11px] font-black text-gray-900 dark:text-white">About this product</div>
+                                        </div>
+                                        <div className="text-[13px] leading-[1.7] font-medium">
+                                            <SimpleMarkdown text={product.description} />
+                                        </div>
+                                    </div>
                                 ) : (
                                     <p className="text-sm text-gray-400 italic">No description available.</p>
                                 )}
@@ -1069,13 +1112,19 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                 <td className="px-4 py-3.5 text-gray-900 dark:text-white font-mono text-[10px]">{product.sku}</td>
                                             </tr>
                                         )}
-                                        {/* Product Variants/Attributes */}
                                         {productVariants.length > 0 && Object.entries(productVariants[0]?.options || {}).map(([key, value]) => (
                                             <tr key={key}>
                                                 <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800 capitalize">{key}</td>
                                                 <td className="px-4 py-3.5 text-gray-900 dark:text-white">
                                                     {productVariants.map(v => v.options[key]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
                                                 </td>
+                                            </tr>
+                                        ))}
+                                        {/* Custom Attributes */}
+                                        {(productAttributes.length > 0 ? productAttributes : (product.attributes || [])).map((attr, idx) => (
+                                            <tr key={`attr-${idx}`}>
+                                                <td className="px-4 py-3.5 bg-gray-50 dark:bg-gray-900/50 font-semibold text-gray-600 dark:text-gray-300 w-2/5 border-r border-gray-100 dark:border-gray-800">{attr.name}</td>
+                                                <td className="px-4 py-3.5 text-gray-900 dark:text-white">{attr.value}</td>
                                             </tr>
                                         ))}
                                         {/* Delivery */}
@@ -1218,6 +1267,15 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                     </div>
                 </div>
             )}
+
+            {/* AI Assistant & Q/A Section */}
+            <div className="px-4 mb-4">
+                <ProductQuestions
+                    product={product}
+                    attributes={productAttributes}
+                    vendorContext={vendorContextForAI}
+                />
+            </div>
 
             {/* AI Recommendations */}
             <div className="mt-2 space-y-4 pb-8">
@@ -1657,7 +1715,23 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             {/* Product Info & Pricing Tiers */}
                             <div className="p-5 flex gap-5">
                                 <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100 dark:border-gray-800 shadow-sm transition-all duration-300">
-                                    <img src={getOptimizedImageUrl(sheetPreviewVariant?.image || currentVariant?.image || product.image, 'thumb')} className="w-full h-full object-cover" alt="" />
+                                    {(() => {
+                                        const rawImg = sheetPreviewVariant?.image || currentVariant?.image || product.image || '';
+                                        const thumbImg = rawImg ? getOptimizedImageUrl(rawImg, 'thumb') : '';
+                                        return (
+                                            <img
+                                                src={thumbImg}
+                                                onError={(e) => {
+                                                    const el = e.currentTarget;
+                                                    if ((el as any).dataset?.fallbackApplied) return;
+                                                    (el as any).dataset.fallbackApplied = '1';
+                                                    if (rawImg) el.src = rawImg;
+                                                }}
+                                                className="w-full h-full object-contain"
+                                                alt=""
+                                            />
+                                        );
+                                    })()}
                                 </div>
                                 <div className="flex-1 min-w-0 py-1">
                                     <div className="flex gap-6 overflow-x-auto hide-scrollbar pb-2">
@@ -1728,7 +1802,23 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                         >
                                                             <div className="flex items-center gap-4 min-w-0 flex-1">
                                                                 <div className={`w-14 h-14 rounded-xl overflow-hidden border flex-shrink-0 transition-all ${sheetPreviewVariant?.id === variant?.id ? 'border-orange-500 shadow-orange-100 dark:shadow-none scale-105' : 'border-gray-100 dark:border-gray-800 shadow-sm'}`}>
-                                                                    <img src={getOptimizedImageUrl(repImg || product.image, 'thumb')} className="w-full h-full object-cover" alt="" />
+                                                                    {(() => {
+                                                                        const rawImg = repImg || product.image || '';
+                                                                        const thumbImg = rawImg ? getOptimizedImageUrl(rawImg, 'thumb') : '';
+                                                                        return (
+                                                                            <img
+                                                                                src={thumbImg}
+                                                                                onError={(e) => {
+                                                                                    const el = e.currentTarget;
+                                                                                    if ((el as any).dataset?.fallbackApplied) return;
+                                                                                    (el as any).dataset.fallbackApplied = '1';
+                                                                                    if (rawImg) el.src = rawImg;
+                                                                                }}
+                                                                                className="w-full h-full object-contain"
+                                                                                alt=""
+                                                                            />
+                                                                        );
+                                                                    })()}
                                                                 </div>
                                                                 <div className="flex flex-col gap-0.5 min-w-0">
                                                                     <span className={`text-sm font-black uppercase tracking-tight truncate transition-colors ${sheetPreviewVariant?.id === variant?.id ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{val}</span>

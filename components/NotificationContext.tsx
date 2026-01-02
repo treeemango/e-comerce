@@ -28,7 +28,7 @@ interface NotificationContextType {
     history: Notification[];
     showNotification: (message: string, type: NotificationType, duration?: number, onClick?: () => void, action?: NotificationAction, id?: string) => void;
     dismissNotification: (id: string) => void;
-    markAllAsRead: () => void;
+    markAllAsRead: () => Promise<void>;
     clearHistory: () => void;
 }
 
@@ -46,7 +46,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     const showNotification = useCallback((message: string, type: NotificationType, duration = 5000, onClick?: () => void, action?: NotificationAction, customId?: string) => {
         const id = customId || Math.random().toString(36).substring(2, 9);
         const timestamp = new Date().toISOString();
-        const newNotification: Notification = { id, message, type, duration, timestamp, onClick, action };
+        const newNotification: Notification = { id, message, type, duration, timestamp, onClick, action, is_read: false };
 
         setNotifications((prev) => [...prev, newNotification]);
         setHistory((prev) => {
@@ -165,10 +165,36 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         };
     }, []);
 
-    const markAllAsRead = useCallback(() => {
-        // Since we don't have an "unread" state yet, we can clear the active toasts
+    const markAllAsRead = useCallback(async () => {
+        // Clear active toast UI
         setNotifications([]);
-    }, []);
+
+        // Mark all local history items as read so the bell badge clears immediately.
+        setHistory((prev) => {
+            if (!prev.length) return prev;
+            const updated = prev.map((n) => ({ ...n, is_read: true }));
+            if (currentUserId) {
+                try {
+                    localStorage.setItem(`notification_history_${currentUserId}`, JSON.stringify(updated));
+                } catch (e) {
+                    console.warn('[NotificationContext] Failed to persist read state:', e);
+                }
+            }
+            return updated;
+        });
+
+        // Best-effort: sync read state to DB for this user so it persists across sessions.
+        if (!currentUserId) return;
+        try {
+            await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', currentUserId)
+                .eq('is_read', false);
+        } catch (e) {
+            console.warn('[NotificationContext] Failed to mark notifications read in DB:', e);
+        }
+    }, [currentUserId]);
 
     const clearHistory = useCallback(() => {
         setHistory([]);

@@ -605,6 +605,9 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
     const [isGeneratingUseCaseTags, setIsGeneratingUseCaseTags] = useState(false);
     const [isGeneratingOccasionTags, setIsGeneratingOccasionTags] = useState(false);
 
+    const [isSuggestingAttributes, setIsSuggestingAttributes] = useState(false);
+    const [aiAttributeSuggestError, setAiAttributeSuggestError] = useState<string | null>(null);
+
 
 
     // --- SEO Metadata State ---
@@ -897,6 +900,92 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
             console.error('Occasion tags generation error:', err);
         } finally {
             setIsGeneratingOccasionTags(false);
+        }
+    };
+
+    const handleSuggestAttributes = async () => {
+        if (!title.trim()) {
+            alert('Please enter a product title first.');
+            return;
+        }
+        if (!availableAttributes || availableAttributes.length === 0) {
+            alert('No attributes available for this category yet.');
+            return;
+        }
+
+        setAiAttributeSuggestError(null);
+        setIsSuggestingAttributes(true);
+        try {
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+            const brandName = brands.find(b => b.id === brandId)?.name;
+
+            const payloadAttributes = availableAttributes.map(a => ({
+                id: a.id,
+                name: a.name,
+                options: (attributeOptionsMap[a.id] || []).map((o: any) => String(o.value)).filter(Boolean)
+            }));
+
+            const suggestions = await aiService.suggestAttributes({
+                title,
+                category: categoryName,
+                brand: brandName,
+                description,
+                attributes: payloadAttributes,
+            });
+
+            if (!suggestions || suggestions.length === 0) {
+                setAiAttributeSuggestError('No suggestions returned.');
+                return;
+            }
+
+            const normalize = (v: string) => v.trim().toLowerCase();
+
+            setAttributes(prev => {
+                let next = [...prev];
+
+                for (const s of suggestions) {
+                    const rawValue = String(s?.value ?? '').trim();
+                    if (!rawValue) continue;
+
+                    let attrDef = s.attribute_id
+                        ? availableAttributes.find(a => a.id === s.attribute_id)
+                        : undefined;
+
+                    if (!attrDef && s.attribute_name) {
+                        const nameNorm = normalize(String(s.attribute_name));
+                        attrDef = availableAttributes.find(a => normalize(a.name) === nameNorm);
+                    }
+
+                    if (!attrDef) continue;
+
+                    const existing = next.find(a => a.attribute_id === attrDef.id);
+                    const existingValue = String(existing?.value || existing?.value_text || '').trim();
+                    if (existingValue) continue;
+
+                    const options = attributeOptionsMap[attrDef.id] || [];
+                    const matched = options.find((o: any) => normalize(String(o.value)) === normalize(rawValue));
+
+                    const finalValue = matched ? String(matched.value) : rawValue;
+                    const finalOptionId = matched ? String(matched.id) : undefined;
+
+                    const updated: ProductAttributeData = {
+                        attribute_id: attrDef.id,
+                        name: attrDef.name,
+                        value: finalValue,
+                        value_option_id: finalOptionId,
+                        value_text: finalValue
+                    };
+
+                    next = [...next.filter(a => a.attribute_id !== attrDef.id), updated];
+                }
+
+                return next;
+            });
+        } catch (error: any) {
+            console.error('AI attribute suggestions error:', error);
+            setAiAttributeSuggestError(error?.message || 'AI was unable to suggest attributes.');
+        } finally {
+            setIsSuggestingAttributes(false);
         }
     };
 
@@ -1556,7 +1645,33 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                 {/* Step 1: Attributes */}
                 {currentStep === 1 && (
                     <div className="space-y-5 animate-in slide-in-from-right-8 duration-300">
-                        <div className="text-sm text-gray-500 mb-2">Specify technical specs for better search visibility.</div>
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm text-gray-500">Specify technical specs for better search visibility.</div>
+                            <button
+                                type="button"
+                                onClick={handleSuggestAttributes}
+                                disabled={isSuggestingAttributes || !title.trim() || availableAttributes.length === 0}
+                                className={cn(
+                                    'flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider shadow-sm active:scale-95 transition-all',
+                                    (isSuggestingAttributes || !title.trim() || availableAttributes.length === 0)
+                                        ? 'bg-gray-100 text-gray-400 border border-gray-100'
+                                        : 'bg-orange-500 text-white'
+                                )}
+                                title="AI Decide attribute values"
+                            >
+                                <span className={cn('material-icons text-[12px]', isSuggestingAttributes ? 'animate-spin' : '')}>
+                                    {isSuggestingAttributes ? 'sync' : 'auto_awesome'}
+                                </span>
+                                {isSuggestingAttributes ? 'DECIDING...' : 'AI DECIDE'}
+                            </button>
+                        </div>
+
+                        {aiAttributeSuggestError && (
+                            <div className="flex items-center gap-2 px-4 py-2 border border-red-200 rounded-xl bg-red-50 text-red-700">
+                                <span className="material-icons text-sm">error</span>
+                                <span className="text-xs font-medium">{aiAttributeSuggestError}</span>
+                            </div>
+                        )}
                         {errorAttributes ? (
                             <div className="p-8 text-center bg-red-50/30 rounded-2xl border-2 border-dashed border-red-100">
                                 <span className="material-icons text-4xl text-red-300 mb-3">error_outline</span>

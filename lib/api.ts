@@ -704,7 +704,8 @@ export const fetchProductById = async (productId: string): Promise<Product | nul
         free_delivery: item.free_delivery,
         delivery_cost: item.delivery_cost,
         listing_type: item.listing_type || 'direct_purchase',
-        condition: item.condition || 'new'
+        condition: item.condition || 'new',
+        attributes: item.attributes || []
     } as Product;
 };
 
@@ -963,7 +964,7 @@ export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<
                 vendor_media (*)
             `)
             .or(`id.eq.${vendorIdOrUserId},user_id.eq.${vendorIdOrUserId}`)
-            .single();
+            .maybeSingle();
 
         if (error || !vendor) {
             console.error('Error fetching vendor profile:', error);
@@ -6113,6 +6114,58 @@ export const fetchBrands = async (categoryId: string): Promise<ShopifyBrand[]> =
         return [];
     }
     return data || [];
+};
+
+// Fetch product-specific attributes (for displaying in Specifications tab)
+export const fetchProductAttributes = async (productId: string): Promise<{ name: string; value: string }[]> => {
+    try {
+        const { data, error } = await supabase
+            .rpc('get_product_attributes', { p_product_id: productId });
+
+        if (error) {
+            console.warn('RPC get_product_attributes failed, trying direct query:', error);
+
+            // Fallback: Direct query with joins
+            const { data: directData, error: directError } = await supabase
+                .from('product_attribute_values')
+                .select('value_text, value_number, attribute_id')
+                .eq('product_id', productId);
+
+            if (directError || !directData) {
+                console.error('Error fetching product attributes:', directError);
+                return [];
+            }
+
+            // Get attribute names
+            const attrIds = directData.map(d => d.attribute_id).filter(Boolean);
+            if (attrIds.length === 0) return [];
+
+            const { data: attrNames } = await supabase
+                .from('shopify_attributes')
+                .select('id, name')
+                .in('id', attrIds);
+
+            const nameMap = new Map((attrNames || []).map(a => [a.id, a.name]));
+
+            return directData.map(a => ({
+                name: nameMap.get(a.attribute_id) || 'Unknown',
+                value: a.value_text || a.value_number?.toString() || ''
+            })).filter(a => a.value);
+        }
+
+        // RPC returns array of {attribute_id, name, value}
+        if (Array.isArray(data)) {
+            return data.map((a: any) => ({
+                name: a.name || 'Unknown',
+                value: a.value || ''
+            })).filter((a: any) => a.value);
+        }
+
+        return [];
+    } catch (err) {
+        console.error('fetchProductAttributes error:', err);
+        return [];
+    }
 };
 
 export const fetchAttributes = async (categoryId: string): Promise<ShopifyAttribute[]> => {

@@ -20,6 +20,12 @@ export interface ImageAnalysisResult {
     search_query: string;
 }
 
+export interface AttributeSuggestion {
+    attribute_id?: string;
+    attribute_name?: string;
+    value: string;
+}
+
 class AIService {
     private async callFunction(action: string, params: any): Promise<string> {
         // Default to allowing calls if the flag table isn't present.
@@ -30,7 +36,8 @@ class AIService {
             action === 'generate_seo' ||
             action === 'generate_tags' ||
             action === 'generate_use_case_tags' ||
-            action === 'generate_occasion_tags'
+            action === 'generate_occasion_tags' ||
+            action === 'suggest_attributes'
         ) {
             await assertAIFeatureEnabled('listing_assistant');
         }
@@ -52,6 +59,16 @@ class AIService {
         }
 
         return data.result;
+    }
+
+    private parseJsonResult<T>(result: string, fallback: T): T {
+        if (!result) return fallback;
+        try {
+            const jsonStr = result.replace(/```json|```/g, '').trim();
+            return JSON.parse(jsonStr);
+        } catch {
+            return fallback;
+        }
     }
 
     async improveTitle(title: string, category?: string, focus?: string): Promise<string> {
@@ -129,6 +146,47 @@ class AIService {
                 search_query: result.substring(0, 50)
             };
         }
+    }
+
+    /**
+     * Suggest attribute values for a listing based on title/category/brand.
+     * Returns structured suggestions; caller can map to option ids.
+     */
+    async suggestAttributes(params: {
+        title: string;
+        category?: string;
+        brand?: string;
+        description?: string;
+        attributes: Array<{ id: string; name: string; options?: string[] }>;
+    }): Promise<AttributeSuggestion[]> {
+        if (!params?.title?.trim()) return [];
+        const result = await this.callFunction('suggest_attributes', params);
+
+        const parsed = this.parseJsonResult<any>(result, null);
+        if (!parsed) return [];
+
+        // Accept either an array of suggestions or an object map.
+        if (Array.isArray(parsed)) {
+            return parsed
+                .filter(Boolean)
+                .map((s: any) => ({
+                    attribute_id: typeof s.attribute_id === 'string' ? s.attribute_id : undefined,
+                    attribute_name: typeof s.attribute_name === 'string' ? s.attribute_name : (typeof s.name === 'string' ? s.name : undefined),
+                    value: typeof s.value === 'string' ? s.value : (typeof s.value_text === 'string' ? s.value_text : '')
+                }))
+                .filter((s: AttributeSuggestion) => !!s.value);
+        }
+
+        if (typeof parsed === 'object') {
+            return Object.entries(parsed)
+                .map(([key, value]) => ({
+                    attribute_name: key,
+                    value: typeof value === 'string' ? value : String(value ?? '')
+                }))
+                .filter(s => !!s.value);
+        }
+
+        return [];
     }
 }
 

@@ -22,17 +22,18 @@ const ImageMagnifier: React.FC<ImageMagnifierProps> = ({
     const [zoom, setZoom] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [zoomImageLoaded, setZoomImageLoaded] = useState(false);
+    const [useOptimized, setUseOptimized] = useState(hasVariants);
 
     // Generate optimized URLs
     const urls = useMemo(() => {
-        if (!hasVariants) {
+        if (!useOptimized) {
             return { display: src, zoom: src };
         }
         return {
             display: getOptimizedImageUrl(src, 'detail'),
             zoom: getOptimizedImageUrl(src, 'zoom')
         };
-    }, [src, hasVariants]);
+    }, [src, useOptimized]);
 
     const handleMouseEnter = () => {
         setZoom(true);
@@ -61,7 +62,7 @@ const ImageMagnifier: React.FC<ImageMagnifierProps> = ({
             onMouseMove={handleMouseMove}
         >
             {/* Preload zoom image */}
-            {hasVariants && (
+            {useOptimized && (
                 <link
                     rel="preload"
                     as="image"
@@ -78,6 +79,12 @@ const ImageMagnifier: React.FC<ImageMagnifierProps> = ({
                 style={{ pointerEvents: 'none' }}
                 loading="lazy"
                 decoding="async"
+                onError={() => {
+                    // Optimized variants may not exist for some uploads; fall back to original.
+                    setUseOptimized(false);
+                    setZoomImageLoaded(false);
+                    setZoom(false);
+                }}
             />
 
             {/* Zoom overlay (zoom quality for crisp magnification) */}

@@ -291,28 +291,33 @@ export function getOptimizedImageUrl(
 ): string {
     if (!baseUrl) return baseUrl;
 
+    // Don't attempt optimized variants for GIFs (we intentionally skip GIF processing)
+    if (/\.gif(?:[?#]|$)/i.test(baseUrl)) {
+        return baseUrl;
+    }
+
+    // Preserve query/hash while manipulating the filename
+    const [urlWithoutHash, hash = ''] = baseUrl.split('#');
+    const [urlWithoutQuery, query = ''] = urlWithoutHash.split('?');
+
     // If URL already has a variant suffix, replace it
     const variantPattern = /_(thumb|grid|detail|zoom)\.(webp|jpg|jpeg|png)$/i;
-    const cleanUrl = baseUrl.replace(variantPattern, '.$2');
+    const cleanUrl = urlWithoutQuery.replace(variantPattern, '.$2');
 
     // Get variant config
     const variantConfig = IMAGE_VARIANTS[variant];
 
     // Don't add suffix for original
     if (variant === 'original' || !variantConfig.suffix) {
-        return cleanUrl;
+        const rebuilt = cleanUrl + (query ? `?${query}` : '') + (hash ? `#${hash}` : '');
+        return rebuilt;
     }
 
-    // Insert variant suffix before extension
-    const extensionMatch = cleanUrl.match(/\.(webp|jpg|jpeg|png|gif)$/i);
-    if (extensionMatch) {
-        const ext = extensionMatch[0];
-        const basePath = cleanUrl.slice(0, -ext.length);
-        return `${basePath}${variantConfig.suffix}${ext}`;
-    }
-
-    // If no extension found, just append suffix
-    return `${cleanUrl}${variantConfig.suffix}`;
+    // Variants are always stored as .webp (see supabase/functions/process-image)
+    const extensionMatch = cleanUrl.match(/\.(webp|jpg|jpeg|png)$/i);
+    const basePath = extensionMatch ? cleanUrl.slice(0, -extensionMatch[0].length) : cleanUrl;
+    const rebuilt = `${basePath}${variantConfig.suffix}.webp` + (query ? `?${query}` : '') + (hash ? `#${hash}` : '');
+    return rebuilt;
 }
 
 /**

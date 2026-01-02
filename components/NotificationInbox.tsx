@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNotifications, dispatchNotificationAction, Notification } from './NotificationContext';
 
 interface NotificationInboxProps {
@@ -8,7 +8,13 @@ interface NotificationInboxProps {
 }
 
 const NotificationInbox: React.FC<NotificationInboxProps> = ({ onClose, compact = false }) => {
-    const { history, clearHistory } = useNotifications();
+    const { history, clearHistory, markAllAsRead } = useNotifications();
+
+    // Opening the inbox means the user has seen the notifications.
+    // Clear the bell badge/"new" indicator on both web and mobile.
+    useEffect(() => {
+        void markAllAsRead();
+    }, [markAllAsRead]);
 
     const getIcon = (type: string) => {
         switch (type) {
