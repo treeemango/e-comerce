@@ -285,7 +285,7 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
   );
 
   return (
-    <div className="fixed bottom-6 right-6 z-40">
+    <div className="fixed bottom-6 right-6 z-[60]">
       {/* Premium Floating Button Group */}
       <div className="flex flex-col items-center gap-3 bg-white/90 dark:bg-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-black/10 border border-gray-100 dark:border-gray-800 px-4 py-5">
         <button
@@ -327,7 +327,7 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
         </button>
       </div>
       {isMessagesOpen && user && (
-        <div className="fixed inset-0 z-50 flex items-end justify-end">
+        <div className="fixed inset-0 z-[100] flex items-end justify-end">
           <div
             className="absolute inset-0 bg-black/30"
             onClick={() => setIsMessagesOpen(false)}
@@ -441,7 +441,7 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
         </div>
       )}
       {isFeedbackOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800 animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -477,8 +477,8 @@ const FloatingWidget: React.FC<FloatingWidgetProps> = ({
                           key={cat}
                           onClick={() => setFeedbackCategory(cat)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${feedbackCategory === cat
-                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-emerald-300 dark:hover:border-emerald-700'
+                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-emerald-300 dark:hover:border-emerald-700'
                             }`}
                         >
                           {cat}
