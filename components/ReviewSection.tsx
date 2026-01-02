@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Review, ReviewFilters, ProductReviewSummary } from '@/types';
-import { fetchProductReviews, fetchProductReviewSummary, voteOnReview } from '@/lib/api';
+import { fetchProductReviews, fetchProductReviewSummary, voteOnReview, fetchSellerReviews } from '@/lib/api';
 import { ReviewCard } from './ReviewCard';
 import { WriteReviewModal } from './WriteReviewModal';
 
@@ -8,10 +8,13 @@ interface ReviewSectionProps {
     productId: string;
     userId?: string;
     hasPurchased?: boolean; // Only allow reviews if user has purchased
+    sellerId?: string;
+    sellerName?: string;
 }
 
-export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId, hasPurchased = false }) => {
+export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId, hasPurchased = false, sellerId, sellerName }) => {
     const [reviews, setReviews] = useState<Review[]>([]);
+    const [activeReviewTab, setActiveReviewTab] = useState<'product' | 'store'>('product');
     const [summary, setSummary] = useState<ProductReviewSummary | null>(null);
     const [filters, setFilters] = useState<ReviewFilters>({});
     const [page, setPage] = useState(1);
@@ -20,9 +23,27 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
     const [showWriteReview, setShowWriteReview] = useState(false);
 
     useEffect(() => {
-        loadReviews();
-        loadSummary();
-    }, [productId, filters, page]);
+        if (activeReviewTab === 'product') {
+            loadReviews();
+            loadSummary();
+        } else if (sellerId) {
+            loadSellerReviews();
+        }
+    }, [productId, sellerId, activeReviewTab, filters, page]);
+
+    const loadSellerReviews = async () => {
+        setLoading(true);
+        try {
+            const fetchedReviews = await fetchSellerReviews(sellerId!);
+            setReviews(fetchedReviews);
+            setTotalReviews(fetchedReviews.length);
+            setSummary(null); // No summary for seller reviews yet
+        } catch (error) {
+            console.error('Failed to load seller reviews', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const loadReviews = async () => {
         setLoading(true);
@@ -94,20 +115,52 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
 
     return (
         <div className="w-full">
-            <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Customer Reviews</h2>
-                {hasPurchased && userId && (
+            <div className="mb-8 p-1">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Ratings & Reviews</h2>
+
+                <div className="flex items-center gap-8 border-b border-slate-200 dark:border-slate-800">
                     <button
-                        onClick={handleWriteReviewClick}
-                        className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-2.5 rounded-full font-semibold text-sm shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-500/40 transition-all hover:scale-105"
+                        onClick={() => setActiveReviewTab('product')}
+                        className={`pb-4 text-sm font-bold transition-all relative ${activeReviewTab === 'product'
+                            ? 'text-primary'
+                            : 'text-slate-400 hover:text-slate-600'
+                            }`}
                     >
-                        Write a Review
+                        Product reviews ({summary?.total_reviews || 0})
+                        {activeReviewTab === 'product' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />
+                        )}
                     </button>
-                )}
+                    {sellerId && (
+                        <button
+                            onClick={() => setActiveReviewTab('store')}
+                            className={`pb-4 text-sm font-bold transition-all relative ${activeReviewTab === 'store'
+                                ? 'text-primary'
+                                : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            Store reviews ({reviews.length && activeReviewTab === 'store' ? reviews.length : '...'})
+                            {activeReviewTab === 'store' && (
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />
+                            )}
+                        </button>
+                    )}
+
+                    <div className="ml-auto">
+                        {hasPurchased && userId && activeReviewTab === 'product' && (
+                            <button
+                                onClick={handleWriteReviewClick}
+                                className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-2 rounded-full font-bold text-xs shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-500/40 transition-all hover:scale-105 mb-3"
+                            >
+                                Write a Review
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
 
-            {/* Review Summary */}
-            {summary && summary.total_reviews > 0 ? (
+            {/* Content for Product Reviews only */}
+            {activeReviewTab === 'product' && (summary && summary.total_reviews > 0 ? (
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-2xl p-6 mb-6 border border-slate-200 dark:border-slate-700">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Overall Rating */}
@@ -176,10 +229,10 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, userId,
                         </button>
                     )}
                 </div>
-            )}
+            ))}
 
             {/* Filter Controls */}
-            {summary && summary.total_reviews > 0 && (
+            {activeReviewTab === 'product' && summary && summary.total_reviews > 0 && (
                 <div className="flex flex-wrap items-center gap-3 mb-6">
                     <button
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${!filters.rating && !filters.verified_only && !filters.with_photos

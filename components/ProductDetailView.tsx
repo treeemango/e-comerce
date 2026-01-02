@@ -105,9 +105,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
    const [isImageFocusView, setIsImageFocusView] = useState(false);
 
-   // Tab navigation state - default to Reviews if has reviews, else Description
-   const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'reviews'>(
-      product.reviews && product.reviews > 0 ? 'reviews' : 'description'
+   // Tab navigation state - default to Reviews if has reviews, else Specifications
+   const [activeTab, setActiveTab] = useState<'specifications' | 'reviews'>(
+      product.reviews && product.reviews > 0 ? 'reviews' : 'specifications'
    );
 
    useEffect(() => {
@@ -1413,13 +1413,59 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
          {/* Modern Tabbed Content Section - Below the product hero */}
          <div className="mt-16 mb-12">
-            {/* Tab Navigation */}
+
+            {/* AI Insights & Q/A - High Prominence */}
+            <div className="mb-12">
+               <ProductQuestions
+                  product={product}
+                  attributes={productAttributes}
+                  vendorContext={vendorContextForAI}
+               />
+            </div>
+
+            {/* Ratings & Reviews - Immediately after AI Insights */}
+            <div className="mb-12">
+               <ReviewSection
+                  productId={product.id.toString()}
+                  userId={user?.id}
+                  hasPurchased={false}
+                  sellerId={vendor?.vendor_id}
+                  sellerName={vendor?.business_name}
+               />
+            </div>
+
+            {/* Product Overview - Clean Style (No Card, Just Text) */}
+            {product.description && (
+               <div className="mb-12 animate-in fade-in duration-700">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                     <span className="material-icons text-sm text-slate-300">info</span>
+                     Product Overview
+                  </h3>
+                  <div className="prose prose-slate dark:prose-invert max-w-none text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                     <SimpleMarkdown text={product.description} />
+                  </div>
+               </div>
+            )}
+
+            {/* Rich Banner Images - "A+" Style Content */}
+            {product.images && product.images.length > 0 && (
+               <div className="mb-12 space-y-4 animate-in fade-in duration-1000 slide-in-from-bottom-4">
+                  {product.images.map((img, idx) => (
+                     <div key={idx} className="w-full rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                        <img
+                           src={img}
+                           alt={`${product.title} - Detail ${idx + 1}`}
+                           className="w-full h-auto object-cover hover:scale-[1.01] transition-transform duration-700 ease-out"
+                           loading="lazy"
+                        />
+                     </div>
+                  ))}
+               </div>
+            )}
+
+            {/* Tab Navigation (Specifications Only) */}
             <div className="flex border-b-2 border-slate-200 dark:border-slate-700 mb-8">
-               {/* Dynamic tab order: Reviews first if has reviews, else last */}
-               {(product.reviews && product.reviews > 0
-                  ? ['Reviews', 'Description', 'Specifications']
-                  : ['Description', 'Specifications', 'Reviews']
-               ).map((tab) => (
+               {['Specifications'].map((tab) => (
                   <button
                      key={tab}
                      onClick={() => setActiveTab(tab.toLowerCase())}
@@ -1429,11 +1475,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         }`}
                   >
                      {tab}
-                     {tab === 'Reviews' && product.reviews && product.reviews > 0 && (
-                        <span className="ml-2 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full">
-                           {product.reviews}
-                        </span>
-                     )}
                      {activeTab === tab.toLowerCase() && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-orange-500"></div>
                      )}
@@ -1441,321 +1482,352 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                ))}
             </div>
 
-            {/* Description Tab Content */}
-            {activeTab === 'description' && (
-               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                  <div className="lg:col-span-2 space-y-8">
-                     {/* Enhanced Description */}
-                     {product.description && (
-                        <div className="bg-gradient-to-br from-orange-50 via-white to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-3xl p-8 border border-orange-100 dark:border-slate-700 shadow-sm">
-                           <div className="flex items-center gap-3 mb-6">
-                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary/10 to-orange-500/15 flex items-center justify-center border border-orange-100 dark:border-slate-700">
-                                 <span className="material-icons-round text-primary">description</span>
+
+
+            {/* Product Questions - Moved above tabs for prominence */}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+               <div className="lg:col-span-2 space-y-12">
+
+                  {/* Specifications Tab Content */}
+                  {activeTab === 'specifications' && (
+                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in duration-500">
+                        <table className="w-full text-sm">
+                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {/* Brand */}
+                              {product.brand && (
+                                 <tr>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Brand</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.brand}</td>
+                                 </tr>
+                              )}
+                              {/* Category */}
+                              <tr>
+                                 <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Category</td>
+                                 <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.category || 'N/A'}</td>
+                              </tr>
+                              {/* Availability */}
+                              <tr>
+                                 <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Availability</td>
+                                 <td className="px-6 py-4">
+                                    <span className={`inline-flex items-center gap-1.5 ${product.stock > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                       <span className={`w-2 h-2 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                       {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                                    </span>
+                                 </td>
+                              </tr>
+                              {/* Sold By */}
+                              {vendor && (
+                                 <tr>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Sold By</td>
+                                    <td className="px-6 py-4">
+                                       <a
+                                          href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
+                                          className="text-primary hover:underline font-medium"
+                                       >
+                                          {vendor.business_name}
+                                       </a>
+                                    </td>
+                                 </tr>
+                              )}
+                              {/* Condition */}
+                              {product.condition && (
+                                 <tr>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Condition</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100 capitalize">{product.condition.replace('_', ' ')}</td>
+                                 </tr>
+                              )}
+                              {/* SKU */}
+                              {product.sku && (
+                                 <tr>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">SKU</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100 font-mono text-xs">{product.sku}</td>
+                                 </tr>
+                              )}
+                              {/* Product Variants/Attributes */}
+                              {productVariants.length > 0 && Object.entries(productVariants[0]?.options || {}).map(([key, value]) => (
+                                 <tr key={key}>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800 capitalize">{key}</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100">
+                                       {productVariants.map(v => v.options[key]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                                    </td>
+                                 </tr>
+                              ))}
+                              {/* Custom Attributes */}
+                              {productAttributes && productAttributes.length > 0 && productAttributes.map((attr, idx) => (
+                                 <tr key={`attr-${idx}`}>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">{attr.name}</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{attr.value}</td>
+                                 </tr>
+                              ))}
+                              {/* Weight */}
+                              {product.weight && (
+                                 <tr>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Weight</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.weight}</td>
+                                 </tr>
+                              )}
+                              {/* Dimensions */}
+                              {product.dimensions && (
+                                 <tr>
+                                    <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Dimensions</td>
+                                    <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.dimensions}</td>
+                                 </tr>
+                              )}
+                              {/* Delivery */}
+                              <tr>
+                                 <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Delivery</td>
+                                 <td className="px-6 py-4 text-slate-900 dark:text-slate-100">
+                                    {product.free_delivery ? 'Free Shipping' : `${getPrice('deliveryCost', product.delivery_cost || 0, currencyCode)}`}
+                                    {product.deliveryTimeEstimate && ` • ${product.deliveryTimeEstimate}`}
+                                 </td>
+                              </tr>
+                              {/* Return Policy */}
+                              <tr>
+                                 <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Return Policy</td>
+                                 <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.return_policy || '30-day returns'}</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
+                  )}
+
+                  {/* Vendor Business & Policies - Modern Way */}
+                  {vendor && (
+                     <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 animate-in fade-in duration-700">
+                        <div className="space-y-6">
+                           {/* Company Introduction */}
+                           {vendor.business_description && (
+                              <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                                    <span className="material-icons text-slate-400 text-sm">business</span>
+                                    Company Introduction
+                                 </h4>
+                                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                    {vendor.business_description}
+                                 </p>
                               </div>
-                              <h2 className="text-xl font-black text-slate-900 dark:text-white">About this product</h2>
-                           </div>
-                           <div className="prose dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 leading-relaxed">
-                              <SimpleMarkdown text={product.description} />
+                           )}
+
+                           {/* Certificates */}
+                           {vendor.certificates && vendor.certificates.length > 0 && (
+                              <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                                    <span className="material-icons text-slate-400 text-sm">workspace_premium</span>
+                                    Certificates & Verified Documents
+                                 </h4>
+                                 <div className="flex flex-wrap gap-4">
+                                    {vendor.certificates.map((cert, idx) => (
+                                       <div key={idx} className="group relative w-24 h-32 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden cursor-zoom-in hover:shadow-md transition-all">
+                                          <img
+                                             src={cert.thumbnail || cert.url}
+                                             alt={cert.name || 'Certificate'}
+                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                          />
+                                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                       </div>
+                                    ))}
+                                 </div>
+                              </div>
+                           )}
+
+                           {/* Policies Grid */}
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Return Policy */}
+                              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+                                 <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 flex items-center justify-center mb-4">
+                                    <span className="material-icons text-sm">assignment_return</span>
+                                 </div>
+                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Return Policy</h4>
+                                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
+                                    {vendor.return_policy || 'This seller accepts returns within 30 days of delivery for standard items. Please contact the seller for specific return instructions.'}
+                                 </p>
+                              </div>
+
+                              {/* Shipping Policy */}
+                              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+                                 <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center mb-4">
+                                    <span className="material-icons text-sm">local_shipping</span>
+                                 </div>
+                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Shipping Policy</h4>
+                                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
+                                    {vendor.shipping_policy || `Standard shipping via ${vendor.delivery_speed || 'trusted carriers'}. Orders are typically processed within 1-2 business days.`}
+                                 </p>
+                              </div>
                            </div>
                         </div>
-                     )}
+                     </div>
+                  )}
 
-                     {/* Tags & Discovery */}
-                     {(product.tags?.length || product.use_case_tags?.length || product.occasion_tags?.length) && (
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-slate-800 dark:to-slate-800/50 rounded-3xl p-8 border border-purple-100 dark:border-slate-700">
-                           <div className="flex items-center gap-3 mb-6">
-                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                                 <span className="material-icons-round text-white">auto_awesome</span>
+               </div>
+
+               {/* Sidebar - Persistent Vendor Info & Discovery */}
+               <div className="space-y-6">
+                  {vendor ? (
+                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24 animate-in slide-in-from-right duration-500">
+                        {/* Header with Logo */}
+                        <div className="flex items-center gap-4 mb-4">
+                           {vendor.logo_url ? (
+                              <img
+                                 src={getOptimizedImageUrl(vendor.logo_url, 'thumb')}
+                                 onError={(e) => {
+                                    const raw = (vendor.logo_url || '').toString();
+                                    const el = e.currentTarget;
+                                    if (!raw) return;
+                                    if ((el as any).dataset?.fallbackApplied) return;
+                                    (el as any).dataset.fallbackApplied = '1';
+                                    el.src = raw;
+                                 }}
+                                 alt={vendor.business_name}
+                                 className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700"
+                              />
+                           ) : (
+                              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-black text-xl uppercase">
+                                 {vendor.business_name?.charAt(0) || '?'}
                               </div>
-                              <h3 className="text-lg font-black text-slate-900 dark:text-white">Discovery</h3>
-                           </div>
-
-                           <div className="space-y-5">
-                              {product.occasion_tags && product.occasion_tags.length > 0 && (
-                                 <div>
-                                    <span className="text-xs font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3 block">Perfect For</span>
-                                    <div className="flex flex-wrap gap-2">
-                                       {product.occasion_tags.map(tag => (
-                                          <span key={tag} className="px-4 py-2 bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 text-sm font-bold rounded-full shadow-sm border border-purple-100 dark:border-purple-800">
-                                             {tag}
-                                          </span>
-                                       ))}
-                                    </div>
-                                 </div>
-                              )}
-                              {product.use_case_tags && product.use_case_tags.length > 0 && (
-                                 <div>
-                                    <span className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-3 block">Best Used In</span>
-                                    <div className="flex flex-wrap gap-2">
-                                       {product.use_case_tags.map(tag => (
-                                          <a href={`/search?q=${tag}`} key={tag} className="px-4 py-2 bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 text-sm font-bold rounded-full shadow-sm border border-blue-100 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
-                                             {tag}
-                                          </a>
-                                       ))}
-                                    </div>
-                                 </div>
-                              )}
-                              {product.tags && product.tags.length > 0 && (
-                                 <div className="pt-4 border-t border-purple-200/50 dark:border-slate-700">
-                                    <div className="flex flex-wrap gap-2">
-                                       {product.tags.map(tag => (
-                                          <span key={tag} className="text-sm text-slate-500 hover:text-primary cursor-pointer transition-colors">
-                                             #{tag}
-                                          </span>
-                                       ))}
-                                    </div>
+                           )}
+                           <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                 <h3 className="font-black text-slate-900 dark:text-white truncate">{vendor.business_name}</h3>
+                                 {vendor.is_verified && <span className="material-icons-round text-blue-500 text-base" title="Verified">verified</span>}
+                              </div>
+                              {/* Country Badge */}
+                              {vendor.business_country && vendor.business_country !== 'Independent Seller' && (
+                                 <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <span className="material-icons-outlined text-xs text-blue-500">public</span>
+                                    <span className="font-semibold">From {vendor.business_country}</span>
                                  </div>
                               )}
                            </div>
                         </div>
-                     )}
-                  </div>
 
-                  {/* Sidebar - Vendor Info */}
-                  <div className="space-y-6">
-                     {vendor ? (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
-                           {/* Header with Logo */}
-                           <div className="flex items-center gap-4 mb-4">
-                              {vendor.logo_url ? (
-                                 <img
-                                    src={getOptimizedImageUrl(vendor.logo_url, 'thumb')}
-                                    onError={(e) => {
-                                       const raw = (vendor.logo_url || '').toString();
-                                       const el = e.currentTarget;
-                                       if (!raw) return;
-                                       if ((el as any).dataset?.fallbackApplied) return;
-                                       (el as any).dataset.fallbackApplied = '1';
-                                       el.src = raw;
-                                    }}
-                                    alt={vendor.business_name}
-                                    className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700"
-                                 />
-                              ) : (
-                                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-black text-xl uppercase">
-                                    {vendor.business_name?.charAt(0) || '?'}
+                        {/* Stats Grid - 4 columns */}
+                        <div className="grid grid-cols-4 gap-2 py-4 mb-4 border-y border-slate-100 dark:border-slate-700">
+                           <div className="text-center">
+                              <div className="flex items-center justify-center gap-0.5 mb-0.5">
+                                 <span className="material-icons-round text-amber-500 text-xs">star</span>
+                                 <span className="text-sm font-black text-slate-900 dark:text-white">{vendor.vendor_rating?.toFixed(1) || '0.0'}</span>
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Rating</div>
+                           </div>
+                           <div className="text-center border-l border-slate-100 dark:border-slate-700">
+                              <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
+                                 {vendor.completed_orders ?? 0}
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Orders</div>
+                           </div>
+                           <div className="text-center border-l border-slate-100 dark:border-slate-700">
+                              <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
+                                 {(vendor.follower_count ?? followerCount) >= 1000 ? `${((vendor.follower_count ?? followerCount) / 1000).toFixed(1)}k` : (vendor.follower_count ?? followerCount)}
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Followers</div>
+                           </div>
+                           <div className="text-center border-l border-slate-100 dark:border-slate-700">
+                              <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
+                                 {vendor.total_products ?? 0}
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Products</div>
+                           </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 mb-4">
+                           <button onClick={handleMessageClick} className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2">
+                              <span className="material-icons-round text-sm">chat</span> Message
+                           </button>
+                           <a
+                              href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-primary to-orange-500 text-white hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
+                           >
+                              <span className="material-icons-round text-sm">storefront</span> Visit Store
+                           </a>
+                        </div>
+                        <div className="flex gap-2">
+                           {/* Follow Button */}
+                           <button
+                              onClick={handleFollowToggle}
+                              disabled={isFollowLoading}
+                              className={`flex-1 px-4 py-3 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${isFollowing
+                                 ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                                 : 'border-2 border-purple-500 text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                                 } ${isFollowLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                           >
+                              <span className="material-icons-round text-sm">{isFollowing ? 'check' : 'add'}</span>
+                              {isFollowing ? 'Following' : 'Follow'}
+                           </button>
+                        </div>
+
+                        {/* Business Verification Section */}
+                        {vendor.is_verified && (
+                           <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/30">
+                              <div className="flex items-center gap-3">
+                                 <span className="material-icons-round text-blue-500 text-xl">verified_user</span>
+                                 <div className="flex-1">
+                                    <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Business Legally Verified</p>
+                                    <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Licensed & Regulated Store</p>
                                  </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                 <div className="flex items-center gap-2">
-                                    <h3 className="font-black text-slate-900 dark:text-white truncate">{vendor.business_name}</h3>
-                                    {vendor.is_verified && <span className="material-icons-round text-blue-500 text-base" title="Verified">verified</span>}
-                                 </div>
-                                 {/* Country Badge */}
-                                 {vendor.business_country && vendor.business_country !== 'Independent Seller' && (
-                                    <div className="flex items-center gap-1 mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                       <span className="material-icons-outlined text-xs text-blue-500">public</span>
-                                       <span className="font-semibold">From {vendor.business_country}</span>
-                                    </div>
-                                 )}
                               </div>
                            </div>
+                        )}
+                     </div>
+                  ) : null}
 
-                           {/* Stats Grid - 4 columns */}
-                           <div className="grid grid-cols-4 gap-2 py-4 mb-4 border-y border-slate-100 dark:border-slate-700">
-                              <div className="text-center">
-                                 <div className="flex items-center justify-center gap-0.5 mb-0.5">
-                                    <span className="material-icons-round text-amber-500 text-xs">star</span>
-                                    <span className="text-sm font-black text-slate-900 dark:text-white">{vendor.vendor_rating?.toFixed(1) || '0.0'}</span>
-                                 </div>
-                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Rating</div>
-                              </div>
-                              <div className="text-center border-l border-slate-100 dark:border-slate-700">
-                                 <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
-                                    {vendor.completed_orders ?? 0}
-                                 </div>
-                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Orders</div>
-                              </div>
-                              <div className="text-center border-l border-slate-100 dark:border-slate-700">
-                                 <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
-                                    {(vendor.follower_count ?? followerCount) >= 1000 ? `${((vendor.follower_count ?? followerCount) / 1000).toFixed(1)}k` : (vendor.follower_count ?? followerCount)}
-                                 </div>
-                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Followers</div>
-                              </div>
-                              <div className="text-center border-l border-slate-100 dark:border-slate-700">
-                                 <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
-                                    {vendor.total_products ?? 0}
-                                 </div>
-                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Products</div>
-                              </div>
+                  {/* Tags & Discovery - Persistent in sidebar */}
+                  {(product.tags?.length || product.use_case_tags?.length || product.occasion_tags?.length) && (
+                     <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-slate-800 dark:to-slate-800/50 rounded-[32px] p-8 border border-purple-100 dark:border-slate-700 shadow-sm animate-in slide-in-from-bottom duration-700">
+                        <div className="flex items-center gap-3 mb-6">
+                           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                              <span className="material-icons-round text-white">auto_awesome</span>
                            </div>
+                           <h3 className="text-lg font-black text-slate-900 dark:text-white">Discovery</h3>
+                        </div>
 
-                           {/* Action Buttons */}
-                           <div className="flex gap-2 mb-4">
-                              <button onClick={handleMessageClick} className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2">
-                                 <span className="material-icons-round text-sm">chat</span> Message
-                              </button>
-                              <a
-                                 href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
-                                 target="_blank"
-                                 rel="noopener noreferrer"
-                                 className="px-4 py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-primary to-orange-500 text-white hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
-                              >
-                                 <span className="material-icons-round text-sm">storefront</span> Visit Store
-                              </a>
-                           </div>
-                           <div className="flex gap-2">
-                              {/* Follow Button */}
-                              <button
-                                 onClick={handleFollowToggle}
-                                 disabled={isFollowLoading}
-                                 className={`flex-1 px-4 py-3 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${isFollowing
-                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-                                    : 'border-2 border-purple-500 text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-                                    } ${isFollowLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                 <span className="material-icons-round text-sm">{isFollowing ? 'check' : 'add'}</span>
-                                 {isFollowing ? 'Following' : 'Follow'}
-                              </button>
-                           </div>
-
-                           {/* Business Verification Section */}
-                           {vendor.is_verified && (
-                              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/30">
-                                 <div className="flex items-center gap-3">
-                                    <span className="material-icons-round text-blue-500 text-xl">verified_user</span>
-                                    <div className="flex-1">
-                                       <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Business Legally Verified</p>
-                                       <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Licensed & Regulated Store</p>
-                                    </div>
-                                    <a
-                                       href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-xl text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide shadow-sm hover:shadow transition-all text-center"
-                                    >
-                                       View Certificates
-                                    </a>
+                        <div className="space-y-6">
+                           {product.occasion_tags && product.occasion_tags.length > 0 && (
+                              <div>
+                                 <span className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3 block">Perfect For</span>
+                                 <div className="flex flex-wrap gap-2">
+                                    {product.occasion_tags.map(tag => (
+                                       <span key={tag} className="px-4 py-2 bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 text-xs font-bold rounded-full shadow-sm border border-purple-100 dark:border-purple-800 hover:scale-105 transition-transform">
+                                          {tag}
+                                       </span>
+                                    ))}
+                                 </div>
+                              </div>
+                           )}
+                           {product.use_case_tags && product.use_case_tags.length > 0 && (
+                              <div>
+                                 <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-3 block">Best Used In</span>
+                                 <div className="flex flex-wrap gap-2">
+                                    {product.use_case_tags.map(tag => (
+                                       <a href={`/search?q=${tag}`} key={tag} className="px-4 py-2 bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full shadow-sm border border-blue-100 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all hover:scale-105">
+                                          {tag}
+                                       </a>
+                                    ))}
+                                 </div>
+                              </div>
+                           )}
+                           {product.tags && product.tags.length > 0 && (
+                              <div className="pt-4 border-t border-purple-200/50 dark:border-slate-700">
+                                 <div className="flex flex-wrap gap-2">
+                                    {product.tags.map(tag => (
+                                       <span key={tag} className="text-xs font-bold text-slate-500 hover:text-primary cursor-pointer transition-colors uppercase tracking-tight">
+                                          #{tag}
+                                       </span>
+                                    ))}
                                  </div>
                               </div>
                            )}
                         </div>
-                     ) : null}
-                  </div>
+                     </div>
+                  )}
                </div>
-            )}
+            </div>
 
-            {/* Specifications Tab Content */}
-            {activeTab === 'specifications' && (
-               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                  <table className="w-full text-sm">
-                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {/* Brand */}
-                        {product.brand && (
-                           <tr>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Brand</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.brand}</td>
-                           </tr>
-                        )}
-                        {/* Category */}
-                        <tr>
-                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Category</td>
-                           <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.category || 'N/A'}</td>
-                        </tr>
-                        {/* Availability */}
-                        <tr>
-                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Availability</td>
-                           <td className="px-6 py-4">
-                              <span className={`inline-flex items-center gap-1.5 ${product.stock > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                 <span className={`w-2 h-2 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                 {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
-                              </span>
-                           </td>
-                        </tr>
-                        {/* Sold By */}
-                        {vendor && (
-                           <tr>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Sold By</td>
-                              <td className="px-6 py-4">
-                                 <a
-                                    href={`/?view=vendor-store&vendorId=${vendor.vendor_id}`}
-                                    className="text-primary hover:underline font-medium"
-                                 >
-                                    {vendor.business_name}
-                                 </a>
-                              </td>
-                           </tr>
-                        )}
-                        {/* Condition */}
-                        {product.condition && (
-                           <tr>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Condition</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100 capitalize">{product.condition.replace('_', ' ')}</td>
-                           </tr>
-                        )}
-                        {/* SKU */}
-                        {product.sku && (
-                           <tr>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">SKU</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100 font-mono text-xs">{product.sku}</td>
-                           </tr>
-                        )}
-                        {/* Product Variants/Attributes */}
-                        {productVariants.length > 0 && Object.entries(productVariants[0]?.options || {}).map(([key, value]) => (
-                           <tr key={key}>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800 capitalize">{key}</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">
-                                 {productVariants.map(v => v.options[key]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
-                              </td>
-                           </tr>
-                        ))}
-                        {/* Custom Attributes */}
-                        {productAttributes && productAttributes.length > 0 && productAttributes.map((attr, idx) => (
-                           <tr key={`attr-${idx}`}>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">{attr.name}</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{attr.value}</td>
-                           </tr>
-                        ))}
-                        {/* Weight */}
-                        {product.weight && (
-                           <tr>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Weight</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.weight}</td>
-                           </tr>
-                        )}
-                        {/* Dimensions */}
-                        {product.dimensions && (
-                           <tr>
-                              <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Dimensions</td>
-                              <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.dimensions}</td>
-                           </tr>
-                        )}
-                        {/* Delivery */}
-                        <tr>
-                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Delivery</td>
-                           <td className="px-6 py-4 text-slate-900 dark:text-slate-100">
-                              {product.free_delivery ? 'Free Shipping' : `${getPrice('deliveryCost', product.delivery_cost || 0, currencyCode)}`}
-                              {product.deliveryTimeEstimate && ` • ${product.deliveryTimeEstimate}`}
-                           </td>
-                        </tr>
-                        {/* Return Policy */}
-                        <tr>
-                           <td className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 w-1/3 border-r border-slate-100 dark:border-slate-800">Return Policy</td>
-                           <td className="px-6 py-4 text-slate-900 dark:text-slate-100">{product.return_policy || '30-day returns'}</td>
-                        </tr>
-                     </tbody>
-                  </table>
-               </div>
-            )}
-
-            {/* Reviews Tab Content */}
-            {activeTab === 'reviews' && (
-               <div id="reviews">
-                  <ReviewSection
-                     productId={product.id.toString()}
-                     userId={user?.id}
-                     hasPurchased={false}
-                  />
-               </div>
-            )}
          </div>
 
-         {/* Product Questions */}
-         <ProductQuestions
-            product={product}
-            attributes={productAttributes}
-            vendorContext={vendorContextForAI}
-         />
 
          {/* AI Search Results: Use Case Recommendations */}
          {(isLoadingUseCase || (product.use_case_tags && product.use_case_tags.length > 0 && useCaseItems.length > 0)) && (
