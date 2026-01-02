@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SUPPORTED_CURRENCIES, setUserCurrency } from '@/lib/currency';
+import { FlagIcon } from '@/lib/FlagIcon';
 
 interface CountrySelectorProps {
     isOpen: boolean;
@@ -77,7 +78,7 @@ const CountrySelector: React.FC<CountrySelectorProps> = ({ isOpen, onClose, onCu
                                         onClick={() => handleCurrencySelect(currency.code)}
                                         className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     >
-                                        <span className="text-2xl">{currency.flag}</span>
+                                        <FlagIcon emoji={currency.flag} label={currency.name} fallbackText={currency.code} className="w-8 h-8" />
                                         <div className="flex-1 text-left">
                                             <div className="font-medium text-gray-900 dark:text-white">
                                                 {currency.name}
@@ -108,7 +109,7 @@ const CountrySelector: React.FC<CountrySelectorProps> = ({ isOpen, onClose, onCu
                                         onClick={() => handleCurrencySelect(currency.code)}
                                         className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     >
-                                        <span className="text-lg">{currency.flag}</span>
+                                        <FlagIcon emoji={currency.flag} label={currency.name} fallbackText={currency.code} className="w-5 h-5" />
                                         <div className="flex-1 text-left">
                                             <div className="text-sm font-medium text-gray-900 dark:text-white">
                                                 {currency.name}

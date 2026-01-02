@@ -113,7 +113,7 @@ const Step5Address: React.FC<Step5Props> = ({ data, updateData, onNext, onBack }
                                 <option value="">Select your country</option>
                                 {countryList.map((country) => (
                                     <option key={country} value={country}>
-                                        {countryCurrencyMap[country].flag} {country}
+                                        {country}
                                     </option>
                                 ))}
                             </select>

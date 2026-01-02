@@ -362,7 +362,7 @@ export const fetchDealsProducts = async (
             const price = item.current_price ?? item.price ?? originalPrice;
             const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
                 ? item.gallery.map((media: any, idx: number) => ({
-                    id: media.id ?? `${item.id} -media - ${idx} `,
+                    id: media.id ?? `${item.id}-media-${idx}`,
                     image_url: media.image_url ?? media.url ?? undefined,
                     thumbnail_url: media.thumbnail_url ?? undefined,
                     is_main: media.is_main ?? false,
@@ -374,7 +374,7 @@ export const fetchDealsProducts = async (
 
             const mediaItems: MediaItem[] = galleryMedia
                 .map((media, idx) => ({
-                    id: (media.id ?? `${item.id} -media - ${idx} `).toString(),
+                    id: (media.id ?? `${item.id}-media-${idx}`).toString(),
                     type: (media.type as MediaItem['type']) ?? 'image',
                     url: (media.video_url ?? media.image_url ?? '').toString(),
                     thumbnail: media.thumbnail_url ?? undefined,
@@ -3694,8 +3694,7 @@ export const saveShippingTemplate = async (template: any): Promise<boolean> => {
 
 
 // Step 1: User Registration
-export const registerSeller = async (email: string, password: string, fullName: string, phone?: string): Promise<{ user: any, error: any }> => {
-
+export const registerSeller = async (email: string, password: string, fullName: string, phone?: string): Promise<{ user: any, session: any, error: any }> => {
     console.log('Registering seller:', email);
 
     // 1. Sign up with Supabase Auth
@@ -3714,7 +3713,17 @@ export const registerSeller = async (email: string, password: string, fullName: 
 
     if (authError) {
         console.error('Error signing up seller auth:', authError);
-        return { user: null, error: authError };
+        return { user: null, session: null, error: authError };
+    }
+
+    console.log('Registration successful:', {
+        userId: authData.user?.id,
+        hasSession: !!authData.session,
+        isConfirmed: authData.user?.email_confirmed_at ? 'yes' : 'no'
+    });
+
+    if (!authData.session) {
+        console.warn('⚠️ No session returned after signup. Email confirmation may be required.');
     }
 
     // 2. Update users table if needed (though trigger usually handles this, we ensure is_seller is true)
@@ -3738,7 +3747,7 @@ export const registerSeller = async (email: string, password: string, fullName: 
         }
     }
 
-    return { user: authData.user, error: null };
+    return { user: authData.user, session: authData.session, error: null };
 };
 
 // Driver Registration
@@ -3994,6 +4003,10 @@ export const createBusinessProfile = async (payload: {
     logo_url?: string;
     banner_url?: string;
 }): Promise<{ business: Business | null, error: any }> => {
+    // Log the current session state for debugging 401s
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log('Upserting business profile. Active user:', sessionData.session?.user?.id || 'NONE', 'Role:', sessionData.session?.user?.role || 'anon');
+
     const { data, error } = await supabase
         .from('vendors')
         .upsert(payload, { onConflict: 'user_id' })
@@ -4046,7 +4059,7 @@ export const uploadVendorMediaToStorage = async (file: File, bucketPath: string)
     // 1. Upload to Storage
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-    const filePath = `${bucketPath} / ${fileName}`;
+    const filePath = `${bucketPath}/${fileName}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
         .from('seller-documents')

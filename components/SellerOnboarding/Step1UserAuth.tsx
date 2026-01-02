@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { OnboardingState } from '@/types';
+import { supabase } from '../../lib/supabase';
 
 interface Step1Props {
     data: OnboardingState;
@@ -9,43 +10,31 @@ interface Step1Props {
 
 const Step1UserAuth: React.FC<Step1Props> = ({ data, updateData, onNext }) => {
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
-    const [passwordStrength, setPasswordStrength] = useState(0);
+    const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        supabase.auth.getSession().then(({ data: sessionData }) => {
+            if (!mounted) return;
+            setSignedInEmail(sessionData.session?.user?.email ?? null);
+        });
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         updateData({ [name]: value });
-
-        // Check password strength
-        if (name === 'password') {
-            let strength = 0;
-            if (value.length >= 8) strength++;
-            if (/[a-z]/.test(value) && /[A-Z]/.test(value)) strength++;
-            if (/\d/.test(value)) strength++;
-            if (/[^a-zA-Z0-9]/.test(value)) strength++;
-            setPasswordStrength(strength);
-        }
 
         if (errors[name]) {
             setErrors({ ...errors, [name]: '' });
         }
     };
 
-    const getPasswordStrengthColor = () => {
-        if (passwordStrength === 0) return 'bg-gray-300';
-        if (passwordStrength === 1) return 'bg-red-500';
-        if (passwordStrength === 2) return 'bg-yellow-500';
-        if (passwordStrength === 3) return 'bg-blue-500';
-        return 'bg-green-500';
-    };
-
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
         if (!data.businessLocation) newErrors.businessLocation = 'Location is required';
-        if (!data.email) newErrors.email = 'Email is required';
-        if (!data.email.includes('@')) newErrors.email = 'Please enter a valid email';
-        if (!data.password) newErrors.password = 'Password is required';
-        if (data.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
-        if (data.password !== data.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -61,13 +50,19 @@ const Step1UserAuth: React.FC<Step1Props> = ({ data, updateData, onNext }) => {
     return (
         <div className="max-w-2xl mx-auto">
             <div className="mb-8">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Your Seller Account</h2>
-                <p className="text-gray-600">Join thousands of successful sellers and start earning today</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Set Up Your Seller Profile</h2>
+                <p className="text-gray-600">You’ll use your existing buyer account to sell.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Left: Form */}
                 <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm font-semibold text-blue-900">Signed-in account</p>
+                        <p className="text-sm text-blue-800">{signedInEmail || 'Signed in'}</p>
+                        <p className="text-xs text-blue-700 mt-1">No password is needed to register as a seller.</p>
+                    </div>
+
                     {/* Business Location */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">Business Location <span className="text-red-500">*</span></label>
@@ -139,61 +134,6 @@ const Step1UserAuth: React.FC<Step1Props> = ({ data, updateData, onNext }) => {
                             );
                         })()}
                         {errors.businessLocation && <p className="text-red-500 text-xs mt-1">{errors.businessLocation}</p>}
-                    </div>
-
-                    {/* Email */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Business Email <span className="text-red-500">*</span></label>
-                        <input
-                            type="email"
-                            name="email"
-                            value={data.email}
-                            onChange={handleChange}
-                            className={`w-full px-4 py-3 rounded-lg border transition-colors focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none ${errors.email ? 'border-red-500' : 'border-gray-300'
-                                }`}
-                            placeholder="your.business@email.com"
-                        />
-                        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                    </div>
-
-                    {/* Password */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Password <span className="text-red-500">*</span></label>
-                        <input
-                            type="password"
-                            name="password"
-                            value={data.password}
-                            onChange={handleChange}
-                            className={`w-full px-4 py-3 rounded-lg border transition-colors focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none ${errors.password ? 'border-red-500' : 'border-gray-300'
-                                }`}
-                            placeholder="Create a strong password"
-                        />
-                        {data.password && (
-                            <div className="mt-2">
-                                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                    <div className={`h-full ${getPasswordStrengthColor()} transition-all duration-300`} style={{ width: `${(passwordStrength / 4) * 100}%` }}></div>
-                                </div>
-                                <p className="text-xs text-gray-600 mt-1">
-                                    Strength: {passwordStrength === 0 && 'Very Weak'} {passwordStrength === 1 && 'Weak'} {passwordStrength === 2 && 'Fair'} {passwordStrength === 3 && 'Good'} {passwordStrength === 4 && 'Strong'}
-                                </p>
-                            </div>
-                        )}
-                        {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                    </div>
-
-                    {/* Confirm Password */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password <span className="text-red-500">*</span></label>
-                        <input
-                            type="password"
-                            name="confirmPassword"
-                            value={data.confirmPassword}
-                            onChange={handleChange}
-                            className={`w-full px-4 py-3 rounded-lg border transition-colors focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                                }`}
-                            placeholder="Re-enter your password"
-                        />
-                        {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
                     </div>
 
                     <button

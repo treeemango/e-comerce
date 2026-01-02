@@ -5,6 +5,7 @@ import { fetchSuggestions, trackSearch, SearchSuggestion, fetchTrendingCategorie
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb } from '../types';
 import { getCurrencySymbol, SUPPORTED_CURRENCIES, getUserCurrency, setUserCurrency, useCurrencyConverter, formatPrice } from '@/lib/currency';
 import { detectUserCurrency } from '@/lib/currency-service';
+import { FlagIcon } from '@/lib/FlagIcon';
 import { useNotifications } from './NotificationContext';
 import NotificationInbox from './NotificationInbox';
 import CountrySelector from './CountrySelector';
@@ -760,7 +761,12 @@ const Header: React.FC<HeaderProps> = ({
                         window.location.reload();
                       }}
                     >
-                      <span className="text-base">{currency.flag}</span>
+                      <FlagIcon
+                        emoji={currency.flag}
+                        label={currency.name}
+                        fallbackText={currency.code}
+                        className="w-5 h-5"
+                      />
                       <div className="flex-1 text-left">
                         <span className="font-medium">{currency.code}</span>
                         <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">{currency.name}</span>

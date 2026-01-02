@@ -6,14 +6,13 @@ import Step3Financials from './Step3Financials';
 import Step5Address from './Step5Address';
 import Step4Assets from './Step4Assets';
 import {
-    registerSeller,
     createBusinessProfile,
     addVendorBankAccount,
     uploadVendorMediaToStorage,
     createVendorMediaRecord,
-    updateBusinessMedia,
-    createBusinessPolicies
+    
 } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 
 interface SellerOnboardingViewProps {
     onComplete: () => void;
@@ -76,11 +75,13 @@ const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ onComplete,
     const handleFinalSubmit = async () => {
         updateData({ isLoading: true, error: null });
         try {
-            // 1. Register User
-            const { user, error: authError } = await registerSeller(state.email, state.password, state.shopName);
-            if (authError) throw new Error('Registration failed: ' + authError.message);
-            if (!user) throw new Error('Registration failed: No user returned');
-            const userId = user.id;
+            // 1. Require existing signed-in user (buyer first)
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
+            const userId = sessionData.session?.user?.id;
+            if (!userId) {
+                throw new Error('Please sign in as a buyer first, then continue to register as a seller.');
+            }
 
             // 2. Upload files to storage (without DB records yet)
             let logoUrl = null, logoPath = null;
@@ -148,9 +149,13 @@ const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ onComplete,
             };
             const { business, error: bizError } = await createBusinessProfile(payload);
             if (bizError) {
+                console.error('Business profile creation error:', bizError);
                 // Check for duplicate key error
                 if (bizError.code === '23505' && bizError.message?.includes('vendors_user_id_key')) {
                     throw new Error('This account already has a seller profile. Please sign in to your seller dashboard instead.');
+                }
+                if (bizError.status === 401 || bizError.status === 403) {
+                    throw new Error('Profile creation failed: Unauthorized. This usually means you need to confirm your email before you can set up a shop. Please check your inbox.');
                 }
                 throw new Error('Business creation failed: ' + bizError.message);
             }
@@ -183,6 +188,21 @@ const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ onComplete,
                 routing_number: state.routingNumber
             });
             if (bankError) console.error('Bank account warning:', bankError);
+
+            // 6. Ensure the user is marked as a seller for immediate dashboard access
+            try {
+                await supabase
+                    .from('users')
+                    .update({ is_seller: true, role: 'seller' })
+                    .eq('id', userId);
+            } catch (e) {
+                console.warn('Non-blocking: failed to update public.users role', e);
+            }
+            try {
+                await supabase.auth.updateUser({ data: { role: 'seller', is_seller: true } });
+            } catch (e) {
+                console.warn('Non-blocking: failed to update auth metadata', e);
+            }
 
             // Success!
             alert('Seller account created successfully! Redirecting to dashboard...');

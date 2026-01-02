@@ -1,8 +1,9 @@
 
 import React, { useState, useRef } from 'react';
 import { CSVParser, ParsedRow } from '../../../lib/csv-parser';
-import { createProductsBulk } from '../../../lib/api';
-import { CreateProductPayload } from '../../../types';
+import { createProductsBulk, fetchVerticals, fetchCategories, fetchBrands } from '../../../lib/api';
+import { CreateProductPayload, ShopifyVertical, ShopifyCategory, ShopifyBrand } from '../../../types';
+import { useEffect } from 'react';
 
 interface AddProductsUploadViewProps {
     sellerId: string;
@@ -17,7 +18,120 @@ const AddProductsUploadView: React.FC<AddProductsUploadViewProps> = ({ sellerId 
         failed: { index: number; error: string }[];
     } | null>(null);
     const [progress, setProgress] = useState({ current: 0, total: 0 });
+    const [allCategories, setAllCategories] = useState<ShopifyCategory[]>([]);
+    const [allBrands, setAllBrands] = useState<ShopifyBrand[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Initial data fetch for resolution maps
+    useEffect(() => {
+        const loadResolutionData = async () => {
+            try {
+                // Fetch all verticals first to get categories
+                const verticals = await fetchVerticals();
+                const categoryPromises = verticals.map(v => fetchCategories(v.id));
+                const categoriesSubsets = await Promise.all(categoryPromises);
+                const categories = categoriesSubsets.flat();
+                setAllCategories(categories);
+
+                // For brands, fetch for each category
+                // This might be slow if many categories, but safe for initial implementation
+                const brandPromises = categories.map(c => fetchBrands(c.id));
+                const brandsSubsets = await Promise.all(brandPromises);
+                const brands = brandsSubsets.flat();
+                setAllBrands(brands);
+            } catch (err) {
+                console.error('Failed to load resolution data:', err);
+            }
+        };
+
+        loadResolutionData();
+    }, []);
+
+    const findBestMatch = (input: string, options: { id: string; name: string }[]) => {
+        const normalInput = input.toLowerCase().trim();
+        if (!normalInput) return null;
+
+        // 1. Exact match
+        const exact = options.find(o => o.name.toLowerCase() === normalInput);
+        if (exact) return exact;
+
+        // 2. Starts with / Contains
+        const partial = options.find(o =>
+            o.name.toLowerCase().includes(normalInput) ||
+            normalInput.includes(o.name.toLowerCase())
+        );
+        if (partial) return partial;
+
+        // 3. Word-based match (e.g., "Electrical Items" vs "Electronics")
+        const inputWords = normalInput.split(/\s+/).filter(w => w.length > 2);
+        if (inputWords.length > 0) {
+            const wordMatch = options.find(o => {
+                const lowerName = o.name.toLowerCase();
+                return inputWords.some(word => lowerName.includes(word));
+            });
+            if (wordMatch) return wordMatch;
+        }
+
+        return null;
+    };
+
+    const resolveCategoryId = (nameOrId: string) => {
+        if (!nameOrId) return '';
+        // If it looks like a UUID, return as is
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(nameOrId)) return nameOrId;
+
+        const bestMatch = findBestMatch(nameOrId, allCategories);
+        return bestMatch ? bestMatch.id : nameOrId;
+    };
+
+    const resolveBrandId = (nameOrId: string) => {
+        if (!nameOrId) return '';
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(nameOrId)) return nameOrId;
+
+        const bestMatch = findBestMatch(nameOrId, allBrands);
+        return bestMatch ? bestMatch.id : nameOrId;
+    };
+
+    const handleDownloadTemplate = () => {
+        const headers = [
+            'title', 'description', 'category_id', 'brand_id', 'condition', 'listing_type',
+            'price', 'compare_at_price', 'currency', 'stock', 'sku', 'sale_unit',
+            'image_url', 'additional_images', 'video_url',
+            'seo_title', 'meta_description', 'url_slug', 'canonical_url', 'seo_keywords',
+            'free_delivery', 'delivery_scope', 'delivery_cost', 'delivery_time_estimate', 'delivery_time_days', 'is_express_delivery',
+            'min_order_value', 'min_order_for_free_delivery', 'delivery_locations',
+            'tags', 'use_case_tags', 'occasion_tags', 'attributes', 'quantity_discounts'
+        ];
+
+        const sampleData = [
+            [
+                'Sample Product', 'A great product description', 'electronics', 'sony', 'new', 'direct_purchase',
+                '99.99', '129.99', 'USD', '100', 'SKU001', 'piece',
+                'https://example.com/image.jpg', 'https://example.com/image2.jpg,https://example.com/image3.jpg', 'https://youtube.com/watch?v=123',
+                'Sample SEO Title', 'Meta description for SEO', 'sample-product', 'https://example.com/sample-product', 'keyword1,keyword2',
+                'true', 'nationwide', '0', '3-5 days', '3', 'false',
+                '0', '50', 'USA,Canada',
+                'electronics,gadget', 'home-office', 'gift', 'Color:Black|Material:Plastic', '5:89.99|10:79.99'
+            ]
+        ];
+
+        const csvContent = [
+            headers.join(','),
+            ...sampleData.map(row => row.map(val => `"${val.replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'bulk_upload_template.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -43,37 +157,114 @@ const AddProductsUploadView: React.FC<AddProductsUploadViewProps> = ({ sellerId 
                 }
 
                 // Map CSV rows to CreateProductPayload
-                // Expected CSV headers: title, description, category_id, price, currency, stock, sku, image_url
                 const productsToCreate = result.data.map((row: ParsedRow, index: number) => {
-                    const payload: CreateProductPayload = {
+                    // Extract attributes
+                    const attributes: any[] = [];
+                    if (row['attributes']) {
+                        const pairs = row['attributes'].split('|');
+                        pairs.forEach(pair => {
+                            const [key, value] = pair.split(':');
+                            if (key && value) {
+                                attributes.push({
+                                    name: key.trim(),
+                                    value: value.trim(),
+                                    attribute_id: '', // Will be handled by backend if custom
+                                    is_custom: true
+                                });
+                            }
+                        });
+                    }
+
+                    // Extract SEO and other arrays
+                    const seoKeywords = row['seo_keywords'] ? row['seo_keywords'].split(',').map(s => s.trim()) : [];
+                    const deliveryLocations = row['delivery_locations'] ? row['delivery_locations'].split(',').map(s => s.trim()) : [];
+                    const tags = row['tags'] ? row['tags'].split(',').map(s => s.trim()) : [];
+                    const useCaseTags = row['use_case_tags'] ? row['use_case_tags'].split(',').map(s => s.trim()) : [];
+                    const occasionTags = row['occasion_tags'] ? row['occasion_tags'].split(',').map(s => s.trim()) : [];
+
+                    // Extract media
+                    const additionalImages = row['additional_images'] ? row['additional_images'].split(',').map(s => s.trim()) : [];
+                    const allImages = [row['image_url'], ...additionalImages].filter(Boolean);
+
+                    const media: any[] = allImages.map((url, idx) => ({
+                        url,
+                        storage_path: '',
+                        media_type: 'image',
+                        is_main: idx === 0,
+                        position: idx
+                    }));
+
+                    if (row['video_url']) {
+                        media.push({
+                            url: row['video_url'],
+                            storage_path: '',
+                            media_type: row['video_url'].includes('youtube.com') || row['video_url'].includes('youtu.be') ? 'youtube' : 'video',
+                            is_main: false,
+                            position: media.length
+                        });
+                    }
+
+                    // Extract quantity discounts
+                    const quantityDiscounts: any[] = [];
+                    if (row['quantity_discounts']) {
+                        const pairs = row['quantity_discounts'].split('|');
+                        pairs.forEach(pair => {
+                            const [qty, price] = pair.split(':');
+                            if (qty && price) {
+                                quantityDiscounts.push({
+                                    min_quantity: parseInt(qty.trim()),
+                                    unit_price: parseFloat(price.trim())
+                                });
+                            }
+                        });
+                    }
+
+                    const payload: any = {
                         title: row['title'] || `Product ${index + 1}`,
                         description: row['description'] || '',
-                        category_id: row['category_id'] || '',
+                        category_id: resolveCategoryId(row['category_id'] || ''),
+                        brand_id: resolveBrandId(row['brand_id'] || ''),
                         currency: row['currency'] || 'USD',
-                        condition: (row['condition'] as any) || 'new',
-                        attributes: [],
+                        condition: row['condition'] || 'new',
+                        listing_type: row['listing_type'] || 'direct_purchase',
+                        sale_unit: row['sale_unit'] || row['pricing_unit'] || 'piece',
+                        seo_title: row['seo_title'] || '',
+                        meta_description: row['meta_description'] || '',
+                        url_slug: row['url_slug'] || '',
+                        canonical_url: row['canonical_url'] || '',
+                        seo_keywords: row['seo_keywords'] || '',
+                        free_delivery: row['free_delivery'] === 'true',
+                        delivery_scope: row['delivery_scope'] || 'nationwide',
+                        delivery_cost: parseFloat(row['delivery_cost'] || '0'),
+                        delivery_time_estimate: row['delivery_time_estimate'] || row['delivery_time'] || '',
+                        delivery_time_days: parseInt(row['delivery_time_days'] || '1'),
+                        is_express_delivery: row['is_express_delivery'] === 'true',
+                        min_order_value: parseFloat(row['min_order_value'] || '0'),
+                        min_order_for_free_delivery: parseFloat(row['min_order_for_free_delivery'] || '0'),
+                        delivery_locations: deliveryLocations,
+                        tags: tags,
+                        use_case_tags: useCaseTags,
+                        occasion_tags: occasionTags,
+                        attributes,
                         variants: [{
                             sku: row['sku'] || '',
                             price: parseFloat(row['price'] || '0'),
+                            compare_at_price: parseFloat(row['compare_at_price'] || row['price'] || '0'),
                             stock: parseInt(row['stock'] || '0'),
                             options: {},
                             is_default: true,
                             image_url: row['image_url'] || ''
                         }],
-                        media: row['image_url'] ? [{
-                            url: row['image_url'],
-                            storage_path: '',
-                            media_type: 'image',
-                            is_main: true,
-                            position: 0
-                        }] : []
+                        media,
+                        quantity_discounts: quantityDiscounts
                     };
 
                     return {
                         payload,
                         variants: payload.variants,
                         media: payload.media,
-                        attributes: payload.attributes
+                        attributes: payload.attributes,
+                        quantityDiscounts: payload.quantity_discounts
                     };
                 });
 
@@ -149,7 +340,10 @@ const AddProductsUploadView: React.FC<AddProductsUploadViewProps> = ({ sellerId 
                         </div>
 
                         <div className="flex justify-center mt-12">
-                            <button className="bg-orange-500 text-white px-12 py-2.5 rounded font-bold hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20">
+                            <button
+                                onClick={handleDownloadTemplate}
+                                className="bg-orange-500 text-white px-12 py-2.5 rounded font-bold hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20"
+                            >
                                 Generate spreadsheet
                             </button>
                         </div>

@@ -1417,17 +1417,37 @@ const App: React.FC = () => {
         {currentView === 'seller-login' && (
           <SellerLoginView
             onSignUpClick={() => {
+              if (!user?.id) {
+                setAuthNotice('Please sign in as a buyer first to register as a seller.');
+                handleSignInClick();
+                return;
+              }
               setCurrentView('seller-onboarding');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onSignInClick={handleSignInClick}
           />
         )}
-        {currentView === 'seller-onboarding' && (
+        {currentView === 'seller-onboarding' && !user?.id && (
+          <BuyerAuthView
+            onAuthSuccess={handleAuthSuccess}
+            authContext={{ view: 'seller-onboarding' }}
+            externalError={authNotice || 'Please sign in as a buyer first to register as a seller.'}
+          />
+        )}
+        {currentView === 'seller-onboarding' && user?.id && (
           <SellerOnboardingView
-            onComplete={() => {
-              setCurrentView('seller-dashboard'); // Navigate to dashboard on success
-              setDashboardTab('account-profile'); // Redirect to profile to see verification status
+            onComplete={async () => {
+              try {
+                const sellerProfile = await fetchSellerProfile(user.id);
+                if (sellerProfile) {
+                  setUser(prev => (prev ? { ...prev, role: 'seller' } : prev));
+                }
+              } catch {
+                // Non-blocking
+              }
+              setCurrentView('seller-dashboard');
+              setDashboardTab('account-profile');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onCancel={() => {

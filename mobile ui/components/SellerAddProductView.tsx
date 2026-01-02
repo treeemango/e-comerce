@@ -1945,7 +1945,7 @@ export const SellerAddProductView: React.FC<SellerAddProductViewProps> = ({
                                             className="bg-white border-2 border-gray-100 rounded-xl px-3 py-2 text-sm font-bold focus:border-orange-500 outline-none transition-all"
                                         >
                                             {SUPPORTED_CURRENCIES.map(c => (
-                                                <option key={c.code} value={c.code}>{c.flag} {c.code} - {c.name}</option>
+                                                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
                                             ))}
                                         </select>
                                     </div>

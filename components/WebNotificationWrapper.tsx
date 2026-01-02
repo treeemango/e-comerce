@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useNotifications } from './NotificationContext';
-import { fetchUserCoupons, fetchBuyerOrders, fetchBuyerNotificationPreferences, getSellerUnreadCount, getWishlist, fetchLightningDeals, fetchSellerOrdersSummary, fetchSellerStats, WishlistProduct, LightningDealItem } from '../lib/api';
+import { fetchUserCoupons, fetchBuyerOrders, fetchBuyerNotificationPreferences, getSellerUnreadCount, getWishlist, fetchLightningDeals, fetchSellerOrdersSummary, fetchSellerStats, fetchVendorFullProfile, WishlistProduct, LightningDealItem } from '../lib/api';
 import { UserCoupon, BuyerOrder, User, BuyerNotificationPreferences, SellerOrderSummary, SellerStats } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -27,6 +27,8 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
     const prevRecommendedIds = useRef<Set<string>>(new Set());
     const prefsRef = useRef<BuyerNotificationPreferences | null>(null);
 
+    const prevSellerVerifiedRef = useRef<boolean | null>(null);
+
     const onDataUpdateRef = useRef(onDataUpdate);
     const showNotificationRef = useRef(showNotification);
 
@@ -42,13 +44,45 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
         const loadHighFrequencyData = async () => {
             if (!user?.id) return;
             try {
-                const isSeller = user.role === 'seller' || user.role === 'vendor' || user.role === 'admin';
-                const [orders, unreadCount, sellerOrders, sellerStats] = await Promise.all([
+                const isSeller = user.role === 'seller' || (user as any)?.role === 'vendor' || user.role === 'admin' || (user as any)?.is_seller === true;
+                const [orders, unreadCount, sellerOrders, sellerStats, vendorProfile] = await Promise.all([
                     fetchBuyerOrders(user.id),
                     getSellerUnreadCount(user.id),
                     isSeller ? fetchSellerOrdersSummary(user.id) : Promise.resolve([] as SellerOrderSummary[]),
-                    isSeller ? fetchSellerStats(user.id) : Promise.resolve(null as SellerStats | null)
+                    isSeller ? fetchSellerStats(user.id) : Promise.resolve(null as SellerStats | null),
+                    isSeller ? fetchVendorFullProfile(user.id) : Promise.resolve(null as any)
                 ]);
+
+                // Seller verification approved notification (once)
+                if (isSeller && vendorProfile && typeof vendorProfile.is_verified === 'boolean') {
+                    const currentVerified = !!vendorProfile.is_verified;
+                    const prevVerified = prevSellerVerifiedRef.current;
+
+                    if (prevVerified === null) {
+                        prevSellerVerifiedRef.current = currentVerified;
+                    } else {
+                        const storageKey = `seller_verified_notified_${user.id}`;
+                        const alreadyNotified = typeof window !== 'undefined' && window.localStorage
+                            ? window.localStorage.getItem(storageKey) === '1'
+                            : false;
+
+                        if (!alreadyNotified && prevVerified === false && currentVerified === true) {
+                            showNotificationRef.current(
+                                '🎉 Congratulations! Your seller profile has been approved. Your store is now verified.',
+                                'success',
+                                8000,
+                                undefined,
+                                { target: 'seller-dashboard' }
+                            );
+                            try {
+                                window.localStorage?.setItem(storageKey, '1');
+                            } catch {
+                                // ignore
+                            }
+                        }
+                        prevSellerVerifiedRef.current = currentVerified;
+                    }
+                }
 
                 if (hasInitialLoaded.current) {
                     // Order status change notification...

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    registerSeller,
     checkShopNameAvailability,
     createBusinessProfile,
     addVendorBankAccount,
@@ -9,6 +8,7 @@ import {
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { processImageForUpload, validateImageFile } from '@/lib/image-utils';
+import { supabase } from '@/lib/supabase';
 
 interface SellerOnboardingViewProps {
     userId?: string;
@@ -28,6 +28,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
     const [error, setError] = useState<string | null>(null);
     const [compressing, setCompressing] = useState<string | null>(null);
     const [compressionStats, setCompressionStats] = useState<{ [key: string]: CompressionStats }>({});
+    const [isCompleting, setIsCompleting] = useState(false);
 
     const PRIMARY_CATEGORIES = [
         'Animals & Pet Supplies',
@@ -66,9 +67,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
 
     // Form State
     const [formData, setFormData] = useState({
-        // Step 1: Account (if userId not provided)
-        email: '',
-        password: '',
+        // Step 1: Store identity
         shopName: '',
         // Step 2: Business Info
         businessName: '',
@@ -161,16 +160,6 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                 setError('Shop name is required');
                 return;
             }
-            if (!userId) {
-                if (!formData.email.trim()) {
-                    setError('Email address is required');
-                    return;
-                }
-                if (!formData.password) {
-                    setError('Password is required');
-                    return;
-                }
-            }
         }
 
         if (step === 2) {
@@ -178,7 +167,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                 setError('Business name is required');
                 return;
             }
-            if (!formData.businessEmail.trim() && !formData.email.trim()) {
+            if (!formData.businessEmail.trim()) {
                 setError('Business email is required');
                 return;
             }
@@ -264,13 +253,9 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
         setIsLoading(true);
         setError(null);
         try {
-            let currentUserId = userId;
-
-            // 1. Register if no userId
+            const currentUserId = userId;
             if (!currentUserId) {
-                const { user, error: regError } = await registerSeller(formData.email, formData.password, formData.shopName);
-                if (regError) throw new Error(regError.message);
-                currentUserId = user.id;
+                throw new Error('Please sign in as a buyer first, then continue to register as a seller.');
             }
 
             // 2. Upload Media
@@ -316,7 +301,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                 business_type: formData.businessType,
                 primary_category: formData.categoryId,
                 primary_category_description: formData.categoryDescription || undefined,
-                business_email: (formData.businessEmail || formData.email) || undefined,
+                business_email: formData.businessEmail || undefined,
                 business_phone: formData.businessPhone,
                 website_url: formData.website || undefined,
                 years_in_business: formData.yearsInBusiness ? Number(formData.yearsInBusiness) : null,
@@ -342,7 +327,13 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
             };
 
             const { business, error: bizError } = await createBusinessProfile(payload);
-            if (bizError) throw new Error(bizError.message);
+            if (bizError) {
+                console.error('Business profile creation error:', bizError);
+                if (bizError.status === 401 || bizError.status === 403) {
+                    throw new Error('Profile creation failed: Unauthorized. This usually means you need to confirm your email before you can set up a shop. Please check your inbox.');
+                }
+                throw new Error(bizError.message);
+            }
             if (!business) throw new Error("Failed to create profile");
 
             // 4. Create Media Records
@@ -370,7 +361,25 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                 if (bankError) console.error('Bank account warning:', bankError);
             }
 
-            onComplete();
+            // 6. Mark the account as seller (mobile uses public.users.role)
+            try {
+                await supabase
+                    .from('users')
+                    .update({ is_seller: true, role: 'seller' })
+                    .eq('id', currentUserId);
+            } catch (e) {
+                console.warn('Non-blocking: failed to update public.users role', e);
+            }
+            try {
+                await supabase.auth.updateUser({ data: { role: 'seller', is_seller: true } });
+            } catch (e) {
+                console.warn('Non-blocking: failed to update auth metadata', e);
+            }
+
+            // Show success state briefly, then auto-redirect to Seller Dashboard.
+            setIsCompleting(true);
+            setStep(6);
+            window.setTimeout(() => onComplete(), 1400);
         } catch (err: any) {
             console.error(err);
             setError(err.message || "An unexpected error occurred");
@@ -392,17 +401,29 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
             {/* Header */}
             <div className="bg-white px-5 pt-12 pb-4 border-b border-gray-100 flex items-center justify-between sticky top-0 z-10">
                 <div className="flex items-center gap-3">
-                    <button onClick={onCancel} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl active:scale-90 transition-all">
+                    <button
+                        onClick={onCancel}
+                        disabled={step === 6}
+                        className={cn(
+                            "w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl active:scale-90 transition-all",
+                            step === 6 && "opacity-50 active:scale-100"
+                        )}
+                    >
                         <span className="material-icons text-gray-900">close</span>
                     </button>
                     <div>
                         <h2 className="text-xl font-black text-gray-900 leading-tight">Seller Setup</h2>
-                        <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Step {step} of 5: {STEPS[step - 1].title}</p>
+                        {step <= 5 ? (
+                            <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Step {step} of 5: {STEPS[step - 1].title}</p>
+                        ) : (
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Completed</p>
+                        )}
                     </div>
                 </div>
             </div>
 
             {/* Progress Bar */}
+            {step <= 5 && (
             <div className="px-5 py-4 bg-gray-50/50">
                 <div className="flex justify-between items-center relative">
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-200 -z-0" />
@@ -423,6 +444,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                     })}
                 </div>
             </div>
+            )}
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-5 py-6">
@@ -430,6 +452,27 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                     <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 items-start animate-shake">
                         <span className="material-icons text-red-500 text-xl">error_outline</span>
                         <p className="text-xs font-bold text-red-600 leading-relaxed">{error}</p>
+                    </div>
+                )}
+
+                {step === 6 && (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-10">
+                        <div className="w-20 h-20 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-6">
+                            <span className="material-icons text-emerald-600 text-4xl">check_circle</span>
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 mb-2">Congratulations!</h3>
+                        <p className="text-sm font-bold text-gray-600 leading-relaxed max-w-xs">
+                            Your seller profile is submitted. You’ll be logged in and taken to your Seller Dashboard now.
+                        </p>
+                        <div className="mt-5 p-4 bg-orange-50 border border-orange-100 rounded-2xl max-w-sm">
+                            <p className="text-xs font-bold text-orange-900 leading-relaxed">
+                                While admin reviews your profile, you can still add products. New listings may show as pending until approved.
+                            </p>
+                        </div>
+                        <div className="mt-8 flex items-center gap-3 text-[11px] font-black text-gray-500 uppercase tracking-widest">
+                            <span className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                            Redirecting…
+                        </div>
                     </div>
                 )}
 
@@ -495,25 +538,19 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                         </div>
                         <div>
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Business Type</label>
-                            <select
+                            <input
+                                type="text"
+                                placeholder="e.g. Retailer, Wholesaler, Manufacturer"
                                 value={formData.businessType}
                                 onChange={e => updateFormData({ businessType: e.target.value })}
-                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none appearance-none"
-                            >
-                                <option value="">Select business type</option>
-                                <option value="sole_proprietor">Sole Proprietor</option>
-                                <option value="partnership">Partnership</option>
-                                <option value="limited_company">Limited Company</option>
-                                <option value="cooperative">Cooperative</option>
-                                <option value="ngo">NGO</option>
-                                <option value="other">Other</option>
-                            </select>
+                                className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
+                            />
                         </div>
                         <div>
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Business Email</label>
                             <input
                                 type="email"
-                                placeholder="business@email.com"
+                                placeholder="business@example.com"
                                 value={formData.businessEmail}
                                 onChange={e => updateFormData({ businessEmail: e.target.value })}
                                 className="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:bg-white outline-none"
@@ -855,7 +892,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                                     accept="image/*,.pdf"
                                     multiple
                                     onChange={(e) => {
-                                        const files = e.target.files ? Array.from(e.target.files) : [];
+                                        const files = e.target.files ? Array.from(e.target.files) as File[] : [];
                                         if (files.length === 0) return;
 
                                         const validFiles = files.filter((f) => f.size <= 10 * 1024 * 1024);
@@ -914,7 +951,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
             </div>
 
             {/* Footer Actions */}
-            <div className="p-5 border-t border-gray-100 bg-white sticky bottom-0 z-10">
+            <div className={cn("p-5 border-t border-gray-100 bg-white sticky bottom-0 z-10", step === 6 && "hidden")}>
                 <div className="flex gap-3">
                     {step > 1 && (
                         <button
@@ -927,7 +964,7 @@ export const SellerOnboardingView: React.FC<SellerOnboardingViewProps> = ({ user
                     )}
                     <button
                         onClick={step === 5 ? handleFinalSubmit : handleNext}
-                        disabled={isLoading}
+                        disabled={isLoading || isCompleting}
                         className={cn(
                             "flex-[2] py-4 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all",
                             step === 5 ? "bg-emerald-600 text-white shadow-emerald-600/20" : "bg-orange-500 text-white shadow-orange-500/20"

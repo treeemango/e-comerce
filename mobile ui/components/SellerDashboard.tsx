@@ -6,6 +6,7 @@ import {
   fetchFilteredProducts,
   fetchVendorFullProfile,
 } from '../../lib/api';
+import type { VendorFullProfile } from '../../lib/api';
 import {
   SellerStats,
   SellerOrder,
@@ -32,6 +33,7 @@ import { SellerReviewsView } from './SellerReviewsView';
 import { SellerManageReturnsView } from './SellerManageReturnsView';
 import { SellerAnalyticsView } from './SellerAnalyticsView';
 import { SellerProfileSettingsView } from './SellerProfileSettingsView';
+import { SellerBulkUploadSheet } from './SellerBulkUploadSheet';
 
 interface SellerDashboardProps {
   sellerId: string;
@@ -68,6 +70,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [badges, setBadges] = useState<VendorBadge[]>([]);
+  const [vendorProfile, setVendorProfile] = useState<VendorFullProfile | null>(null);
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'promotions' | 'messages' | 'wallet' | 'menu' | 'reviews' | 'returns' | 'analytics' | 'settings'>('overview');
@@ -89,6 +92,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
   const [showCreateAutomaticDiscount, setShowCreateAutomaticDiscount] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [selectedProductForPricing, setSelectedProductForPricing] = useState<Product | null>(null);
   const [selectedProductForBulkPricing, setSelectedProductForBulkPricing] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SellerOrder | null>(null);
@@ -134,6 +138,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
         setProducts(invData);
         setOrders(ordersData);
         setUnreadCount(msgCount);
+        setVendorProfile(vendorProfile);
         setBadges(vendorProfile?.badges || []);
       } catch (error) {
         console.error('Failed to load seller dashboard data', error);
@@ -424,6 +429,25 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
               </div>
             </div>
 
+            {/* Pending verification / approval banner (keep product posting enabled) */}
+            {vendorProfile && vendorProfile.is_verified === false && (
+              <div className="px-5 mt-5">
+                <div className="bg-orange-50 border border-orange-100 rounded-3xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center border border-orange-100 shrink-0">
+                      <span className="material-icons-round text-orange-600">hourglass_top</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-black text-orange-900">Profile under review</div>
+                      <div className="text-[11px] font-bold text-orange-800/80 leading-relaxed mt-1">
+                        You can add products now. Your store verification and new listings may remain pending until admin approval.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Enhanced Quick Actions Grid */}
             <div className="px-5 mt-8 mb-8">
               <div className="flex items-center justify-between mb-4 px-1">
@@ -433,6 +457,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
               <div className="grid grid-cols-4 gap-4">
                 {[
                   { label: 'New Listing', icon: 'add', color: 'bg-blue-500', onClick: () => setShowAddProduct(true) },
+                  { label: 'Bulk Upload', icon: 'file_upload', color: 'bg-indigo-600', onClick: () => setShowBulkUpload(true) },
                   { label: 'Inventory', icon: 'inventory_2', color: 'bg-indigo-500', onClick: () => setActiveTab('products') },
                   { label: 'Ship Orders', icon: 'local_shipping', color: 'bg-purple-500', onClick: () => setActiveTab('orders') },
                   { label: 'Messages', icon: 'chat_bubble', color: 'bg-emerald-500', onClick: () => setActiveTab('messages') },
@@ -626,6 +651,18 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
             // Refresh orders
             const ordersData = await fetchSellerOrders(sellerId);
             setOrders(ordersData);
+          }}
+        />,
+        document.body
+      )}
+
+      {showBulkUpload && createPortal(
+        <SellerBulkUploadSheet
+          sellerId={sellerId}
+          onClose={() => setShowBulkUpload(false)}
+          onSuccess={() => {
+            setShowBulkUpload(false);
+            refreshInventory();
           }}
         />,
         document.body

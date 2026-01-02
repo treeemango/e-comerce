@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FlagIcon } from '@/lib/FlagIcon';
 
 interface SellerLoginViewProps {
    onSignUpClick?: () => void;
@@ -31,7 +32,12 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
             </div>
             <div className="flex items-center gap-4 text-sm">
                <div className="hidden md:flex items-center gap-2 bg-gray-800/50 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-gray-800 transition-colors">
-                  <span className="text-lg">{countries.find(c => c.code === activeCountry)?.flag}</span>
+                  <FlagIcon
+                     emoji={countries.find(c => c.code === activeCountry)?.flag}
+                     label={countries.find(c => c.code === activeCountry)?.name || 'Country'}
+                     fallbackText={countries.find(c => c.code === activeCountry)?.code || '—'}
+                     className="w-5 h-5"
+                  />
                   <span className="font-medium">{countries.find(c => c.code === activeCountry)?.name}</span>
                   <span className="material-icons-round text-sm">expand_more</span>
                </div>
@@ -66,7 +72,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                               : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
                               }`}
                         >
-                           <span>{country.flag}</span>
+                              <FlagIcon emoji={country.flag} label={country.name} fallbackText={country.code} className="w-4 h-4" />
                            <span className="hidden sm:inline">{country.code}</span>
                         </button>
                      ))}
@@ -138,7 +144,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                            <div className="relative">
                               <select className="w-full bg-white/10 backdrop-blur border border-white/20 rounded-xl px-4 py-3 text-white text-sm appearance-none focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none">
                                  {countries.map(c => (
-                                    <option key={c.code} value={c.code} className="bg-gray-900 text-white">{c.flag} {c.name}</option>
+                                    <option key={c.code} value={c.code} className="bg-gray-900 text-white">{c.name}</option>
                                  ))}
                               </select>
                               <span className="material-icons-round absolute right-3 top-3 text-white/50 text-sm pointer-events-none">expand_more</span>
@@ -235,18 +241,20 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
 
                <div className="flex flex-wrap justify-center gap-4">
                   {[
-                     { flag: '🇬🇧', name: 'United Kingdom' },
-                     { flag: '🇰🇪', name: 'Kenya' },
-                     { flag: '🇳🇬', name: 'Nigeria' },
-                     { flag: '🇿🇦', name: 'South Africa' },
-                     { flag: '🇬🇭', name: 'Ghana' },
-                     { flag: '🇺🇬', name: 'Uganda' },
-                     { flag: '🇹🇿', name: 'Tanzania' },
-                     { flag: '🇷🇼', name: 'Rwanda' },
-                     { flag: '🇪🇹', name: 'Ethiopia' },
+                     { code: 'UK', emoji: '🇬🇧', name: 'United Kingdom' },
+                     { code: 'KE', emoji: '🇰🇪', name: 'Kenya' },
+                     { code: 'NG', emoji: '🇳🇬', name: 'Nigeria' },
+                     { code: 'ZA', emoji: '🇿🇦', name: 'South Africa' },
+                     { code: 'GH', emoji: '🇬🇭', name: 'Ghana' },
+                     { code: 'UG', emoji: '🇺🇬', name: 'Uganda' },
+                     { code: 'TZ', emoji: '🇹🇿', name: 'Tanzania' },
+                     { code: 'RW', emoji: '🇷🇼', name: 'Rwanda' },
+                     { code: 'ET', emoji: '🇪🇹', name: 'Ethiopia' },
                   ].map((country, i) => (
                      <div key={i} className="bg-white/10 backdrop-blur px-6 py-4 rounded-2xl border border-white/10 hover:border-primary/50 hover:bg-white/20 transition-all cursor-pointer group">
-                        <span className="text-3xl block mb-2 group-hover:scale-125 transition-transform">{country.flag}</span>
+                        <div className="w-8 h-8 mx-auto mb-2 group-hover:scale-125 transition-transform">
+                           <FlagIcon emoji={country.emoji} label={country.name} fallbackText={country.code} className="w-8 h-8" />
+                        </div>
                         <span className="text-white font-bold text-sm">{country.name}</span>
                      </div>
                   ))}

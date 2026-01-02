@@ -1676,7 +1676,15 @@ const App: React.FC = () => {
                 ) : (
                     <SellerAccess
                         onLogin={handleSellerAuth}
-                        onSignup={() => setOnboardingType('seller')}
+                        onSignup={() => {
+                            if (!userProfile?.id) {
+                                setAuthToast('Please sign in as a buyer first to register as a seller.');
+                                setTimeout(() => setAuthToast(null), 3500);
+                                setIsAccountOpen(true);
+                                return;
+                            }
+                            setOnboardingType('seller');
+                        }}
                         onBackToShop={() => setActiveTab('home')}
                     />
                 );
@@ -2000,6 +2008,8 @@ const App: React.FC = () => {
                     onComplete={async () => {
                         setOnboardingType(null);
                         await refreshUserProfile();
+                        setActiveTab('you');
+                        window.history.pushState({ view: 'you' }, '', window.location.href);
                         setSellerView('dashboard');
                     }}
                     onCancel={() => setOnboardingType(null)}
