@@ -213,16 +213,16 @@ const Step2BusinessInfo: React.FC<Step2Props> = ({ data, updateData, onNext, onB
 
                 {/* Category Description */}
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category Description <span className="text-gray-400 font-normal">(Optional)</span></label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Anything else about this category? <span className="text-gray-400 font-normal">(Optional)</span></label>
                     <textarea
                         name="categoryDescription"
                         value={data.categoryDescription || ''}
                         onChange={handleChange}
                         rows={3}
                         className="w-full px-4 py-3 rounded-lg border border-gray-300 transition-colors focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                        placeholder="Explain what products you'll be selling in this category..."
+                        placeholder="Any additional comments or specific details about your chosen category..."
                     />
-                    <p className="text-xs text-gray-500 mt-1">Help us understand your product focus within this category</p>
+                    <p className="text-xs text-gray-500 mt-1">Let us know if you have specific needs or a unique niche.</p>
                 </div>
 
                 {/* Description */}

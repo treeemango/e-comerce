@@ -39,6 +39,21 @@ BEGIN
     updated_at = now()
   WHERE user_id = p_seller_id;
 
+  -- Send notification to seller
+  INSERT INTO public.notifications (
+    user_id,
+    type,
+    message,
+    is_read,
+    action_payload
+  ) VALUES (
+    p_seller_id,
+    'success',
+    '🎉 Your seller account has been approved! You can now start listing products.',
+    false,
+    '{"target": "seller-orders"}'::jsonb
+  );
+
   RETURN true;
 END;
 $$;
