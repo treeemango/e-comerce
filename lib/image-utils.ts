@@ -87,7 +87,8 @@ export const SUPPORTED_IMAGE_TYPES = [
     'image/jpg',
     'image/png',
     'image/webp',
-    'image/gif'
+    'image/gif',
+    'image/avif'
 ];
 
 // ============================================================================
@@ -301,7 +302,7 @@ export function getOptimizedImageUrl(
     const [urlWithoutQuery, query = ''] = urlWithoutHash.split('?');
 
     // If URL already has a variant suffix, replace it
-    const variantPattern = /_(thumb|grid|detail|zoom)\.(webp|jpg|jpeg|png)$/i;
+    const variantPattern = /_(thumb|grid|detail|zoom)\.(webp|jpg|jpeg|png|avif)$/i;
     const cleanUrl = urlWithoutQuery.replace(variantPattern, '.$2');
 
     // Get variant config
@@ -314,10 +315,13 @@ export function getOptimizedImageUrl(
     }
 
     // Variants are always stored as .webp (see supabase/functions/process-image)
-    const extensionMatch = cleanUrl.match(/\.(webp|jpg|jpeg|png)$/i);
+    const extensionMatch = cleanUrl.match(/\.(webp|jpg|jpeg|png|avif)$/i);
     const basePath = extensionMatch ? cleanUrl.slice(0, -extensionMatch[0].length) : cleanUrl;
-    const rebuilt = `${basePath}${variantConfig.suffix}.webp` + (query ? `?${query}` : '') + (hash ? `#${hash}` : '');
-    return rebuilt;
+    const rebuilt = `${basePath}${variantConfig.suffix}.${extensionMatch?.[1] === 'avif' ? 'avif' : 'webp'}` + (query ? `?${query}` : '') + (hash ? `#${hash}` : '');
+    // For now we still default to webp output from the processor, but if we have an avif input we might want to keep it?
+    // Actually the processor below converts to webp/jpeg. So the URL builder should probably stick to webp if that's what we generate.
+    // Let's just update the regex to match existing avif files if any.
+    return `${basePath}${variantConfig.suffix}.webp` + (query ? `?${query}` : '') + (hash ? `#${hash}` : '');
 }
 
 /**
@@ -380,7 +384,7 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
     if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
         return {
             valid: false,
-            error: `Unsupported image type: ${file.type}. Please use JPEG, PNG, or WebP.`
+            error: `Unsupported image type: ${file.type}. Please use JPEG, PNG, WebP, or AVIF.`
         };
     }
 
