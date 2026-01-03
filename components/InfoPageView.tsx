@@ -13,7 +13,8 @@ interface InfoPageViewProps {
 const InfoPageView: React.FC<InfoPageViewProps> = ({ slug, onClose, onNavigate }) => {
     const page = infoContent[slug] || infoContent['about'];
 
-    const pageUrl = `${SITE_CONFIG.url}/info/${slug}`;
+    const pagePath = slug === 'support-center' ? '/help' : `/${slug}`;
+    const pageUrl = `${SITE_CONFIG.url}${pagePath}`;
 
     useSEO({
         title: `${page.title} | JuaExpress`,

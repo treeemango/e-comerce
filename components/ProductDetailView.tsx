@@ -104,6 +104,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [overlayQuantity, setOverlayQuantity] = useState(1);
    const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
    const [isImageFocusView, setIsImageFocusView] = useState(false);
+   const [dealTimeLeft, setDealTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
 
    // Tab navigation state - default to Reviews if has reviews, else Specifications
    const [activeTab, setActiveTab] = useState<'specifications' | 'reviews'>(
@@ -603,6 +604,34 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          trackProductViewAuto(product.id);
       }
    }, [product.id]);
+
+   // Deal timer effect
+   useEffect(() => {
+      const endTimeStr = product.deal_ends_at || product.deal_end || product.activeCoupon?.endsAt;
+      if (!endTimeStr) return;
+
+      const calculateTimeLeft = () => {
+         const endTime = new Date(endTimeStr).getTime();
+         const now = Date.now();
+         const diff = endTime - now;
+
+         if (diff <= 0) {
+            setDealTimeLeft(null);
+            return;
+         }
+
+         setDealTimeLeft({
+            days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+            hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+            minutes: Math.floor((diff / (1000 * 60)) % 60),
+            seconds: Math.floor((diff / 1000) % 60)
+         });
+      };
+
+      calculateTimeLeft();
+      const timer = setInterval(calculateTimeLeft, 1000);
+      return () => clearInterval(timer);
+   }, [product.deal_ends_at, product.deal_end, product.activeCoupon?.endsAt]);
 
    // Check if user is following this store
    useEffect(() => {
@@ -1117,6 +1146,53 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                   </div>
 
+                  {dealTimeLeft && (
+                     <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 to-rose-500 p-[1px] shadow-sm">
+                        <div className="flex items-center justify-between bg-white/95 dark:bg-slate-900/95 px-4 py-3 backdrop-blur-md">
+                           <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 animate-pulse">
+                                 <span className="material-icons text-xl">timer</span>
+                              </div>
+                              <div>
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-red-600/70 leading-none mb-1">Limited Time Offer</p>
+                                 <p className="text-sm font-bold text-slate-900 dark:text-white">Deal ends in:</p>
+                              </div>
+                           </div>
+
+                           <div className="flex items-center gap-2">
+                              {dealTimeLeft.days > 0 && (
+                                 <div className="flex flex-col items-center">
+                                    <div className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-lg min-w-[40px] text-center shadow-inner">
+                                       <span className="text-sm font-black text-slate-900 dark:text-white leading-none">{dealTimeLeft.days}</span>
+                                    </div>
+                                    <span className="text-[8px] font-black text-slate-400 mt-1 uppercase">Days</span>
+                                 </div>
+                              )}
+                              <div className="flex flex-col items-center">
+                                 <div className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-lg min-w-[40px] text-center shadow-inner">
+                                    <span className="text-sm font-black text-slate-900 dark:text-white leading-none">{String(dealTimeLeft.hours).padStart(2, '0')}</span>
+                                 </div>
+                                 <span className="text-[8px] font-black text-slate-400 mt-1 uppercase">Hours</span>
+                              </div>
+                              <span className="text-slate-300 font-bold -mt-4">:</span>
+                              <div className="flex flex-col items-center">
+                                 <div className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-lg min-w-[40px] text-center shadow-inner">
+                                    <span className="text-sm font-black text-slate-900 dark:text-white leading-none">{String(dealTimeLeft.minutes).padStart(2, '0')}</span>
+                                 </div>
+                                 <span className="text-[8px] font-black text-slate-400 mt-1 uppercase">Mins</span>
+                              </div>
+                              <span className="text-slate-300 font-bold -mt-4">:</span>
+                              <div className="flex flex-col items-center">
+                                 <div className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-lg min-w-[40px] text-center shadow-inner text-red-600">
+                                    <span className="text-sm font-black leading-none">{String(dealTimeLeft.seconds).padStart(2, '0')}</span>
+                                 </div>
+                                 <span className="text-[8px] font-black text-slate-400 mt-1 uppercase">Secs</span>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  )}
+
                   <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 mb-6">
                      <div className="flex items-baseline gap-2 mb-1">
                         <span className="text-3xl font-bold text-orange-600 dark:text-orange-500">{getPrice('displayPrice', displayPrice, currencyCode)}</span>
@@ -1164,57 +1240,13 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                        </div>
                                     )}
                                  </div>
-                                 <button
-                                    onClick={() => {
-                                       if (productVariants.length > 1) {
-                                          openVariantOverlay(currentVariant);
-                                          return;
-                                       }
-                                       if (product.activeCoupon) {
-                                          navigator.clipboard.writeText(product.activeCoupon.code);
-                                          alert('Coupon code copied!');
-                                       }
-                                    }}
-                                    className="px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded text-xs font-bold transition-colors"
-                                 >
-                                    Copy Code
-                                 </button>
+                                 <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded text-xs font-bold">
+                                    Auto-applied
+                                 </span>
                               </div>
                            )}
 
-                           {productCoupons
-                              .filter(c => c.code !== product.activeCoupon?.code)
-                              .map(coupon => {
-                                 const isClaimed = claimedCoupons.has(coupon.id);
-                                 return (
-                                    <div key={coupon.id} className="relative overflow-hidden bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3 flex items-center justify-between gap-4 transition-all hover:shadow-md group">
-                                       <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white dark:bg-slate-900 rounded-full border border-orange-200 dark:border-orange-800"></div>
-                                       <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white dark:bg-slate-900 rounded-full border border-orange-200 dark:border-orange-800"></div>
 
-                                       <div className="pl-2">
-                                          <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
-                                             {coupon.discount_amount ? `${getPrice(`coupon-${coupon.id}`, coupon.discount_amount, currencyCode)} OFF` : `${coupon.discount_percentage}% OFF`}
-                                          </div>
-                                          <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                                             {coupon.name}
-                                          </div>
-                                          <div className="text-[10px] text-slate-400 mt-0.5">
-                                             Expires: {new Date(coupon.end_time).toLocaleDateString()}
-                                          </div>
-                                       </div>
-                                       <button
-                                          onClick={() => !isClaimed && handleClaimCoupon(coupon.id)}
-                                          disabled={isClaimed}
-                                          className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${isClaimed
-                                             ? 'bg-green-100 text-green-700 cursor-default'
-                                             : 'bg-orange-500 text-white hover:bg-orange-600 hover:shadow-orange-500/30'
-                                             }`}
-                                       >
-                                          {isClaimed ? 'Claimed' : 'Claim'}
-                                       </button>
-                                    </div>
-                                 );
-                              })}
                         </div>
                      </div>
                   )}

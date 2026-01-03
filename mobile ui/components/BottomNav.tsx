@@ -75,7 +75,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       role="navigation"
       aria-label="Main navigation"
     >
-      <div className="max-w-[420px] mx-auto glass rounded-[32px] shadow-premium p-2 flex items-center justify-around translate-y-[-env(safe-area-inset-bottom)]">
+      <div className="glass rounded-[32px] shadow-premium p-2 flex items-center justify-around translate-y-[-env(safe-area-inset-bottom)]">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const isMessages = tab.id === 'messages';

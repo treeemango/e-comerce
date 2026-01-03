@@ -3,6 +3,7 @@ import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
 import { useCurrencyConverter } from '@/lib/currency';
 import { Product } from '@/types';
 import { fetchEventBanner, type EventBannerData, TRUST_BADGES } from '@/lib/event-banner-service';
+import { getEventIconSrc } from '@/lib/event-icons';
 
 // Vibe-based gradients for event banners
 const VIBE_GRADIENTS: Record<string, string> = {
@@ -12,6 +13,12 @@ const VIBE_GRADIENTS: Record<string, string> = {
   premium: 'linear-gradient(135deg, #1e293b, #fbbf24)',
   fun: 'linear-gradient(135deg, #7c3aed, #06b6d4)',
   spiritual: 'linear-gradient(135deg, #0f3460, #e2c044)'
+};
+
+const getEventBannerGradient = (banner: EventBannerData) => {
+  const hasAiColors = Boolean(banner.backgroundColor) && Boolean(banner.accentColor);
+  if (hasAiColors) return `linear-gradient(135deg, ${banner.backgroundColor}, ${banner.accentColor})`;
+  return VIBE_GRADIENTS[banner.vibe || 'premium'] || VIBE_GRADIENTS.premium;
 };
 
 // Thematic Mapping for Categories
@@ -205,50 +212,97 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
 
   return (
     <section className="mb-8 lg:mb-12 relative group">
-      {/* Event Banner Overlay - AI Generated */}
+      {/* Desktop full-width event banner (outside the rounded hero) */}
       {eventBanner && eventBanner.eventName !== 'default' && (
         <div
-          className="absolute top-0 left-0 right-0 z-30 px-6 py-3 rounded-t-3xl flex items-center justify-between backdrop-blur-md border-b border-white/10"
-          style={{
-            backgroundColor: `${eventBanner.backgroundColor}ee`,
+          className="hidden md:flex relative left-1/2 -translate-x-1/2 w-screen h-12 items-center justify-between z-20 text-white overflow-hidden group/event cursor-pointer"
+          style={{ background: getEventBannerGradient(eventBanner) }}
+          onClick={() => {
+            const url = new URL(window.location.href);
+            url.search = '';
+            url.searchParams.set('view', 'event-deals');
+            url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
+            if (eventBanner.searchQuery) {
+              url.searchParams.set('search', eventBanner.searchQuery);
+            }
+            window.open(url.toString(), '_blank');
           }}
         >
-          <div className="flex-1">
-            <h3
-              className="text-lg md:text-xl font-black tracking-tight"
-              style={{ color: eventBanner.accentColor }}
-            >
-              {eventBanner.headline}
-            </h3>
-            <p className="text-xs md:text-sm text-white/80 mt-0.5">
-              {eventBanner.subheadline}
-            </p>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/event:animate-shimmer" />
+
+          <div className="w-full flex items-center justify-between px-8 md:px-20 relative z-10">
+            <div className="flex items-center gap-6">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
+                <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
+                <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex items-baseline gap-2">
+                  <span className="line-clamp-1">{eventBanner.headline}</span>
+                  <span className="opacity-60 font-bold text-xs lowercase italic hidden lg:inline">— {eventBanner.subheadline}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap">
+                {eventBanner.cta}
+              </button>
+            </div>
           </div>
-          <button
-            className="shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all hover:scale-105 active:scale-95"
-            style={{
-              backgroundColor: eventBanner.accentColor,
-              color: eventBanner.backgroundColor
+        </div>
+      )}
+
+      <div className="relative h-[580px] sm:h-[520px] md:h-[550px] rounded-3xl overflow-hidden shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] bg-black">
+        {/* Banner Overlay */}
+        {eventBanner && eventBanner.eventName !== 'default' && (
+          <div
+            className="absolute top-0 inset-x-0 h-16 flex md:hidden items-center justify-between px-8 md:px-20 z-20 text-white overflow-hidden group/event cursor-pointer"
+            style={{ background: getEventBannerGradient(eventBanner) }}
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.search = '';
+              url.searchParams.set('view', 'event-deals');
+              url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
+              if (eventBanner.searchQuery) {
+                url.searchParams.set('search', eventBanner.searchQuery);
+              }
+              window.open(url.toString(), '_blank');
             }}
           >
-            {eventBanner.cta}
-          </button>
-        </div>
-      )}
-      {/* Urgency Tag - Pulsing Animation */}
-      {eventBanner?.urgencyText && (
-        <div
-          className="absolute top-[70px] right-5 z-40 px-4 py-2 rounded-full font-bold text-sm text-white animate-pulse-urgency flex items-center gap-2"
-          style={{
-            background: 'linear-gradient(135deg, #dc2626, #f59e0b)',
-            boxShadow: '0 4px 15px rgba(220, 38, 38, 0.4)'
-          }}
-        >
-          <span className="material-icons text-base">schedule</span>
-          {eventBanner.urgencyText}
-        </div>
-      )}
-      <div className={`relative ${eventBanner && eventBanner.eventName !== 'default' ? 'h-[540px] md:h-[590px] pt-[60px]' : 'h-[500px] md:h-[550px]'} rounded-3xl overflow-hidden shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] bg-black`}>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/event:animate-shimmer" />
+
+            <div className="flex items-center gap-6 relative z-10">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
+                <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
+                <h3 className="text-xl font-black tracking-tight uppercase mt-1">
+                  {eventBanner.headline}
+                  <span className="ml-3 opacity-60 font-bold text-xs lowercase italic">— {eventBanner.subheadline}</span>
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 relative z-10">
+              <button className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap">
+                {eventBanner.cta}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Urgency Badge */}
+        {eventBanner?.urgencyText && (
+          <div className="absolute top-20 md:top-4 right-8 md:right-20 z-20">
+            <div className="bg-red-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-lg border border-white/20 uppercase tracking-widest flex items-center gap-2">
+              <span className="material-icons text-xs">timer</span>
+              {eventBanner.urgencyText}
+            </div>
+          </div>
+        )}
+
         {deals.map((deal, index) => {
           const theme = getTheme(deal.category_id || deal.category_name, index);
           const isActive = index === currentSlide;
@@ -263,13 +317,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
               {/* Background with Immersive Gradient */}
               <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} transition-colors duration-1000`} />
 
-              {/* Animated Glow/Orbs */}
-              <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full animate-pulse" />
-              <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-fuchsia-500/10 blur-[120px] rounded-full animate-pulse delay-1000" />
+              {/* Subtle ambient glow */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-black/10" />
 
               {/* Optional Video Background Layer - limited to 1 play per session/navigation */}
               {youtubeVideo && isActive && !playedVideos.includes(deal.id.toString()) && (
-                <div className="absolute inset-0 opacity-20 mix-blend-overlay pointer-events-none overflow-hidden">
+                <div className="absolute inset-0 opacity-10 mix-blend-overlay pointer-events-none overflow-hidden">
                   <iframe
                     src={`${youtubeVideo.url}${youtubeVideo.url.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=0&loop=1&playlist=${youtubeVideo.url.split('/').pop()}`}
                     className="w-full h-full scale-[1.5] object-cover"
@@ -280,37 +333,36 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
               )}
 
               {/* Split Content Layout */}
-              <div className={`absolute inset-x-0 bottom-0 flex flex-col md:flex-row items-center justify-between px-8 md:px-20 py-12 gap-10 ${eventBanner && eventBanner.eventName !== 'default' ? 'top-[60px]' : 'top-0'}`}>
+              <div className={`absolute inset-x-0 bottom-0 flex flex-col md:flex-row items-center justify-between px-4 sm:px-8 md:px-20 py-6 sm:py-8 md:py-12 gap-6 md:gap-12 ${eventBanner && eventBanner.eventName !== 'default' ? 'top-16 md:top-0' : 'top-0'}`}>
 
                 {/* Left Side: Product Info */}
-                <div className="flex-1 text-left space-y-6 max-w-2xl">
-                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 transition-all duration-700 delay-300 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-                    <span className="flex h-2 w-2 rounded-full bg-green-400 animate-ping" />
-                    <span className="text-[10px] font-bold tracking-widest uppercase text-white/80">{deal.tag || 'TOP RATED'}</span>
+                <div className="flex-1 text-left space-y-2 sm:space-y-4 md:space-y-6 max-w-2xl w-full">
+                  <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 transition-all duration-700 delay-300 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-white/80">{deal.tag || 'Top pick'}</span>
                   </div>
 
-                  <h2 className={`text-4xl md:text-6xl font-black leading-tight tracking-tight text-white transition-all duration-700 delay-500 line-clamp-2 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-[-40px] opacity-0'}`}>
+                  <h2 className={`text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-extrabold leading-[1.05] tracking-tight text-white transition-all duration-700 delay-500 line-clamp-2 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-[-40px] opacity-0'}`}>
                     {deal.title}
                   </h2>
 
-                  <div className={`flex flex-wrap items-baseline gap-x-4 gap-y-2 transition-all duration-700 delay-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-                    <span className="text-4xl md:text-5xl font-extrabold text-white tracking-tighter shrink-0">
+                  <div className={`flex flex-wrap items-baseline gap-x-2 sm:gap-x-4 gap-y-1 sm:gap-y-2 transition-all duration-700 delay-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                    <span className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tighter shrink-0">
                       {getPrice(deal.id, false)}
                     </span>
                     {deal.originalPrice > deal.price && (
-                      <span className="text-xl md:text-2xl text-white/40 line-through font-medium shrink-0">
+                      <span className="text-base sm:text-lg md:text-xl lg:text-2xl text-white/40 line-through font-medium shrink-0">
                         {getPrice(deal.id, true)}
                       </span>
                     )}
                     {(deal.discountPercent || 0) > 0 && (
-                      <span className={`text-sm font-bold px-3 py-1 rounded-lg bg-red-500 text-white animate-bounce flex items-center gap-1 shrink-0`}>
-                        <span className="material-icons text-xs">trending_down</span>
+                      <span className={`text-xs sm:text-sm font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-red-500/90 text-white flex items-center gap-1 shrink-0`}>
                         -{deal.discountPercent}%
                       </span>
                     )}
 
                     {(deal.rating || 0) > 0 && (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 backdrop-blur-md border border-amber-500/30 shrink-0">
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 shrink-0">
                         <span className="material-icons text-amber-400 text-sm">star</span>
                         <span className="text-white font-bold text-sm">{(deal.rating || 0).toFixed(1)}</span>
                         {(deal.reviews || 0) > 0 && (
@@ -320,7 +372,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                     )}
                   </div>
 
-                  <p className={`text-lg md:text-xl text-white/70 max-w-md line-clamp-3 transition-all duration-700 delay-900 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                  <p className={`text-sm sm:text-base md:text-lg text-white/70 max-w-xl line-clamp-3 transition-all duration-700 delay-900 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
                     {deal.description || deal.metaDescription || (() => {
                       // Smart contextual fallback based on available data
                       const categoryText = deal.category_name || 'premium products';
@@ -339,7 +391,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                     })()}
                   </p>
 
-                  <div className={`pt-6 transition-all duration-700 delay-1000 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                  <div className={`pt-3 sm:pt-4 md:pt-6 transition-all duration-700 delay-1000 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
                     <button
                       onClick={() => onProductClick?.({
                         id: deal.id,
@@ -353,14 +405,14 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                         reviews: deal.reviews,
                         category: deal.category_name,
                       } as Product)}
-                      className="group/btn relative px-10 py-4 bg-white text-black font-black rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_20px_40px_-10px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3 w-full md:w-fit"
+                      className="group/btn relative px-7 sm:px-9 md:px-11 py-3 sm:py-3.5 bg-white text-black font-bold text-sm sm:text-base rounded-full transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] shadow-lg flex items-center justify-center gap-2 sm:gap-3 w-full md:w-fit"
                     >
-                      SHOP THIS DEAL
-                      <span className="material-icons transition-transform group-hover/btn:translate-x-2">arrow_forward</span>
+                      Shop this deal
+                      <span className="material-icons transition-transform group-hover/btn:translate-x-1">arrow_forward</span>
                     </button>
 
-                    {/* Trust Badges */}
-                    <div className="flex flex-wrap items-center gap-4 mt-4">
+                    {/* Trust Badges - Hide on smallest screens */}
+                    <div className="hidden sm:flex flex-wrap items-center gap-2 sm:gap-4 mt-2 sm:mt-4">
                       {TRUST_BADGES.map((badge, idx) => (
                         <span
                           key={idx}
@@ -380,27 +432,26 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                 </div>
 
                 {/* Right Side: Floating Product Image - Enhanced for white bg images */}
-                <div className={`flex-1 relative w-full h-[300px] md:h-full flex items-center justify-center transition-all duration-1000 delay-500 ${isActive ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-20 opacity-0 scale-90'}`}>
+                <div className={`flex-shrink-0 relative w-full h-[180px] sm:h-[220px] md:h-full md:flex-1 flex items-center justify-center transition-all duration-1000 delay-500 ${isActive ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-20 opacity-0 scale-90'}`}>
                   {/* Image Shadow/Glow */}
                   <div className="absolute inset-x-0 bottom-10 h-10 bg-black/40 blur-2xl rounded-[100%] scale-x-50" />
 
-                  <div className="relative group/img cursor-pointer max-w-[90%] md:max-w-none">
+                  <div className="relative group/img cursor-pointer max-w-[70%] sm:max-w-[80%] md:max-w-none">
                     {/* Glass Container for images with solid backgrounds */}
-                    <div className="relative p-2 md:p-4 rounded-[40px] bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] overflow-hidden">
+                    <div className="relative p-1.5 sm:p-2 md:p-4 rounded-2xl sm:rounded-3xl md:rounded-[40px] bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] overflow-hidden">
                       <img
                         src={deal.image}
                         alt={deal.title}
-                        className="w-full h-[220px] md:w-[420px] md:h-[420px] object-contain rounded-[30px] drop-shadow-2xl animate-float transition-transform duration-700 group-hover/img:scale-110"
+                        className="w-full h-[140px] sm:h-[180px] md:w-[350px] md:h-[350px] lg:w-[420px] lg:h-[420px] object-contain rounded-xl sm:rounded-2xl md:rounded-[30px] drop-shadow-xl md:animate-float transition-transform duration-700 group-hover/img:scale-[1.04]"
                         loading="eager"
                       />
                     </div>
 
-                    {/* Floating Product Badge */}
-                    <div className="absolute -top-6 -right-6 md:-top-10 md:-right-10 bg-white shadow-2xl rotate-12 group-hover:rotate-0 transition-all duration-500 p-4 md:p-6 rounded-[30px] border border-white">
-                      <div className="text-[10px] text-black/40 font-black uppercase tracking-widest mb-1">Elite Rank</div>
+                    {/* Floating Rating Badge */}
+                    <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 shadow-lg transition-all duration-300 px-3 py-1.5 rounded-full border border-black/5">
                       <div className="flex items-center gap-1.5">
-                        <span className="material-icons text-slate-900 dark:text-slate-100 text-xl md:text-2xl">star</span>
-                        <span className="text-xl md:text-3xl font-black text-black">4.9</span>
+                        <span className="material-icons text-amber-500 text-base">star</span>
+                        <span className="text-sm font-bold text-black">{((deal.rating || 4.9) as number).toFixed(1)}</span>
                       </div>
                     </div>
                   </div>
@@ -454,13 +505,6 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
         }
         .animate-shimmer {
           animation: shimmer 3s linear infinite;
-        }
-        @keyframes pulse-urgency {
-          0%, 100% { transform: scale(1); box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4); }
-          50% { transform: scale(1.05); box-shadow: 0 6px 20px rgba(220, 38, 38, 0.6); }
-        }
-        .animate-pulse-urgency {
-          animation: pulse-urgency 2s ease-in-out infinite;
         }
       `}} />
     </section>

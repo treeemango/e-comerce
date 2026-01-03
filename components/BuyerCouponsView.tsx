@@ -67,15 +67,7 @@ const BuyerCouponsView: React.FC<BuyerCouponsViewProps> = ({ user }) => {
 
     const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString() : '—';
 
-    const handleCopy = async (code?: string) => {
-        if (!code) return;
-        try {
-            await navigator.clipboard.writeText(code);
-            setMessage('Coupon code copied. Paste it at checkout.');
-        } catch (err) {
-            console.error('Copy failed', err);
-        }
-    };
+
 
     const handleClaim = async (couponId: string) => {
         if (!user?.id) {
@@ -130,20 +122,10 @@ const BuyerCouponsView: React.FC<BuyerCouponsViewProps> = ({ user }) => {
                 <div className="flex items-center justify-between">
                     <div className="text-xs text-gray-500">Claimed {formatDate(entry.claimed_at)}{entry.used_at ? ` · Used ${formatDate(entry.used_at)}` : ''}</div>
                     <div className="flex gap-2">
-                        <button
-                            className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-60"
-                            onClick={() => handleCopy(coupon.code)}
-                            disabled={isDisabled}
-                        >
-                            Copy code
-                        </button>
-                        <button
-                            className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-900 disabled:opacity-60"
-                            onClick={() => handleCopy(coupon.code)}
-                            disabled={isDisabled}
-                        >
-                            Use at checkout
-                        </button>
+                        <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${isDisabled ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
+                            <span className="material-icons text-sm">check_circle</span>
+                            {isDisabled ? 'Expired/Used' : 'Auto-applied at checkout'}
+                        </span>
                     </div>
                 </div>
             </div>

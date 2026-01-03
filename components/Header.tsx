@@ -66,6 +66,33 @@ const Header: React.FC<HeaderProps> = ({
   const [isMobileCategoriesOpen, setIsMobileCategoriesOpen] = useState(false);
   const [isTopCategoriesOverlayOpen, setIsTopCategoriesOverlayOpen] = useState(false);
   const [selectedOverlayDepartmentId, setSelectedOverlayDepartmentId] = useState<string | null>(null);
+  const [isCategoriesDropdownOpen, setIsCategoriesDropdownOpen] = useState(false);
+  const categoriesDropdownTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Handle categories dropdown hover with delay
+  const handleCategoriesMouseEnter = () => {
+    if (categoriesDropdownTimeoutRef.current) {
+      clearTimeout(categoriesDropdownTimeoutRef.current);
+      categoriesDropdownTimeoutRef.current = null;
+    }
+    setIsCategoriesDropdownOpen(true);
+  };
+
+  const handleCategoriesMouseLeave = () => {
+    // Add a 300ms delay before closing to allow movement between button and dropdown
+    categoriesDropdownTimeoutRef.current = setTimeout(() => {
+      setIsCategoriesDropdownOpen(false);
+    }, 300);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (categoriesDropdownTimeoutRef.current) {
+        clearTimeout(categoriesDropdownTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -287,14 +314,23 @@ const Header: React.FC<HeaderProps> = ({
           </a>
 
           {/* Categories Dropdown Group - Always visible on desktop layout */}
-          <div className="group relative">
-            <button className="bg-black bg-opacity-80 px-4 py-2 rounded-full flex items-center space-x-2 text-sm font-medium hover:bg-opacity-100 transition-all">
+          <div
+            className="relative"
+            onMouseEnter={handleCategoriesMouseEnter}
+            onMouseLeave={handleCategoriesMouseLeave}
+          >
+            <button className={`bg-black px-4 py-2 rounded-full flex items-center space-x-2 text-sm font-medium transition-all ${isCategoriesDropdownOpen ? 'bg-opacity-100' : 'bg-opacity-80 hover:bg-opacity-100'}`}>
               <span>Categories</span>
-              <span className="material-icons text-xs transform group-hover:rotate-180 transition-transform">expand_more</span>
+              <span className={`material-icons text-xs transition-transform duration-200 ${isCategoriesDropdownOpen ? 'rotate-180' : ''}`}>expand_more</span>
             </button>
 
             {/* Mega Menu Dropdown */}
-            <div className="absolute top-full mt-2 left-0 w-[840px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto z-50">
+            <div
+              className={`absolute top-full left-0 w-[840px] transition-all duration-200 z-50 ${isCategoriesDropdownOpen
+                  ? 'opacity-100 pointer-events-auto translate-y-0 mt-2'
+                  : 'opacity-0 pointer-events-none -translate-y-2 mt-2'
+                }`}
+            >
               <div className="bg-background-light dark:bg-gray-800 shadow-lg rounded-lg flex overflow-hidden border border-gray-200 dark:border-gray-700 min-h-[400px]">
 
                 {/* Left Side: Category List */}

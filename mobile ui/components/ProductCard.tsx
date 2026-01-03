@@ -199,21 +199,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                     </div>
                 )}
 
-                {/* Simplified Badges - Top Left */}
-                <div className="absolute top-2 left-2 flex flex-col gap-1.5 z-10 transition-transform duration-300">
-                    {discountPercent > 0 && (
-                        <div className="bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-sm">
-                            -{discountPercent}%
-                        </div>
-                    )}
-                    {dealBadge && (
-                        <div className={`${dealBadge.color} text-white text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm`}>
-                            <span className="material-icons-round text-[10px]">{dealBadge.icon}</span>
-                            {dealBadge.text}
-                        </div>
-                    )}
-                </div>
-
                 {/* Visual Search - Bottom Left */}
                 <div className="absolute bottom-3 left-3 z-10">
                     <button
@@ -268,9 +253,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
                     )}
                 </div>
 
-                {/* Title */}
+                {/* Title and Tags */}
                 <div className="text-[13px] text-gray-700 dark:text-gray-300 line-clamp-2 leading-[1.3] font-medium min-h-[2.6em]">
-                    {product.title}
+                    {(discountPercent > 0 || dealBadge) && (
+                        <span className="text-red-600 dark:text-red-500 font-extrabold italic mr-1.5 tracking-tighter" style={{ textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.1)' }}>
+                            DEAL:
+                        </span>
+                    )}
+                    <span>{product.title}</span>
                 </div>
 
                 {/* Price & Action */}

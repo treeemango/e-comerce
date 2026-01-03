@@ -12,12 +12,52 @@ interface HeroBannerData {
     vibe: 'romantic' | 'festive' | 'patriotic' | 'premium' | 'fun' | 'spiritual';
     urgencyText?: string;    // "Ends Midnight!" or "Last Day!"
     hasCountdown?: boolean;  // Show countdown timer
+    iconKey?: string;        // one of approved local icon keys
     // AI-generated section titles
     lightningDealsTitle?: string;     // e.g. "🎒 School Season Steals"
     lightningDealsHeadline?: string;  // e.g. "Gear Up for Less!"
     lightningDealsSubtitle?: string;  // e.g. "Fresh finds for the new term"
     trendingTitle?: string;           // e.g. "📚 BACK TO SCHOOL PICKS"
     trendingSubtitle?: string;        // e.g. "WHAT STUDENTS LOVE"
+    searchQuery?: string;             // AI-generated search term for "Shop Now"
+}
+
+const APPROVED_ICON_KEYS = [
+    'bolt',
+    'backpack',
+    'gift',
+    'heart',
+    'moon',
+    'flag',
+    'diamond',
+    'fireworks',
+] as const;
+
+function pickFallbackIconKey(eventName: string, vibe: string): string {
+    const name = (eventName || '').toLowerCase();
+    if (name.includes('school')) return 'backpack';
+
+    switch ((vibe || '').toLowerCase()) {
+        case 'romantic':
+            return 'heart';
+        case 'festive':
+            return 'gift';
+        case 'patriotic':
+            return 'flag';
+        case 'spiritual':
+            return 'moon';
+        case 'fun':
+            return 'fireworks';
+        case 'premium':
+            return 'diamond';
+        default:
+            return 'bolt';
+    }
+}
+
+function normalizeIconKey(value: unknown, eventName: string, vibe: string): string {
+    if (typeof value === 'string' && APPROVED_ICON_KEYS.includes(value as any)) return value;
+    return pickFallbackIconKey(eventName, vibe);
 }
 
 interface EventInfo {
@@ -260,11 +300,13 @@ Return JSON only (no markdown, no code blocks):
   "vibe": "${vibe}",
   "urgencyText": "short urgency phrase for limited events, e.g. 'Ends Tonight!' or 'Last 48 Hours!' or null if not time-sensitive",
   "hasCountdown": true if this is a limited-time event that ends within 7 days, false otherwise,
+    "iconKey": "ONE of these only: bolt, backpack, gift, heart, moon, flag, diamond, fireworks",
   "lightningDealsTitle": "Catchy title for flash deals, e.g. '🎒 School Season Steals'",
   "lightningDealsHeadline": "Urgent headline for the section, e.g. 'Gear Up for Less!'",
   "lightningDealsSubtitle": "Supporting text, e.g. 'Fresh finds for the new term'",
   "trendingTitle": "Title for trending items, e.g. '📚 BACK TO SCHOOL PICKS'",
-  "trendingSubtitle": "Short subtext, e.g. 'WHAT STUDENTS LOVE'"
+  "trendingSubtitle": "Short subtext, e.g. 'WHAT STUDENTS LOVE'",
+  "searchQuery": "targeted search term for this event, e.g. 'Back to school backpacks' or 'Christmas party dresses'"
 }
 
 Examples by country/event (use local slang where appropriate):
@@ -337,11 +379,13 @@ Important:
             vibe: banner.vibe || vibe,
             urgencyText: banner.urgencyText || null,
             hasCountdown: banner.hasCountdown || false,
+            iconKey: normalizeIconKey(banner.iconKey, eventName, banner.vibe || vibe),
             lightningDealsTitle: banner.lightningDealsTitle || null,
             lightningDealsHeadline: banner.lightningDealsHeadline || null,
             lightningDealsSubtitle: banner.lightningDealsSubtitle || null,
             trendingTitle: banner.trendingTitle || null,
-            trendingSubtitle: banner.trendingSubtitle || null
+            trendingSubtitle: banner.trendingSubtitle || null,
+            searchQuery: banner.searchQuery || null
         };
     } catch (error) {
         console.error('[HERO-BANNER] Error generating banner:', error);
@@ -362,7 +406,8 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             lightningDealsHeadline: "Gifts That Say I Love You",
             lightningDealsSubtitle: "Perfect presents at perfect prices. Limited time!",
             trendingTitle: "❤️ LOVE IS IN THE AIR",
-            trendingSubtitle: "MOST WANTED GIFTS"
+            trendingSubtitle: "MOST WANTED GIFTS",
+            searchQuery: "Romantic gifts for her"
         },
         festive: {
             headline: "Celebrate with Savings 🎉",
@@ -375,7 +420,8 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             lightningDealsHeadline: "Holiday Deals Disappearing Fast",
             lightningDealsSubtitle: "Grab these seasonal steals before midnight!",
             trendingTitle: "🎄 FESTIVE FAVORITES",
-            trendingSubtitle: "TOP PICKS THIS SEASON"
+            trendingSubtitle: "TOP PICKS THIS SEASON",
+            searchQuery: "Festive decorations"
         },
         patriotic: {
             headline: "Pride & Great Prices 🎯",
@@ -388,7 +434,8 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             lightningDealsHeadline: "Celebrate with Massive Savings",
             lightningDealsSubtitle: "Proud prices for a proud nation!",
             trendingTitle: "🇰🇪 LOCAL PRIDE",
-            trendingSubtitle: "MADE FOR YOU"
+            trendingSubtitle: "MADE FOR YOU",
+            searchQuery: "Made in Kenya"
         },
         spiritual: {
             headline: "Blessings & Bargains 🌙",
@@ -401,7 +448,8 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             lightningDealsHeadline: "Sacred Savings Await",
             lightningDealsSubtitle: "Share the blessings with deals that give back.",
             trendingTitle: "🌙 BLESSED PICKS",
-            trendingSubtitle: "MOST POPULAR THIS SEASON"
+            trendingSubtitle: "MOST POPULAR THIS SEASON",
+            searchQuery: "Spiritual gifts"
         },
         fun: {
             headline: "Time to Save Big! 🚀",
@@ -414,7 +462,8 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             lightningDealsHeadline: "Fresh Finds, Fresher Prices",
             lightningDealsSubtitle: "New season, new deals. Get them while hot!",
             trendingTitle: "🚀 TRENDING NOW",
-            trendingSubtitle: "WHAT THE WORLD WANTS"
+            trendingSubtitle: "WHAT THE WORLD WANTS",
+            searchQuery: "Trending electronics"
         },
         premium: {
             headline: "Premium Quality, Best Prices ✨",
@@ -427,7 +476,8 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             lightningDealsHeadline: "Premium Quality, Unreal Prices",
             lightningDealsSubtitle: "Luxury for less. Today only.",
             trendingTitle: "💎 CURATED FOR YOU",
-            trendingSubtitle: "HANDPICKED EXCELLENCE"
+            trendingSubtitle: "HANDPICKED EXCELLENCE",
+            searchQuery: "Luxury accessories"
         }
     };
 

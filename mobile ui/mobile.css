@@ -32,8 +32,6 @@
 }
 
 .mobile-shell {
-  max-width: 520px;
-  margin: 0 auto;
   background: var(--bg-light);
   min-height: 100vh;
   color: #1A1A1A;

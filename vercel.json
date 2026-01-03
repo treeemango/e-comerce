@@ -1,6 +1,78 @@
 {
     "rewrites": [
         {
+            "source": "/about",
+            "destination": "/about.html"
+        },
+        {
+            "source": "/about/",
+            "destination": "/about.html"
+        },
+        {
+            "source": "/help",
+            "destination": "/help.html"
+        },
+        {
+            "source": "/help/",
+            "destination": "/help.html"
+        },
+        {
+            "source": "/returns",
+            "destination": "/returns.html"
+        },
+        {
+            "source": "/returns/",
+            "destination": "/returns.html"
+        },
+        {
+            "source": "/shipping",
+            "destination": "/shipping.html"
+        },
+        {
+            "source": "/shipping/",
+            "destination": "/shipping.html"
+        },
+        {
+            "source": "/protection",
+            "destination": "/protection.html"
+        },
+        {
+            "source": "/protection/",
+            "destination": "/protection.html"
+        },
+        {
+            "source": "/company-details",
+            "destination": "/company-details.html"
+        },
+        {
+            "source": "/company-details/",
+            "destination": "/company-details.html"
+        },
+        {
+            "source": "/terms",
+            "destination": "/terms.html"
+        },
+        {
+            "source": "/terms/",
+            "destination": "/terms.html"
+        },
+        {
+            "source": "/privacy",
+            "destination": "/privacy.html"
+        },
+        {
+            "source": "/privacy/",
+            "destination": "/privacy.html"
+        },
+        {
+            "source": "/contact",
+            "destination": "/contact.html"
+        },
+        {
+            "source": "/contact/",
+            "destination": "/contact.html"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

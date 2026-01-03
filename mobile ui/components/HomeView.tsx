@@ -14,14 +14,10 @@ interface HomeViewProps {
   onFilterClick?: (filter: string) => void;
   onPlatformReviewsClick?: () => void;
   hasPlatformReviews?: boolean;
+  eventBanner?: EventBannerData | null;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick, hasPlatformReviews = true }) => {
-  const [eventBanner, setEventBanner] = React.useState<EventBannerData | null>(null);
-
-  React.useEffect(() => {
-    fetchEventBanner().then(setEventBanner).catch(console.error);
-  }, []);
+export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick, hasPlatformReviews = true, eventBanner }) => {
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -35,7 +31,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
   };
 
   return (
-    <div className="w-full max-w-md mx-auto sm:max-w-full pb-8">
+    <div className="w-full pb-8">
       {/* SEO: Hidden H1 for brand recognition */}
       <h1 className="sr-only">JuaExpress - Premium Multi-Country E-Commerce Marketplace</h1>
 

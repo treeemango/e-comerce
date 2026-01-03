@@ -96,10 +96,11 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
     // Deal timer effect
     useEffect(() => {
-        if (!product.deal_ends_at) return;
+        const endTimeStr = product.deal_ends_at || (product as any).deal_end || product.activeCoupon?.endsAt;
+        if (!endTimeStr) return;
 
         const calculateTimeLeft = () => {
-            const endTime = new Date(product.deal_ends_at!).getTime();
+            const endTime = new Date(endTimeStr).getTime();
             const now = Date.now();
             const diff = endTime - now;
 
@@ -119,7 +120,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         calculateTimeLeft();
         const timer = setInterval(calculateTimeLeft, 1000);
         return () => clearInterval(timer);
-    }, [product.deal_ends_at]);
+    }, [product.deal_ends_at, (product as any).deal_end, product.activeCoupon?.endsAt]);
 
     const imageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -573,7 +574,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
         <div className="fixed inset-0 z-50 bg-white dark:bg-black overflow-y-auto pb-24 animate-in slide-in-from-right duration-200">
             {/* Premium Header */}
             <header className="sticky top-0 z-40 bg-white dark:bg-black transition-shadow duration-300">
-                <div className="flex items-center justify-between px-4 py-3 gap-4 max-w-[520px] mx-auto">
+                <div className="flex items-center justify-between px-4 py-3 gap-4">
                     <button
                         className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-900 active:scale-90 transition-transform"
                         onClick={onBack}
@@ -676,46 +677,56 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 )}
             </div>
 
-            {/* Enhanced Deal Timer Banner */}
+            {/* Premium Deal Timer */}
             {(product.activeCoupon || product.deal_type || dealTimeLeft) && (
-                <div className="mx-4 rounded-2xl overflow-hidden shadow-lg">
-                    <div className="px-4 py-3 bg-gradient-to-r from-red-600 via-pink-600 to-red-600 animate-gradient-x flex items-center justify-between">
-                        <div className="flex flex-col">
-                            <span className="font-black text-xs uppercase tracking-widest text-white/90">
-                                {product.deal_type === 'coupon' ? '🎁 Exclusive Coupon' : '🔥 Limited Promotion'}
-                            </span>
-                            {product.activeCoupon?.label && (
-                                <span className="text-sm font-black text-white">{product.activeCoupon.label}</span>
+                <div className="mx-4">
+                    <div className="relative overflow-hidden rounded-3xl bg-slate-900 shadow-2xl shadow-red-900/10 border border-white/5">
+                        {/* Glass Background Elements */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/20 blur-[40px] rounded-full -mr-16 -mt-16 animate-pulse" />
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-rose-600/10 blur-[30px] rounded-full -ml-12 -mb-12" />
+
+                        <div className="relative px-5 py-4 flex items-center justify-between backdrop-blur-3xl">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="flex items-center gap-1.5 font-black text-[9px] uppercase tracking-[0.2em] text-red-500 mb-1">
+                                    <span className="w-1 h-1 rounded-full bg-red-500 animate-ping" />
+                                    Active Promotion
+                                </span>
+                                {product.activeCoupon?.label ? (
+                                    <span className="text-sm font-black text-white leading-tight">{product.activeCoupon.label}</span>
+                                ) : (
+                                    <span className="text-sm font-black text-white leading-tight">Exclusive Flash Deal</span>
+                                )}
+                            </div>
+
+                            {dealTimeLeft ? (
+                                <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/5 shadow-inner">
+                                    {dealTimeLeft.days > 0 && (
+                                        <div className="flex flex-col items-center bg-white/10 px-2 py-1 rounded-xl min-w-[34px]">
+                                            <span className="text-[13px] font-black text-white leading-none">{dealTimeLeft.days}</span>
+                                            <span className="text-[7px] font-black text-white/40 uppercase mt-0.5 tracking-tighter">Day</span>
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col items-center bg-white/10 px-2 py-1 rounded-xl min-w-[34px]">
+                                        <span className="text-[13px] font-black text-white leading-none">{String(dealTimeLeft.hours).padStart(2, '0')}</span>
+                                        <span className="text-[7px] font-black text-white/40 uppercase mt-0.5 tracking-tighter">Hrs</span>
+                                    </div>
+                                    <span className="text-white/20 font-black -mt-3.5">:</span>
+                                    <div className="flex flex-col items-center bg-white/10 px-2 py-1 rounded-xl min-w-[34px]">
+                                        <span className="text-[13px] font-black text-white leading-none">{String(dealTimeLeft.minutes).padStart(2, '0')}</span>
+                                        <span className="text-[7px] font-black text-white/40 uppercase mt-0.5 tracking-tighter">Min</span>
+                                    </div>
+                                    <span className="text-white/20 font-black -mt-3.5">:</span>
+                                    <div className="flex flex-col items-center bg-red-500 px-2 py-1 rounded-xl min-w-[34px] shadow-[0_0_15px_rgba(239,68,68,0.4)]">
+                                        <span className="text-[13px] font-black text-white leading-none">{String(dealTimeLeft.seconds).padStart(2, '0')}</span>
+                                        <span className="text-[7px] font-black text-white/80 uppercase mt-0.5 tracking-tighter">Sec</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="px-3 py-1.5 bg-red-500/10 rounded-full border border-red-500/20">
+                                    <span className="text-[10px] font-black text-red-500 uppercase tracking-tighter">Ends Very Soon</span>
+                                </div>
                             )}
                         </div>
-                        {dealTimeLeft ? (
-                            <div className="flex items-center gap-1">
-                                {dealTimeLeft.days > 0 && (
-                                    <div className="bg-white/20 backdrop-blur px-2 py-1 rounded-lg text-center min-w-[36px]">
-                                        <span className="text-sm font-black text-white block leading-none">{dealTimeLeft.days}</span>
-                                        <span className="text-[8px] font-black text-white/70 uppercase">d</span>
-                                    </div>
-                                )}
-                                <div className="bg-white/20 backdrop-blur px-2 py-1 rounded-lg text-center min-w-[36px]">
-                                    <span className="text-sm font-black text-white block leading-none">{String(dealTimeLeft.hours).padStart(2, '0')}</span>
-                                    <span className="text-[8px] font-black text-white/70 uppercase">h</span>
-                                </div>
-                                <span className="text-white font-black">:</span>
-                                <div className="bg-white/20 backdrop-blur px-2 py-1 rounded-lg text-center min-w-[36px]">
-                                    <span className="text-sm font-black text-white block leading-none">{String(dealTimeLeft.minutes).padStart(2, '0')}</span>
-                                    <span className="text-[8px] font-black text-white/70 uppercase">m</span>
-                                </div>
-                                <span className="text-white font-black">:</span>
-                                <div className="bg-white/20 backdrop-blur px-2 py-1 rounded-lg text-center min-w-[36px] animate-pulse">
-                                    <span className="text-sm font-black text-white block leading-none">{String(dealTimeLeft.seconds).padStart(2, '0')}</span>
-                                    <span className="text-[8px] font-black text-white/70 uppercase">s</span>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white/10 backdrop-blur-md px-3 py-1 rounded-full border border-white/20">
-                                <span className="text-[10px] font-black text-white uppercase tracking-tighter">⏰ Hurry! Ends Soon</span>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}

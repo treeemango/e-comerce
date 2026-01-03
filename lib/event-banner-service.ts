@@ -15,12 +15,14 @@ export interface EventBannerData {
     fromCache?: boolean;
     urgencyText?: string;
     hasCountdown?: boolean;
+    iconKey?: string | null;
     // AI-generated section titles
     lightningDealsTitle?: string | null;
     lightningDealsHeadline?: string | null;
     lightningDealsSubtitle?: string | null;
     trendingTitle?: string | null;
     trendingSubtitle?: string | null;
+    searchQuery?: string | null;
 }
 
 // Trust badges for hero section
@@ -123,7 +125,7 @@ export function getSectionTitles(eventBanner: EventBannerData | null) {
     };
 }
 
-const BANNER_CACHE_KEY = 'event_banner_cache_v2';
+const BANNER_CACHE_KEY = 'event_banner_cache_v3';
 const BANNER_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours client-side
 
 interface CachedBanner {
@@ -217,11 +219,13 @@ export async function fetchEventBanner(countryCode?: string): Promise<EventBanne
             fromCache: data.fromCache,
             urgencyText: data.urgencyText,
             hasCountdown: data.hasCountdown,
+            iconKey: data.iconKey,
             lightningDealsTitle: data.lightningDealsTitle,
             lightningDealsHeadline: data.lightningDealsHeadline,
             lightningDealsSubtitle: data.lightningDealsSubtitle,
             trendingTitle: data.trendingTitle,
-            trendingSubtitle: data.trendingSubtitle
+            trendingSubtitle: data.trendingSubtitle,
+            searchQuery: data.searchQuery
         };
 
         // Cache locally
@@ -287,7 +291,8 @@ function getDefaultBanner(): EventBannerData {
         accentColor: "#f59e0b",
         vibe: "premium",
         eventName: "default",
-        countryCode: "GLOBAL"
+        countryCode: "GLOBAL",
+        iconKey: 'diamond'
     };
 }
 

@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSupportedCountryCodes, getCountrySEOConfig } from '../lib/country-seo';
-import { getAllCategoryIds, getCategorySEOConfig } from '../lib/category-seo';
 
 // Load environment variables from .env file
 function loadEnv() {
@@ -52,68 +51,72 @@ interface Category {
   id: string;
   name: string;
   slug?: string;
+  is_active?: boolean;
+}
+
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function slugifyCategoryName(name: string): string {
+  // Preserve existing slugs like "mobile-&-smart-phones" if present in DB.
+  // When slug missing, fall back to a conservative slugification.
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\-_.~&]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function buildUrl(baseUrl: string, pathname: string, countryCode?: string): string {
+  const url = new URL(pathname, baseUrl);
+  if (countryCode && countryCode !== 'KE') {
+    url.searchParams.set('country', countryCode.toLowerCase());
+  }
+  return url.toString();
+}
+
+function renderUrlEntry(loc: string, lastmod: string, changefreq: string, priority: string): string {
+  return `
+  <url>
+    <loc>${xmlEscape(loc)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
 }
 
 /**
  * Generate base sitemap structure for a specific country
  */
 function generateBaseSitemapXML(baseUrl: string, today: string, countryCode?: string) {
-  const countryParam = countryCode && countryCode !== 'KE' ? `?country=${countryCode.toLowerCase()}` : '';
-
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 
   <!-- Main Pages -->
-  <url>
-    <loc>${baseUrl}/${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-
-  <url>
-    <loc>${baseUrl}/five-star${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <url>
-    <loc>${baseUrl}/best-selling${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>
+${renderUrlEntry(buildUrl(baseUrl, '/', countryCode), today, 'daily', '1.0')}
+${renderUrlEntry(buildUrl(baseUrl, '/five-star', countryCode), today, 'daily', '0.9')}
+${renderUrlEntry(buildUrl(baseUrl, '/best-selling', countryCode), today, 'daily', '0.9')}
 
   <!-- Static Pages -->
-  <url>
-    <loc>${baseUrl}/about${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-
-  <url>
-    <loc>${baseUrl}/contact${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-
-  <url>
-    <loc>${baseUrl}/help${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-
-  <url>
-    <loc>${baseUrl}/seller-login${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>`;
+${renderUrlEntry(buildUrl(baseUrl, '/about', countryCode), today, 'monthly', '0.5')}
+${renderUrlEntry(buildUrl(baseUrl, '/company-details', countryCode), today, 'monthly', '0.4')}
+${renderUrlEntry(buildUrl(baseUrl, '/help', countryCode), today, 'monthly', '0.5')}
+${renderUrlEntry(buildUrl(baseUrl, '/returns', countryCode), today, 'monthly', '0.4')}
+${renderUrlEntry(buildUrl(baseUrl, '/shipping', countryCode), today, 'monthly', '0.4')}
+${renderUrlEntry(buildUrl(baseUrl, '/protection', countryCode), today, 'monthly', '0.4')}
+${renderUrlEntry(buildUrl(baseUrl, '/terms', countryCode), today, 'monthly', '0.4')}
+${renderUrlEntry(buildUrl(baseUrl, '/privacy', countryCode), today, 'monthly', '0.4')}
+${renderUrlEntry(buildUrl(baseUrl, '/contact', countryCode), today, 'monthly', '0.5')}
+${renderUrlEntry(buildUrl(baseUrl, '/seller-login', countryCode), today, 'monthly', '0.6')}`;
 }
 
 /**
@@ -161,21 +164,14 @@ async function generateCountrySitemap(countryCode: string, categories: Category[
 
   let xml = generateBaseSitemapXML(baseUrl, today, countryCode);
 
-  // Add categories for this country
-  const categoryIds = getAllCategoryIds();
-  categoryIds.forEach(categoryId => {
-    const categoryConfig = getCategorySEOConfig(categoryId);
-    if (categoryConfig) {
-      const countryParam = countryCode !== 'KE' ? `?country=${countryCode.toLowerCase()}` : '';
-      xml += `
-  <url>
-    <loc>${baseUrl}/category/${categoryConfig.slug}${countryParam}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
-    }
-  });
+  // Add categories (real DB slugs)
+  categories
+    .filter((c) => c && (c.is_active === undefined || c.is_active === true))
+    .forEach((category: Category) => {
+      const slug = (category.slug || slugifyCategoryName(category.name || '')).trim();
+      if (!slug) return;
+      xml += renderUrlEntry(buildUrl(baseUrl, `/category/${slug}`, countryCode), today, 'weekly', '0.8');
+    });
 
   // Add products for this country (limit to top products per country)
   const productsPerCountry = 500; // Limit products per country sitemap
@@ -183,15 +179,8 @@ async function generateCountrySitemap(countryCode: string, categories: Category[
     const lastmod = product.updated_at
       ? new Date(product.updated_at).toISOString().split('T')[0]
       : today;
-    const countryParam = countryCode !== 'KE' ? `?country=${countryCode.toLowerCase()}` : '';
 
-    xml += `
-  <url>
-    <loc>${baseUrl}/product/${product.id}${countryParam}</loc>
-    <lastmod>${lastmod}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
+    xml += renderUrlEntry(buildUrl(baseUrl, `/product/${product.id}`, countryCode), lastmod, 'weekly', '0.7');
   });
 
   xml += '\n</urlset>\n';
@@ -209,14 +198,9 @@ async function generateDefaultSitemap(categories: Category[], products: Product[
 
   // Add categories
   categories.forEach((category: Category) => {
-    const slug = category.slug || category.name.toLowerCase().replace(/\s+/g, '-');
-    xml += `
-  <url>
-    <loc>${baseUrl}/category/${slug}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
+    const slug = (category.slug || slugifyCategoryName(category.name || '')).trim();
+    if (!slug) return;
+    xml += renderUrlEntry(buildUrl(baseUrl, `/category/${slug}`), today, 'weekly', '0.8');
   });
 
   // Add products
@@ -224,13 +208,7 @@ async function generateDefaultSitemap(categories: Category[], products: Product[
     const lastmod = product.updated_at
       ? new Date(product.updated_at).toISOString().split('T')[0]
       : today;
-    xml += `
-  <url>
-    <loc>${baseUrl}/product/${product.id}</loc>
-    <lastmod>${lastmod}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
+    xml += renderUrlEntry(buildUrl(baseUrl, `/product/${product.id}`), lastmod, 'weekly', '0.7');
   });
 
   xml += '\n</urlset>\n';
@@ -251,8 +229,9 @@ async function generateSitemap() {
   console.log('📂 Fetching categories...');
   const { data: categories, error: categoriesError } = await supabase
     .from('shopify_categories')
-    .select('id, name')
-    .limit(100);
+    .select('id, name, slug, is_active')
+    .order('name')
+    .limit(2000);
 
   if (categoriesError) {
     console.warn('⚠️ Warning: Could not fetch categories:', categoriesError.message);

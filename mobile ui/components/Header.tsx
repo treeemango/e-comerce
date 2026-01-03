@@ -22,7 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="bg-white dark:bg-black sticky top-0 z-40 transition-shadow duration-300">
-      <div className="flex items-center justify-between px-4 py-3 gap-3 max-w-[520px] mx-auto">
+      <div className="flex items-center justify-between px-4 py-3 gap-3">
 
         {/* Search Bar - Now on the left */}
         <div

@@ -3,6 +3,7 @@ import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 import { Product } from '@/types';
 import { fetchEventBanner, type EventBannerData, TRUST_BADGES } from '@/lib/event-banner-service';
+import { getEventIconSrc } from '@/lib/event-icons';
 
 // Thematic Mapping for Categories (Shared logic but mobile-tuned colors)
 const CATEGORY_THEMES: Record<string, { gradient: string; accent: string; text: string }> = {
@@ -118,46 +119,50 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
 
     return (
         <div className="relative w-full overflow-hidden">
-            {/* Event Banner Overlay - AI Generated */}
+            {/* Banner Overlay */}
             {eventBanner && eventBanner.eventName !== 'default' && (
                 <div
-                    className="px-4 py-2 flex items-center justify-between"
-                    style={{ backgroundColor: eventBanner.backgroundColor }}
+                    className="absolute top-0 inset-x-0 h-10 flex items-center justify-between px-6 z-20 text-white overflow-hidden group/event cursor-pointer"
+                    style={{
+                        background: `linear-gradient(90deg, ${eventBanner.backgroundColor}, ${eventBanner.accentColor}dd)`
+                    }}
+                    onClick={() => {
+                        const url = new URL(window.location.href);
+                        url.search = '';
+                        url.searchParams.set('view', 'event-deals');
+                        url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
+                        if (eventBanner.searchQuery) {
+                            url.searchParams.set('search', eventBanner.searchQuery);
+                        }
+                        window.open(url.toString(), '_blank');
+                    }}
                 >
-                    <div className="flex-1 min-w-0">
-                        <h3
-                            className="text-sm font-black tracking-tight truncate"
-                            style={{ color: eventBanner.accentColor }}
-                        >
-                            {eventBanner.headline}
-                        </h3>
-                        <p className="text-[10px] text-white/80 truncate">
-                            {eventBanner.subheadline}
-                        </p>
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 backdrop-blur-md border border-white/20">
+                            <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-4 w-4" />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[8px] font-black uppercase tracking-widest text-white/70 leading-none">{eventBanner.eventName}</span>
+                            <h3 className="text-[10px] font-black tracking-tight uppercase mt-0.5 line-clamp-1">{eventBanner.headline}</h3>
+                        </div>
                     </div>
-                    <button
-                        className="shrink-0 ml-2 px-3 py-1 rounded-full text-[10px] font-bold"
-                        style={{
-                            backgroundColor: eventBanner.accentColor,
-                            color: eventBanner.backgroundColor
-                        }}
-                    >
+                    <button className="px-3 py-1 bg-white text-black text-[8px] font-black rounded-full shadow-lg">
                         {eventBanner.cta}
                     </button>
-                    {eventBanner.urgencyText && (
-                        <div
-                            className="shrink-0 ml-2 px-2 py-1 rounded-full text-[9px] font-bold text-white flex items-center gap-1 animate-pulse"
-                            style={{
-                                background: 'linear-gradient(135deg, #dc2626, #f59e0b)',
-                            }}
-                        >
-                            <span className="material-icons-outlined text-[10px]">schedule</span>
-                            {eventBanner.urgencyText}
-                        </div>
-                    )}
                 </div>
             )}
-            <div className="relative w-full h-[260px]">
+
+            {/* Urgency Badge */}
+            {eventBanner?.urgencyText && (
+                <div className="absolute top-12 right-6 z-20 animate-pulse">
+                    <div className="bg-red-600 text-white text-[8px] font-black px-3 py-1 rounded-full shadow-lg flex items-center gap-1.5 uppercase tracking-tighter">
+                        <span className="material-icons text-[10px]">timer</span>
+                        {eventBanner.urgencyText}
+                    </div>
+                </div>
+            )}
+
+            <div className={`relative w-full ${eventBanner && eventBanner.eventName !== 'default' ? 'h-[300px]' : 'h-[260px]'}`}>
                 {deals.map((deal, idx) => {
                     const isActive = idx === currentSlide;
                     const theme = getTheme(deal.category_id || deal.category_name, idx);
@@ -174,7 +179,7 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                             {/* Ambient Glows */}
                             <div className={`absolute top-0 right-0 w-32 h-32 bg-white/10 blur-3xl rounded-full transition-all duration-1000 ${isActive ? 'opacity-100 scale-150' : 'opacity-0 scale-50'}`} />
 
-                            <div className="absolute inset-0 flex items-center px-6 gap-4">
+                            <div className={`absolute inset-0 flex items-center px-6 gap-4 ${eventBanner && eventBanner.eventName !== 'default' ? 'pt-10' : ''}`}>
                                 {/* Product Info */}
                                 <div className="flex-1 flex flex-col justify-center h-full z-10 space-y-2">
                                     <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20 w-fit">

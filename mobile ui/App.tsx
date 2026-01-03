@@ -65,6 +65,7 @@ import { OrderPrice } from '@/components/OrderPrice';
 import { detectUserCurrency } from '@/lib/currency-service';
 import { trackProductViewAuto } from '@/lib/tracking';
 import { useSwipeGesture } from './hooks/useSwipeGesture';
+import { fetchEventBanner, type EventBannerData } from '@/lib/event-banner-service';
 
 type AccountSectionKey = 'orders' | 'coupons' | 'credit' | 'reviews' | 'wishlist' | 'stores' | 'history' | 'addresses' | 'support' | 'settings' | 'switch' | 'logout' | 'messages' | 'driver_access' | 'notifications' | 'profile';
 
@@ -118,6 +119,7 @@ const App: React.FC = () => {
     const [disputeReason, setDisputeReason] = useState('');
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [, setPreferredCurrency] = useState(getUserCurrency());
+    const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
 
     const { history: notificationHistory } = useNotifications();
     const notificationCount = userProfile?.id
@@ -196,6 +198,7 @@ const App: React.FC = () => {
             }
         };
         loadData();
+        fetchEventBanner().then(setEventBanner).catch(console.error);
     }, []);
 
     // Auto-detect and persist currency preference for mobile users
@@ -301,6 +304,7 @@ const App: React.FC = () => {
         const orderId = params.get('order_id');
         const vendorId = params.get('vendorId');
         const chatId = params.get('chat_id');
+        const searchParam = params.get('search');
         const viewDeal = params.get('view') === 'deals';
 
         if (view === 'platform-reviews') {
@@ -331,6 +335,8 @@ const App: React.FC = () => {
                 }
             };
             loadDeepLinkProduct();
+        } else if (searchParam) {
+            handleSearch(searchParam);
         } else if (orderId) {
             // Deep link to order details (via Account > Orders)
             // We set the active account section to orders.
@@ -1781,6 +1787,7 @@ const App: React.FC = () => {
                                         setIsPlatformReviewsOpen(true);
                                     }}
                                     hasPlatformReviews={hasPlatformReviews}
+                                    eventBanner={eventBanner}
                                 />
                             )}
                         </main>
@@ -1950,6 +1957,7 @@ const App: React.FC = () => {
                         userName={userProfile?.name || userProfile?.email}
                         notificationCount={notificationCount}
                     />
+
                 </div>
 
             )}

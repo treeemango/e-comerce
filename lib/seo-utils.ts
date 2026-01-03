@@ -10,7 +10,7 @@ export const SITE_CONFIG = {
     fullName: 'JuaExpress Marketplace',
     description: 'Your African shopping destination - Modern e-commerce with personalized recommendations, fast delivery, and exceptional customer service',
     url: typeof window !== 'undefined' ? window.location.origin : 'https://juaexpress.com',
-    logo: '/images/icon-512.png',
+    logo: '/icon-512.png',
     email: 'juaexpress01@gmail.com',
     phone: '0792345628',
     country: 'Kenya',
@@ -70,7 +70,7 @@ export function generateWebSiteSchema() {
             '@type': 'SearchAction',
             target: {
                 '@type': 'EntryPoint',
-                urlTemplate: `${SITE_CONFIG.url}/search?q={search_term_string}`,
+                urlTemplate: `${SITE_CONFIG.url}/?search={search_term_string}`,
             },
             'query-input': 'required name=search_term_string',
         },

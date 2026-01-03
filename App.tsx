@@ -9,8 +9,9 @@ import ProductSection from './components/ProductSection';
 import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
-import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, ensureSupportConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById } from '@/lib/api';
-import { fetchEventBanner, type EventBannerData } from '@/lib/event-banner-service';
+import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, ensureSupportConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById, fetchCategoryBySlug } from '@/lib/api';
+import { fetchEventBanner, type EventBannerData, getSectionTitles } from '@/lib/event-banner-service';
+import { getEventIconSrc } from '@/lib/event-icons';
 import { getCurrentUser, getUserProfile, isAccountBanned, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
@@ -114,7 +115,7 @@ const App: React.FC = () => {
   const { countryConfig, isLoading: seoLoading } = useCountrySEO({
     pageType: 'home'
   });
-  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'search-results' | 'product-detail' | 'vendor-store' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page' | 'platform-reviews'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'five-star' | 'best-selling' | 'deals' | 'event-deals' | 'search-results' | 'product-detail' | 'vendor-store' | 'seller-login' | 'seller-onboarding' | 'seller-dashboard' | 'driver-login' | 'driver-onboarding' | 'driver-dashboard' | 'admin-login' | 'admin-dashboard' | 'buyer-auth' | 'account-page' | 'checkout' | 'cart' | 'order-confirmation' | 'track-order' | 'wishlist' | 'info-page' | 'platform-reviews'>('home');
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'products' | 'manage-products' | 'add-products' | 'add-products-upload' | 'pricing-health' | 'product-compliance' | 'orders' | 'promotions' | 'finances' | 'performance' | 'apps' | 'account' | 'settings' | 'messages' | 'create-auto-discount' | 'create-coupon'>('manage-products');
   const [adminTab, setAdminTab] = useState<'overview' | 'products' | 'sellers' | 'drivers' | 'users' | 'orders' | 'moderation' | 'finances' | 'ai' | 'messages' | 'content' | 'activity' | 'feedback'>('overview');
   const [driverTab, setDriverTab] = useState<'jobs' | 'earnings' | 'vehicles' | 'profile'>('jobs');
@@ -194,6 +195,8 @@ const App: React.FC = () => {
 
   // Event Banner State (for dynamic section titles)
   const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
+
+  const eventSectionTitles = useMemo(() => getSectionTitles(eventBanner || null), [eventBanner]);
 
   // Fetch event banner on mount for dynamic section titles
   useEffect(() => {
@@ -341,8 +344,96 @@ const App: React.FC = () => {
     const chatId = params.get('chat_id');
     const tabParam = params.get('tab');
     const sectionParam = params.get('section');
+    const searchParam = params.get('search');
 
-    if (chatId) {
+    const pathnameRaw = window.location.pathname || '/';
+    const pathname = pathnameRaw.length > 1 ? pathnameRaw.replace(/\/+$/, '') : '/';
+    const pathSlug = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+    const infoSlugs = new Set([
+      'about',
+      'terms',
+      'privacy',
+      'returns',
+      'shipping',
+      'protection',
+      'contact',
+      'sell',
+      'affiliate',
+      'careers',
+      'sustainability',
+      'support-center',
+      'safety-centre',
+      'sitemap',
+      'intellectual-property',
+      'report-suspicious',
+      'company-details',
+      'corporate-responsibility',
+      'minimum-order'
+    ]);
+
+    const productPathMatch = pathname.match(/^\/product\/([^\/]+)$/);
+    const categoryPathMatch = pathname.match(/^\/category\/([^\/]+)$/);
+
+    if (productPathMatch?.[1]) {
+      const productIdFromPath = decodeURIComponent(productPathMatch[1]);
+      const loadDeepLinkProduct = async () => {
+        try {
+          const product = await fetchProductById(productIdFromPath);
+          if (product) {
+            setSelectedProduct(product);
+            setCurrentView('product-detail');
+          }
+        } catch (err) {
+          console.error('Error loading product from path:', err);
+        }
+      };
+      loadDeepLinkProduct();
+    } else if (categoryPathMatch?.[1]) {
+      const categorySlugFromPath = decodeURIComponent(categoryPathMatch[1]);
+      const loadCategoryFromPath = async () => {
+        try {
+          // Try fast mapping from navbar RPC first
+          const nav = await fetchNavbarCategories();
+          const hit = nav.find((c) => (c.category_handle || '').toLowerCase() === categorySlugFromPath.toLowerCase());
+
+          if (hit?.category_id) {
+            setActiveCategoryIds([String(hit.category_id)]);
+            setProductSectionTitle(hit.category_name || categorySlugFromPath);
+            setCurrentView('search-results');
+            return;
+          }
+
+          // Fallback: lookup shopify_categories by slug
+          const category = await fetchCategoryBySlug(categorySlugFromPath);
+          if (category?.id) {
+            setActiveCategoryIds([String(category.id)]);
+            setProductSectionTitle(category.name || categorySlugFromPath);
+            setCurrentView('search-results');
+            return;
+          }
+
+          // Last resort: show a filtered view using slug as the key
+          setActiveCategoryIds([categorySlugFromPath]);
+          setProductSectionTitle(categorySlugFromPath);
+          setCurrentView('search-results');
+        } catch (err) {
+          console.error('Error loading category from path:', err);
+        }
+      };
+      loadCategoryFromPath();
+    } else if (viewParam === 'event-deals') {
+      setCurrentView('event-deals');
+      setSearchQuery(searchParam || '');
+      setSelectedVendorId(undefined);
+      setActiveVendorStoreId(null);
+      setActiveCategoryIds([]);
+      setVisualSubcategories([]);
+      setBreadcrumbs([]);
+      const eventTitle = params.get('event');
+      setProductSectionTitle(eventTitle || 'Event Deals');
+    } else if (searchParam) {
+      handleSearch(searchParam);
+    } else if (chatId) {
       setAccountPageTitle('Messages');
       setCurrentView('account-page');
       setActiveConversationId(chatId === 'inbox' ? null : chatId);
@@ -391,6 +482,23 @@ const App: React.FC = () => {
     } else if (orderId) {
       setAccountPageTitle('Your orders');
       setCurrentView('account-page');
+    } else if (!viewParam && !productId && !orderId && !chatId) {
+      // Pathname-based routes (for direct visits and indexing)
+      if (pathname === '/five-star') {
+        setCurrentView('five-star');
+      } else if (pathname === '/best-selling') {
+        setCurrentView('best-selling');
+      } else if (pathname === '/deals') {
+        setCurrentView('deals');
+      } else if (pathname === '/seller-login') {
+        setCurrentView('seller-login');
+      } else if (pathname === '/help') {
+        setActiveInfoPageSlug('support-center');
+        setCurrentView('info-page');
+      } else if (infoSlugs.has(pathSlug)) {
+        setActiveInfoPageSlug(pathSlug);
+        setCurrentView('info-page');
+      }
     }
   }, []);
 
@@ -398,8 +506,99 @@ const App: React.FC = () => {
     const onPopState = () => {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
+      const searchParam = params.get('search');
       const productId = params.get('product_id');
       const orderId = params.get('order_id');
+
+      const pathnameRaw = window.location.pathname || '/';
+      const pathname = pathnameRaw.length > 1 ? pathnameRaw.replace(/\/+$/, '') : '/';
+      const pathSlug = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+      const infoSlugs = new Set([
+        'about',
+        'terms',
+        'privacy',
+        'returns',
+        'shipping',
+        'protection',
+        'contact',
+        'sell',
+        'affiliate',
+        'careers',
+        'sustainability',
+        'support-center',
+        'safety-centre',
+        'sitemap',
+        'intellectual-property',
+        'report-suspicious',
+        'company-details',
+        'corporate-responsibility',
+        'minimum-order'
+      ]);
+
+      const productPathMatch = pathname.match(/^\/product\/([^\/]+)$/);
+      const categoryPathMatch = pathname.match(/^\/category\/([^\/]+)$/);
+
+      if (productPathMatch?.[1]) {
+        const productIdFromPath = decodeURIComponent(productPathMatch[1]);
+        (async () => {
+          try {
+            const product = await fetchProductById(productIdFromPath);
+            if (product) {
+              setSelectedProduct(product);
+              setCurrentView('product-detail');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          } catch (err) {
+            console.error('Error loading popstate product from path:', err);
+          }
+        })();
+        return;
+      }
+
+      if (categoryPathMatch?.[1]) {
+        const categorySlugFromPath = decodeURIComponent(categoryPathMatch[1]);
+        (async () => {
+          try {
+            const nav = await fetchNavbarCategories();
+            const hit = nav.find((c) => (c.category_handle || '').toLowerCase() === categorySlugFromPath.toLowerCase());
+            if (hit?.category_id) {
+              setActiveCategoryIds([String(hit.category_id)]);
+              setProductSectionTitle(hit.category_name || categorySlugFromPath);
+              setCurrentView('search-results');
+              return;
+            }
+
+            const category = await fetchCategoryBySlug(categorySlugFromPath);
+            if (category?.id) {
+              setActiveCategoryIds([String(category.id)]);
+              setProductSectionTitle(category.name || categorySlugFromPath);
+              setCurrentView('search-results');
+              return;
+            }
+
+            setActiveCategoryIds([categorySlugFromPath]);
+            setProductSectionTitle(categorySlugFromPath);
+            setCurrentView('search-results');
+          } catch (err) {
+            console.error('Error loading popstate category from path:', err);
+          }
+        })();
+        return;
+      }
+
+      if (view === 'event-deals') {
+        setCurrentView('event-deals');
+        setSearchQuery(searchParam || '');
+        setSelectedVendorId(undefined);
+        setActiveVendorStoreId(null);
+        setActiveCategoryIds([]);
+        setVisualSubcategories([]);
+        setBreadcrumbs([]);
+        const eventTitle = params.get('event');
+        setProductSectionTitle(eventTitle || 'Event Deals');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
 
       if (view === 'vendor-store') {
         const vendorId = params.get('vendorId');
@@ -408,6 +607,11 @@ const App: React.FC = () => {
           setCurrentView('vendor-store');
           return;
         }
+      }
+
+      if (searchParam) {
+        handleSearch(searchParam);
+        return;
       }
 
       if (view === 'wishlist') {
@@ -440,6 +644,36 @@ const App: React.FC = () => {
       if (view === 'platform-reviews') {
         setCurrentView('platform-reviews');
         return;
+      }
+
+      // Pathname-based routes (for direct visits)
+      if (!view && !searchParam && !productId && !orderId) {
+        if (pathname === '/five-star') {
+          setCurrentView('five-star');
+          return;
+        }
+        if (pathname === '/best-selling') {
+          setCurrentView('best-selling');
+          return;
+        }
+        if (pathname === '/deals') {
+          setCurrentView('deals');
+          return;
+        }
+        if (pathname === '/seller-login') {
+          setCurrentView('seller-login');
+          return;
+        }
+        if (pathname === '/help') {
+          setActiveInfoPageSlug('support-center');
+          setCurrentView('info-page');
+          return;
+        }
+        if (infoSlugs.has(pathSlug)) {
+          setActiveInfoPageSlug(pathSlug);
+          setCurrentView('info-page');
+          return;
+        }
       }
 
       // Default fallback
@@ -1288,7 +1522,7 @@ const App: React.FC = () => {
           onCameraClick={() => setIsVisualSearchOpen(true)}
         />
       )}
-      <main className={`flex-1 w-full ${currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' ? 'max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8' : ''}`}>
+      <main className={`flex-1 w-full ${currentView !== 'seller-login' && currentView !== 'buyer-auth' && currentView !== 'seller-onboarding' && currentView !== 'seller-dashboard' && currentView !== 'admin-dashboard' && currentView !== 'admin-login' ? `max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 ${(currentView === 'home' || currentView === 'event-deals' || currentView === 'deals') ? 'pt-0 pb-8' : 'py-8'}` : ''}`}>
         {currentView === 'home' && (
           <>
             <HeroSection onProductClick={handleProductClick} />
@@ -1324,6 +1558,33 @@ const App: React.FC = () => {
         )}
         {currentView === 'deals' && (
           <>
+            {eventBanner && eventBanner.eventName !== 'default' && (
+              <div
+                className="relative left-1/2 -translate-x-1/2 w-screen text-white overflow-hidden"
+                style={{
+                  background: (eventBanner.backgroundColor && eventBanner.accentColor)
+                    ? `linear-gradient(135deg, ${eventBanner.backgroundColor}, ${eventBanner.accentColor})`
+                    : 'linear-gradient(135deg, #111827, #fbbf24)'
+                }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full" />
+                <div className="w-full h-20 md:h-24 px-4 sm:px-6 lg:px-8 flex items-center">
+                  <div className="mx-auto w-full max-w-7xl flex items-center justify-center">
+                    <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
+                      <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-6 w-6" />
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <div className="text-[10px] font-semibold tracking-[0.2em] uppercase text-white/75 leading-none">{eventSectionTitles.lightningDeals.title}</div>
+                      <div className="mt-1 text-lg md:text-xl font-extrabold tracking-tight leading-tight">{eventSectionTitles.lightningDeals.headline}</div>
+                      <div className="mt-0.5 text-sm text-white/85 leading-snug">{eventSectionTitles.lightningDeals.subtitle}</div>
+                    </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <DealsNavBar
               categories={dealCategories}
               loading={dealsLoading}
@@ -1336,6 +1597,7 @@ const App: React.FC = () => {
               products={dealProducts}
               onAddToCart={addToCart}
               showCategoryPills={false}
+              eventBanner={eventBanner}
             />
           </>
         )}
@@ -1352,7 +1614,51 @@ const App: React.FC = () => {
             onCategoryClick={handleCategoryClick}
             breadcrumbs={breadcrumbs}
             onHomeClick={handleHomeClick}
+            eventBanner={eventBanner}
           />
+        )}
+
+        {currentView === 'event-deals' && (
+          <>
+            {eventBanner && eventBanner.eventName !== 'default' && (
+              <div
+                className="relative left-1/2 -translate-x-1/2 w-screen h-12 flex items-center justify-between z-20 text-white overflow-hidden"
+                style={{
+                  background: (eventBanner.backgroundColor && eventBanner.accentColor)
+                    ? `linear-gradient(135deg, ${eventBanner.backgroundColor}, ${eventBanner.accentColor})`
+                    : 'linear-gradient(135deg, #111827, #fbbf24)'
+                }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-none" />
+                <div className="w-full flex items-center justify-between px-4 sm:px-6 lg:px-8 relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
+                      <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-5 w-5" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
+                      <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex items-baseline gap-2">
+                        <span className="line-clamp-1">{eventBanner.headline}</span>
+                        <span className="opacity-60 font-bold text-xs lowercase italic hidden lg:inline">— {eventBanner.subheadline}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl whitespace-nowrap">{eventBanner.cta}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <ProductSection
+              searchQuery={searchQuery}
+              title={productSectionTitle || eventBanner?.headline || 'Event Deals'}
+              onProductClick={handleProductClick}
+              products={products}
+              onAddToCart={addToCart}
+              eventBanner={eventBanner}
+            />
+          </>
         )}
         {currentView === 'product-detail' && selectedProduct && (
           <ProductDetailView

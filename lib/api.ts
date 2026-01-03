@@ -2753,6 +2753,29 @@ export const fetchCategoryName = async (categoryId: string | number): Promise<st
     }
 };
 
+export const fetchCategoryBySlug = async (slug: string): Promise<{ id: string | number; name: string; slug?: string } | null> => {
+    const normalized = (slug || '').trim();
+    if (!normalized) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from('shopify_categories')
+            .select('id, name, slug')
+            .eq('slug', normalized)
+            .limit(1)
+            .maybeSingle();
+
+        if (error || !data) {
+            return null;
+        }
+
+        return data as any;
+    } catch (error) {
+        console.error('Error fetching category by slug:', error);
+        return null;
+    }
+};
+
 // Review System API Functions
 import { Review, ReviewFilters, ProductReviewSummary, SubmitReviewData } from '@/types';
 
