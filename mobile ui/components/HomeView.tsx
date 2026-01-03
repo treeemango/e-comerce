@@ -3,6 +3,7 @@ import { Product } from '@/types';
 import { ProductCard } from './ProductCard';
 import { MobileHeroSection } from './MobileHeroSection';
 import { MobileLightningDealsRow } from './MobileLightningDealsRow';
+import { fetchEventBanner, type EventBannerData, getSectionTitles } from '@/lib/event-banner-service';
 
 interface HomeViewProps {
   products: Product[];
@@ -16,6 +17,11 @@ interface HomeViewProps {
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick, hasPlatformReviews = true }) => {
+  const [eventBanner, setEventBanner] = React.useState<EventBannerData | null>(null);
+
+  React.useEffect(() => {
+    fetchEventBanner().then(setEventBanner).catch(console.error);
+  }, []);
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -38,7 +44,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
           {/* Dynamic Hero Section */}
           <div className="px-4 pt-4">
             <div className="rounded-3xl overflow-hidden shadow-premium">
-              <MobileHeroSection onProductClick={onProductClick} />
+              <MobileHeroSection onProductClick={onProductClick} eventBanner={eventBanner} />
             </div>
           </div>
 
@@ -122,6 +128,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
               <MobileLightningDealsRow
                 onProductClick={onProductClick}
                 onViewAll={onViewAllDeals || (() => { })}
+                eventBanner={eventBanner}
               />
             </div>
           </div>
@@ -157,8 +164,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
 
       {/* Main Product Feed */}
       <div className="mt-8 px-4">
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="font-black text-lg tracking-tight uppercase">Explore More</h3>
+        <div className="flex flex-col gap-1 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="material-icons-round text-primary animate-pulse">local_fire_department</span>
+            <h3 className="font-black text-lg tracking-tight uppercase">
+              {React.useMemo(() => getSectionTitles(eventBanner).trendingDeals.title, [eventBanner])}
+            </h3>
+          </div>
+          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-8">
+            {React.useMemo(() => getSectionTitles(eventBanner).trendingDeals.subtitle, [eventBanner])}
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-3.5">
           {products.map((item, idx) => (

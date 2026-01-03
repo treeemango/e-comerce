@@ -69,7 +69,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
    const [isFollowing, setIsFollowing] = useState(false);
    const [isFollowLoading, setIsFollowLoading] = useState(false);
-   const [followerCount, setFollowerCount] = useState(0);
+   const [followerCount, setFollowerCount] = useState(() => Number(product.vendor?.follower_count ?? 0));
    const [useCaseItems, setUseCaseItems] = useState<Product[]>([]);
 
    // Wishlist State
@@ -1763,7 +1763,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            </div>
                            <div className="text-center border-l border-slate-100 dark:border-slate-700">
                               <div className="text-sm font-black text-slate-900 dark:text-white mb-0.5">
-                                 {(vendor.follower_count ?? followerCount) >= 1000 ? `${((vendor.follower_count ?? followerCount) / 1000).toFixed(1)}k` : (vendor.follower_count ?? followerCount)}
+                                 {followerCount >= 1000 ? `${(followerCount / 1000).toFixed(1)}k` : followerCount}
                               </div>
                               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Followers</div>
                            </div>

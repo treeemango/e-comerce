@@ -10,6 +10,7 @@ import Footer from './components/Footer';
 import FloatingWidget from './components/FloatingWidget';
 import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermissions, UserCoupon, BuyerOrder } from './types';
 import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, ensureSupportConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById } from '@/lib/api';
+import { fetchEventBanner, type EventBannerData } from '@/lib/event-banner-service';
 import { getCurrentUser, getUserProfile, isAccountBanned, onAuthStateChange, signOut } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
@@ -190,6 +191,15 @@ const App: React.FC = () => {
   // Background Sync'd State
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
   const [recentOrders, setRecentOrders] = useState<BuyerOrder[]>([]);
+
+  // Event Banner State (for dynamic section titles)
+  const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
+
+  // Fetch event banner on mount for dynamic section titles
+  useEffect(() => {
+    fetchEventBanner().then(setEventBanner).catch(console.error);
+  }, []);
+
   const isBuyerSurface = (view: typeof currentView) => ![
     'seller-login',
     'seller-onboarding',
@@ -1085,14 +1095,25 @@ const App: React.FC = () => {
       handleSignInClick();
       return;
     }
-    if (!product.vendor?.user_id && !product.vendor?.vendor_id) {
+
+    // Conversations are keyed by the seller's *user id* (products.seller_id / vendors.user_id),
+    // not the vendors table primary key (vendors.id).
+    let sellerId = product.seller_id || product.vendor?.user_id;
+
+    // If the product object is missing seller_id/vendor.user_id, refetch minimal product data.
+    if (!sellerId && product.id) {
+      try {
+        const fresh = await fetchProductById(product.id.toString());
+        sellerId = fresh?.seller_id || fresh?.vendor?.user_id;
+      } catch (e) {
+        console.warn('[handleMessageSeller] Failed to refetch product for seller_id:', e);
+      }
+    }
+
+    if (!sellerId) {
       alert('Cannot message this seller.');
       return;
     }
-
-    // Try to find seller_id, fallback to vendor_id if user_id is missing (though user_id is the seller's uuid)
-    // In types.ts: user_id?: string; // The seller_id from products
-    const sellerId = product.vendor.user_id || product.vendor.vendor_id;
 
     // Create or get existing conversation
     const conversationId = await createConversation(
@@ -1282,8 +1303,9 @@ const App: React.FC = () => {
               onViewAllDeals={() => handleDealsClick(null)}
               onAddToCart={addToCart}
               onProductClick={handleProductClick}
+              eventBanner={eventBanner}
             />
-            <ProductSection isFiveStarView={false} onProductClick={handleProductClick} products={products} onAddToCart={addToCart} />
+            <ProductSection isFiveStarView={false} onProductClick={handleProductClick} products={products} onAddToCart={addToCart} eventBanner={eventBanner} />
           </>
         )}
         {currentView === 'five-star' && (

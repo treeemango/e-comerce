@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchLightningDeals, type LightningDealItem } from '../lib/api';
 import { getCurrencySymbol, useCurrencyConverter, formatPrice } from '@/lib/currency';
 import { MediaItem, Product } from '@/types';
+import { type EventBannerData, getSectionTitles } from '@/lib/event-banner-service';
 
 interface LightningDeal extends LightningDealItem {
   accent?: string;
@@ -15,6 +16,7 @@ type LightningDealsRowProps = {
   onViewAllDeals?: () => void;
   onAddToCart?: (deal: LightningDeal) => void;
   onProductClick?: (product: Product) => void;
+  eventBanner?: EventBannerData | null;
 };
 
 const LightningDealCard: React.FC<{
@@ -352,10 +354,13 @@ const LightningDealCard: React.FC<{
   );
 };
 
-const LightningDealsRow: React.FC<LightningDealsRowProps> = ({ userId, onViewAllDeals, onAddToCart, onProductClick }) => {
+const LightningDealsRow: React.FC<LightningDealsRowProps> = ({ userId, onViewAllDeals, onAddToCart, onProductClick, eventBanner }) => {
   const [deals, setDeals] = useState<LightningDeal[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [timeRemainings, setTimeRemainings] = useState<Map<string, { days: number; hours: number; minutes: number; seconds: number }>>(new Map());
+
+  // Get dynamic section titles based on current event
+  const sectionTitles = useMemo(() => getSectionTitles(eventBanner || null), [eventBanner]);
 
   const priceValues = useMemo(() => {
     const vals: { id: string; amount: number; currency: string }[] = [];
@@ -491,9 +496,9 @@ const LightningDealsRow: React.FC<LightningDealsRowProps> = ({ userId, onViewAll
               <span className="material-icons text-2xl">bolt</span>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-300">Lightning deals</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">Fresh, fast, limited-time drops</p>
-              <p className="text-sm text-gray-600 dark:text-gray-300">Handpicked offers refreshed daily. Grab them before they vanish.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-300">{sectionTitles.lightningDeals.title}</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{sectionTitles.lightningDeals.headline}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300">{sectionTitles.lightningDeals.subtitle}</p>
             </div>
           </div>
 

@@ -2,6 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { fetchHeroDeals, type LightningDealItem } from '@/lib/api';
 import { useCurrencyConverter } from '@/lib/currency';
 import { Product } from '@/types';
+import { fetchEventBanner, type EventBannerData, TRUST_BADGES } from '@/lib/event-banner-service';
+
+// Vibe-based gradients for event banners
+const VIBE_GRADIENTS: Record<string, string> = {
+  romantic: 'linear-gradient(135deg, #9f1239, #ec4899)',
+  festive: 'linear-gradient(135deg, #166534, #fbbf24)',
+  patriotic: 'linear-gradient(135deg, #1e3a8a, #dc2626)',
+  premium: 'linear-gradient(135deg, #1e293b, #fbbf24)',
+  fun: 'linear-gradient(135deg, #7c3aed, #06b6d4)',
+  spiritual: 'linear-gradient(135deg, #0f3460, #e2c044)'
+};
 
 // Thematic Mapping for Categories
 const CATEGORY_THEMES: Record<string, { gradient: string; accent: string; text: string }> = {
@@ -67,6 +78,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [playedVideos, setPlayedVideos] = useState<string[]>([]);
+  const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
 
   // Load played videos from sessionStorage on mount
   useEffect(() => {
@@ -82,6 +94,8 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
 
   useEffect(() => {
     loadDeals();
+    // Fetch dynamic event banner
+    fetchEventBanner().then(setEventBanner).catch(console.error);
   }, []);
 
   const loadDeals = async () => {
@@ -191,7 +205,50 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
 
   return (
     <section className="mb-8 lg:mb-12 relative group">
-      <div className="relative h-[500px] md:h-[550px] rounded-3xl overflow-hidden shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] bg-black">
+      {/* Event Banner Overlay - AI Generated */}
+      {eventBanner && eventBanner.eventName !== 'default' && (
+        <div
+          className="absolute top-0 left-0 right-0 z-30 px-6 py-3 rounded-t-3xl flex items-center justify-between backdrop-blur-md border-b border-white/10"
+          style={{
+            backgroundColor: `${eventBanner.backgroundColor}ee`,
+          }}
+        >
+          <div className="flex-1">
+            <h3
+              className="text-lg md:text-xl font-black tracking-tight"
+              style={{ color: eventBanner.accentColor }}
+            >
+              {eventBanner.headline}
+            </h3>
+            <p className="text-xs md:text-sm text-white/80 mt-0.5">
+              {eventBanner.subheadline}
+            </p>
+          </div>
+          <button
+            className="shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all hover:scale-105 active:scale-95"
+            style={{
+              backgroundColor: eventBanner.accentColor,
+              color: eventBanner.backgroundColor
+            }}
+          >
+            {eventBanner.cta}
+          </button>
+        </div>
+      )}
+      {/* Urgency Tag - Pulsing Animation */}
+      {eventBanner?.urgencyText && (
+        <div
+          className="absolute top-[70px] right-5 z-40 px-4 py-2 rounded-full font-bold text-sm text-white animate-pulse-urgency flex items-center gap-2"
+          style={{
+            background: 'linear-gradient(135deg, #dc2626, #f59e0b)',
+            boxShadow: '0 4px 15px rgba(220, 38, 38, 0.4)'
+          }}
+        >
+          <span className="material-icons text-base">schedule</span>
+          {eventBanner.urgencyText}
+        </div>
+      )}
+      <div className={`relative ${eventBanner && eventBanner.eventName !== 'default' ? 'h-[540px] md:h-[590px] pt-[60px]' : 'h-[500px] md:h-[550px]'} rounded-3xl overflow-hidden shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] bg-black`}>
         {deals.map((deal, index) => {
           const theme = getTheme(deal.category_id || deal.category_name, index);
           const isActive = index === currentSlide;
@@ -223,7 +280,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
               )}
 
               {/* Split Content Layout */}
-              <div className="absolute inset-0 flex flex-col md:flex-row items-center justify-between px-8 md:px-20 py-12 gap-10">
+              <div className={`absolute inset-x-0 bottom-0 flex flex-col md:flex-row items-center justify-between px-8 md:px-20 py-12 gap-10 ${eventBanner && eventBanner.eventName !== 'default' ? 'top-[60px]' : 'top-0'}`}>
 
                 {/* Left Side: Product Info */}
                 <div className="flex-1 text-left space-y-6 max-w-2xl">
@@ -301,6 +358,24 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                       SHOP THIS DEAL
                       <span className="material-icons transition-transform group-hover/btn:translate-x-2">arrow_forward</span>
                     </button>
+
+                    {/* Trust Badges */}
+                    <div className="flex flex-wrap items-center gap-4 mt-4">
+                      {TRUST_BADGES.map((badge, idx) => (
+                        <span
+                          key={idx}
+                          className="flex items-center gap-1.5 text-white/70 text-xs md:text-sm"
+                        >
+                          <span
+                            className="material-icons text-sm"
+                            style={{ color: badge.color }}
+                          >
+                            {badge.icon}
+                          </span>
+                          {badge.text}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -379,6 +454,13 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
         }
         .animate-shimmer {
           animation: shimmer 3s linear infinite;
+        }
+        @keyframes pulse-urgency {
+          0%, 100% { transform: scale(1); box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4); }
+          50% { transform: scale(1.05); box-shadow: 0 6px 20px rgba(220, 38, 38, 0.6); }
+        }
+        .animate-pulse-urgency {
+          animation: pulse-urgency 2s ease-in-out infinite;
         }
       `}} />
     </section>

@@ -431,6 +431,19 @@ const ProductQuestions: React.FC<ProductQuestionsProps> = ({ product, attributes
         setAnswer(null);
 
         try {
+            // Check cache first (RPC computes MD5 hash internally)
+            const { data: cachedAnswer } = await supabase.rpc('get_cached_qa', {
+                p_product_id: product.id,
+                p_question: questionToAsk
+            });
+
+            if (cachedAnswer) {
+                setAnswer(String(cachedAnswer));
+                setLoading(false);
+                return;
+            }
+
+            // Cache miss - call AI
             const { data, error } = await supabase.functions.invoke('ai-assistant', {
                 body: {
                     action: 'answer_product_question',
@@ -461,7 +474,20 @@ const ProductQuestions: React.FC<ProductQuestionsProps> = ({ product, attributes
                 throw new Error(String(functionError));
             }
 
-            setAnswer(String(result ?? '').replace(/^"|"$/g, ''));
+            const aiAnswer = String(result ?? '').replace(/^"|"$/g, '');
+            setAnswer(aiAnswer);
+
+            // Store in cache (fire and forget)
+            void (async () => {
+                try {
+                    await supabase.rpc('upsert_cached_qa', {
+                        p_product_id: product.id,
+                        p_question: questionToAsk,
+                        p_answer: aiAnswer
+                    });
+                } catch { /* Ignore cache write errors */ }
+            })();
+
         } catch (err: any) {
             console.error('AI Q&A Error:', err);
             setAnswer("I'm having trouble connecting to the AI helper right now. Please try again later.");

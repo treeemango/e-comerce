@@ -38,6 +38,7 @@ GRANT SELECT, INSERT, UPDATE ON public.product_ai_insights TO anon, authenticate
 GRANT ALL ON public.product_ai_insights TO service_role;
 
 -- 4. CREATE RPC FUNCTION TO GET CACHED INSIGHTS
+DROP FUNCTION IF EXISTS public.get_cached_product_insights(UUID, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.get_cached_product_insights(
     p_product_id UUID,
     p_product_hash TEXT,
@@ -104,6 +105,7 @@ END;
 $$;
 
 -- 5. CREATE RPC FUNCTION TO STORE/UPDATE CACHED INSIGHTS
+DROP FUNCTION IF EXISTS public.upsert_product_ai_insights(UUID, TEXT, TEXT, UUID, TEXT, TEXT, TEXT, JSONB, BOOLEAN);
 CREATE OR REPLACE FUNCTION public.upsert_product_ai_insights(
     p_product_id UUID,
     p_product_hash TEXT,
@@ -170,3 +172,96 @@ $$;
 -- 6. GRANT EXECUTE PERMISSIONS ON FUNCTIONS
 GRANT EXECUTE ON FUNCTION public.get_cached_product_insights TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.upsert_product_ai_insights TO service_role;
+
+-- ============================================================
+-- 7. Q&A CACHE: Store question-answer pairs per product
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.product_ai_qa_cache (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    question_hash TEXT NOT NULL, -- MD5 hash of normalized question
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days',
+    
+    UNIQUE(product_id, question_hash)
+);
+
+-- Q&A Cache Indexes
+CREATE INDEX IF NOT EXISTS idx_qa_cache_product_question 
+    ON public.product_ai_qa_cache(product_id, question_hash);
+
+CREATE INDEX IF NOT EXISTS idx_qa_cache_expires 
+    ON public.product_ai_qa_cache(expires_at);
+
+-- Q&A Cache Permissions
+GRANT SELECT, INSERT, UPDATE ON public.product_ai_qa_cache TO anon, authenticated;
+GRANT ALL ON public.product_ai_qa_cache TO service_role;
+
+-- 8. RPC: Get cached Q&A answer (computes MD5 hash of question)
+DROP FUNCTION IF EXISTS public.get_cached_qa(UUID, TEXT);
+CREATE OR REPLACE FUNCTION public.get_cached_qa(
+    p_product_id UUID,
+    p_question TEXT
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_answer TEXT;
+    v_hash TEXT;
+BEGIN
+    -- Compute hash same way as upsert_cached_qa
+    v_hash := md5(lower(trim(p_question)));
+    
+    SELECT answer INTO v_answer
+    FROM public.product_ai_qa_cache
+    WHERE product_id = p_product_id
+      AND question_hash = v_hash
+      AND expires_at > NOW();
+    
+    RETURN v_answer;
+END;
+$$;
+
+-- 9. RPC: Store Q&A answer with 30-day TTL
+CREATE OR REPLACE FUNCTION public.upsert_cached_qa(
+    p_product_id UUID,
+    p_question TEXT,
+    p_answer TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_hash TEXT;
+BEGIN
+    -- Create hash from normalized question (lowercase, trimmed)
+    v_hash := md5(lower(trim(p_question)));
+    
+    INSERT INTO public.product_ai_qa_cache (
+        product_id,
+        question_hash,
+        question,
+        answer,
+        expires_at
+    ) VALUES (
+        p_product_id,
+        v_hash,
+        p_question,
+        p_answer,
+        NOW() + INTERVAL '30 days'
+    )
+    ON CONFLICT (product_id, question_hash) DO UPDATE SET
+        answer = EXCLUDED.answer,
+        expires_at = NOW() + INTERVAL '30 days';
+END;
+$$;
+
+-- Q&A RPC Permissions
+GRANT EXECUTE ON FUNCTION public.get_cached_qa TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.upsert_cached_qa TO anon, authenticated, service_role;

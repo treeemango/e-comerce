@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { fetchLightningDeals, LightningDealItem } from '@/lib/api';
 import { useCurrencyConverter, formatPrice as currencyFormatPrice } from '@/lib/currency';
 import { Product } from '@/types';
+import { getSectionTitles, type EventBannerData } from '@/lib/event-banner-service';
 
 const DealCardImage: React.FC<{ deal: LightningDealItem; title: string }> = ({ deal, title }) => {
     const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -71,11 +72,14 @@ const DealCardImage: React.FC<{ deal: LightningDealItem; title: string }> = ({ d
 interface MobileLightningDealsRowProps {
     onProductClick: (product: Product) => void;
     onViewAll: () => void;
+    eventBanner?: EventBannerData | null;
 }
 
-export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = ({ onProductClick, onViewAll }) => {
+export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = ({ onProductClick, onViewAll, eventBanner }) => {
     const [deals, setDeals] = useState<LightningDealItem[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const sectionTitles = useMemo(() => getSectionTitles(eventBanner || null), [eventBanner]);
 
     useEffect(() => {
         loadDeals();
@@ -140,8 +144,8 @@ export const MobileLightningDealsRow: React.FC<MobileLightningDealsRowProps> = (
                         <span className="material-icons text-lg">bolt</span>
                     </div>
                     <div>
-                        <div className="text-sm font-black text-gray-900 dark:text-white leading-none uppercase tracking-wide">Lightning Deals</div>
-                        <div className="text-[10px] font-medium text-orange-600 dark:text-orange-400">Limited time offers</div>
+                        <div className="text-sm font-black text-gray-900 dark:text-white leading-none uppercase tracking-wide">{sectionTitles.lightningDeals.title}</div>
+                        <div className="text-[10px] font-medium text-orange-600 dark:text-orange-400">{sectionTitles.lightningDeals.subtitle}</div>
                     </div>
                 </div>
                 <button

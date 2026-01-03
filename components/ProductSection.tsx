@@ -5,6 +5,7 @@ import { Product, SearchFilters, AppliedFilters, VisualCategory, AttributeValue,
 import { fetchSearchFilters, fetchFilteredProducts, fetchNavbarCategories, NavbarCategory } from '../lib/api';
 import ProductCardSkeleton from './ProductCardSkeleton';
 import { getCurrencySymbol, useCurrencyConverter, convertAmount, getUserCurrency } from '../lib/currency';
+import { type EventBannerData, getSectionTitles } from '@/lib/event-banner-service';
 
 interface ProductSectionProps {
   isFiveStarView?: boolean;
@@ -20,6 +21,7 @@ interface ProductSectionProps {
   breadcrumbs?: Breadcrumb[];
   onHomeClick?: () => void;
   showCategoryPills?: boolean;
+  eventBanner?: EventBannerData | null;
 }
 
 const ProductSection: React.FC<ProductSectionProps> = ({
@@ -35,9 +37,13 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   onCategoryClick,
   breadcrumbs = [],
   onHomeClick,
-  showCategoryPills = true
+  showCategoryPills = true,
+  eventBanner
 }) => {
   const [products, setProducts] = useState<Product[]>(propProducts || []);
+
+  // Get dynamic section titles based on current event
+  const sectionTitles = useMemo(() => getSectionTitles(eventBanner || null), [eventBanner]);
   const [searchFilters, setSearchFilters] = useState<SearchFilters | null>(null);
   const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({
     category_ids: initialCategoryIds,
@@ -571,13 +577,13 @@ const ProductSection: React.FC<ProductSectionProps> = ({
             <>
               <span className="material-icons text-shop-red text-3xl animate-pulse">local_fire_department</span>
               <h2 className="text-2xl font-bold ml-2 text-slate-900 dark:text-white uppercase">
-                TRENDING DEALS
+                {sectionTitles.trendingDeals.title}
               </h2>
             </>
           )}
 
           {!isFiveStarView && !title && (
-            <p className="ml-4 text-slate-500 dark:text-slate-400 hidden sm:block">/ EXPLORE YOUR INTERESTS</p>
+            <p className="ml-4 text-slate-500 dark:text-slate-400 hidden sm:block">/ {sectionTitles.trendingDeals.subtitle}</p>
           )}
         </div>
       )}

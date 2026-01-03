@@ -1027,8 +1027,8 @@ export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<
                 const { data: badgeTableData } = await supabase
                     .from('badge_2030_seller_badges')
                     .select('badges')
-                    .eq('seller_id', vendor.id)
-                    .single();
+                    .eq('seller_id', vendor.user_id)
+                    .maybeSingle();
 
                 if (badgeTableData?.badges) {
                     badgesData = badgeTableData.badges;
@@ -4695,22 +4695,23 @@ export const fetchUserLoyaltyProfile = async (userId: string): Promise<LoyaltyPr
         .from('user_loyalty_profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
     if (error) {
-        // If no profile exists yet, return default bronze profile
-        if (error.code === 'PGRST116') {
-            console.log('No loyalty profile found, returning default');
-            return {
-                user_id: userId,
-                loyalty_points: 0,
-                lifetime_spend: 0,
-                current_tier: 'Bronze',
-                last_activity_at: new Date().toISOString()
-            };
-        }
         console.error('Error fetching loyalty profile:', error);
         return null;
+    }
+
+    // If no profile exists yet, return default bronze profile
+    if (!data) {
+        console.log('No loyalty profile found, returning default');
+        return {
+            user_id: userId,
+            loyalty_points: 0,
+            lifetime_spend: 0,
+            current_tier: 'Bronze',
+            last_activity_at: new Date().toISOString()
+        };
     }
 
     return data as LoyaltyProfile;
@@ -6435,7 +6436,7 @@ export const fetchSellerProfile = async (sellerId: string): Promise<SellerProfil
             vendor_media (*)
         `)
         .eq('user_id', sellerId)
-        .single();
+        .maybeSingle();
 
     if (error) {
         console.error('Error fetching seller profile:', error);
@@ -7856,14 +7857,14 @@ export const fetchBuyerNotificationPreferences = async (userId: string): Promise
             .from('buyer_notification_preferences')
             .select('*')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+        if (error) {
             console.error('Error fetching buyer notification preferences:', error);
             return null;
         }
 
-        return data as BuyerNotificationPreferences;
+        return (data ?? null) as BuyerNotificationPreferences | null;
     } catch (error) {
         console.error('Unexpected error fetching buyer notification preferences:', error);
         return null;
