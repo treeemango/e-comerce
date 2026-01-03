@@ -73,6 +73,16 @@ variant_agg AS (
     FROM public.product_variants
     GROUP BY product_id
 ),
+wholesale_tiers_agg AS (
+    SELECT 
+        product_id,
+        jsonb_agg(jsonb_build_object(
+            'min_quantity', min_quantity,
+            'unit_price', unit_price 
+        ) ORDER BY min_quantity ASC) as wholesale_tiers_json
+    FROM public.quantity_discounts
+    GROUP BY product_id
+),
 -- Aggregate and transform all media (Images + YouTube)
 media_agg AS (
     SELECT 
@@ -221,6 +231,8 @@ SELECT
     p.brand_id,
     p.brand_custom_name,
     p.tags,
+    p.use_case_tags,
+    p.occasion_tags,
     p.vertical_id,
     c.name AS category_name,
     NULL::text AS category_description,
@@ -299,6 +311,7 @@ SELECT
     p.seo_keywords,
     p.canonical_url,
     COALESCE(va.variants_json, '[]'::jsonb) AS variants,
+    COALESCE(wta.wholesale_tiers_json, '[]'::jsonb) AS wholesale_tiers,
     NULL::jsonb AS attributes,
     p.search_vector,
     p.tsv,
@@ -334,6 +347,7 @@ LEFT JOIN public.shopify_categories c ON p.category_id = c.id
 LEFT JOIN public.admin_2025_shopify_brands b ON p.brand_id = b.id
 LEFT JOIN public.vendors vd ON p.seller_id = vd.user_id
 LEFT JOIN variant_agg va ON p.id = va.product_id
+LEFT JOIN wholesale_tiers_agg wta ON p.id = wta.product_id
 LEFT JOIN media_agg ma ON p.id = ma.product_id
 LEFT JOIN active_coupons ac ON p.id = ac.product_id
 LEFT JOIN active_automatic_discounts ad ON p.seller_id = ad.seller_id
@@ -399,6 +413,16 @@ SELECT
     is_express_delivery,
     delivery_scope,
     delivery_locations,
+    sale_unit,
+    delay_credit,
+    eco_friendly,
+    tags,
+    use_case_tags,
+    occasion_tags,
+    seo_title,
+    meta_description,
+    seo_keywords,
+    canonical_url,
     seller_rating,
     seller_total_orders,
     seller_experience_years,
@@ -427,7 +451,8 @@ SELECT
     listing_type,                         -- ✅ ADDED
     condition,                            -- ✅ ADDED
     stock_state,
-    variants
+    variants,
+    wholesale_tiers
 FROM public.product_unified_view;
 
 -- 4. FIX RLS PERMISSION ERRORS (SAFE POLICIES)

@@ -292,8 +292,8 @@ export function getOptimizedImageUrl(
 ): string {
     if (!baseUrl) return baseUrl;
 
-    // Don't attempt optimized variants for GIFs (we intentionally skip GIF processing)
-    if (/\.gif(?:[?#]|$)/i.test(baseUrl)) {
+    // Don't attempt optimized variants for blob URLs or GIFs
+    if (baseUrl.startsWith('blob:') || baseUrl.startsWith('data:') || /\.gif(?:[?#]|$)/i.test(baseUrl)) {
         return baseUrl;
     }
 

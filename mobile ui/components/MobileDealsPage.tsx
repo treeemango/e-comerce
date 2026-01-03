@@ -37,6 +37,8 @@ export const MobileDealsPage: React.FC<MobileDealsPageProps> = ({ onBack, onProd
         price: deal.price,
         originalPrice: deal.originalPrice,
         image: deal.image,
+        media: deal.media,
+        gallery_media: deal.gallery_media,
         discountPercent: deal.discountPercent,
         currency: deal.currency,
         rating: deal.rating || 0,

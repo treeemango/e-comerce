@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './mobile.css';
 import { Header } from './components/Header';
 import { TopAppBanner } from './components/TopAppBanner';
@@ -1413,12 +1413,31 @@ const App: React.FC = () => {
     const openCheckout = () => setIsCheckoutOpen(true);
     const closeCheckout = () => setIsCheckoutOpen(false);
 
-    const handleProductClick = (product: Product) => {
-        if (product?.id) {
-            void trackProductViewAuto(String(product.id));
+    const latestProductRequestIdRef = useRef<string | null>(null);
+
+    const handleProductClick = useCallback((product: Product) => {
+        const productId = product?.id ? String(product.id) : null;
+
+        if (productId) {
+            void trackProductViewAuto(productId);
         }
+
+        // Optimistic: open immediately, then hydrate full gallery/media
         setSelectedProduct(product);
-    };
+
+        if (!productId) return;
+        latestProductRequestIdRef.current = productId;
+        void (async () => {
+            try {
+                const hydrated = await fetchProductById(productId);
+                if (!hydrated) return;
+                if (latestProductRequestIdRef.current !== productId) return;
+                setSelectedProduct(hydrated);
+            } catch (err) {
+                console.error('Error hydrating product on click (mobile):', err);
+            }
+        })();
+    }, []);
 
     const handleSellerSupportClick = async () => {
         if (!userProfile?.id) return;

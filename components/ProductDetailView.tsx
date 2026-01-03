@@ -66,6 +66,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [activeMediaIndex, setActiveMediaIndex] = useState(0);
    const [hoverPreviewMedia, setHoverPreviewMedia] = useState<MediaItem | null>(null);
    const [userHasSelected, setUserHasSelected] = useState(false);
+
    const [isFollowing, setIsFollowing] = useState(false);
    const [isFollowLoading, setIsFollowLoading] = useState(false);
    const [followerCount, setFollowerCount] = useState(0);
@@ -81,7 +82,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    // Message Modal State
    const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
    const [initialMessage, setInitialMessage] = useState('');
-
    // Variants State
    const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
    const [currentVariant, setCurrentVariant] = useState<ProductVariant | null>(null);
@@ -248,6 +248,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          const isPartialData = !resolvedVendor?.business_name || !resolvedVendor?.follower_count;
          if (resolvedVendor && !isPartialData) return;
          if (!product.id) return;
+
          const vendorMap = await fetchVendorInfo([product.id.toString()]);
          const candidateKeys = [product.seller_id, product.vendor?.vendor_id]
             .filter(Boolean)
@@ -264,11 +265,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             vendor = vendorMap.values().next().value;
          }
 
-         if (vendor) {
-            setResolvedVendor(vendor);
-         }
+         if (vendor) setResolvedVendor(vendor);
       };
-
       hydrateVendor();
    }, [product.id, product.seller_id, product.vendor, resolvedVendor]);
 
@@ -783,11 +781,12 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const variantShowcaseMedia: MediaItem[] = useMemo(() => {
       const prioritized: MediaItem[] = [];
 
-      if (currentVariant?.image) {
+      const variantImg = currentVariant?.image_url || currentVariant?.image;
+      if (variantImg) {
          prioritized.push({
             id: `variant-${currentVariant.id}`,
-            image_url: currentVariant.image,
-            thumbnail_url: currentVariant.image,
+            image_url: variantImg,
+            thumbnail_url: variantImg,
             type: 'image',
             alt_text: `${product.title} ${selectedColorLabel || ''}`.trim()
          });
@@ -798,7 +797,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
       const merged = uniqueMedia([...prioritized, ...filteredByColor, ...remaining]);
       return merged.length > 0 ? merged : baseMediaItems;
-   }, [baseMediaItems, currentVariant?.id, currentVariant?.image, product.title, selectedColorLabel]);
+   }, [baseMediaItems, currentVariant?.id, currentVariant?.image, currentVariant?.image_url, product.title, selectedColorLabel]);
 
    useEffect(() => {
       // When user changes color/variant, reset to first media so the new variant hero is shown
@@ -815,8 +814,53 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       }
    }, [variantShowcaseMedia, userHasSelected]);
 
-   const activeMedia = variantShowcaseMedia[activeMediaIndex] || variantShowcaseMedia[0];
+   const activeMedia = variantShowcaseMedia[activeMediaIndex] || variantShowcaseMedia[0] || {
+      id: 'fallback-product-image',
+      image_url: product.image,
+      thumbnail_url: product.image,
+      type: 'image' as const,
+      alt_text: product.title
+   };
    const effectiveActiveMedia = hoverPreviewMedia ?? activeMedia;
+
+   // Ensure we always have a usable image when variants or galleries are missing detail/optimized URLs
+   const fallbackGalleryImage = useMemo(() => {
+      const firstWithImage = variantShowcaseMedia.find(m => m.image_url || m.thumbnail_url);
+      if (firstWithImage) return firstWithImage.image_url || firstWithImage.thumbnail_url || '';
+
+      const galleryFallback = Array.isArray(product.gallery_media)
+         ? product.gallery_media.find(m => (m as any)?.image_url)?.image_url
+         : '';
+
+      return galleryFallback || product.image || '';
+   }, [product.gallery_media, product.image, variantShowcaseMedia]);
+
+   const resolvedActiveImage = useMemo(() => {
+      return effectiveActiveMedia.image_url
+         || effectiveActiveMedia.thumbnail_url
+         || fallbackGalleryImage
+         || product.image
+         || '';
+   }, [effectiveActiveMedia, fallbackGalleryImage, product.image]);
+
+   // Guaranteed hero source so the viewer never renders with an empty src
+   const heroSrc = useMemo(() => {
+      return resolvedActiveImage
+         || product.image
+         || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+   }, [resolvedActiveImage, product.image]);
+
+   // If media count shrinks while hovering variants, keep the index in range to avoid broken previews
+   useEffect(() => {
+      if (variantShowcaseMedia.length === 0) {
+         setActiveMediaIndex(0);
+         return;
+      }
+
+      if (activeMediaIndex >= variantShowcaseMedia.length) {
+         setActiveMediaIndex(0);
+      }
+   }, [activeMediaIndex, variantShowcaseMedia]);
 
    // Generate dynamic breadcrumbs from product category data
    const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
@@ -1004,7 +1048,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   ) : (
                      <div className="w-full h-full flex items-center justify-center p-3 bg-white dark:bg-slate-900">
                         <ImageMagnifier
-                           src={effectiveActiveMedia.image_url!}
+                           src={heroSrc}
                            alt={effectiveActiveMedia.alt_text || product.title}
                            className="w-full h-full flex items-center justify-center"
                         />
@@ -1250,7 +1294,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  const previewVariant = findVariantFor({ [colorOptionName]: label }) || variant;
                                  const variantPrice = previewVariant?.price ?? product.price;
                                  const variantStock = previewVariant?.stock;
-                                 const previewImage = previewVariant?.image || variant.image;
+                                 const previewImage = previewVariant?.image_url || previewVariant?.image || variant.image_url || variant.image;
                                  const previewMedia = previewImage
                                     ? {
                                        id: `hover-${label}`,
@@ -1268,6 +1312,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                        onMouseEnter={() => {
                                           // Auto-select color when hovering
                                           setSelectedOptions(prev => ({ ...prev, [colorOptionName]: label }));
+                                          setActiveMediaIndex(0); // Reset index immediately on hover
                                           if (previewMedia) {
                                              setHoverPreviewMedia(previewMedia);
                                              setUserHasSelected(true);
@@ -1280,11 +1325,11 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                           }`}
                                     >
                                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 border border-slate-100 dark:border-slate-600">
-                                          {previewVariant?.image || variant.image ? (
+                                          {previewImage ? (
                                              <img
-                                                src={getOptimizedImageUrl(previewVariant?.image || variant.image!, 'thumb')}
+                                                src={getOptimizedImageUrl(previewImage, 'thumb')}
                                                 onError={(e) => {
-                                                   const raw = (previewVariant?.image || variant.image || '').toString();
+                                                   const raw = (previewImage || '').toString();
                                                    const el = e.currentTarget;
                                                    if (!raw) return;
                                                    if ((el as any).dataset?.fallbackApplied) return;
@@ -1447,22 +1492,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                </div>
             )}
 
-            {/* Rich Banner Images - "A+" Style Content */}
-            {product.images && product.images.length > 0 && (
-               <div className="mb-12 space-y-4 animate-in fade-in duration-1000 slide-in-from-bottom-4">
-                  {product.images.map((img, idx) => (
-                     <div key={idx} className="w-full rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                        <img
-                           src={img}
-                           alt={`${product.title} - Detail ${idx + 1}`}
-                           className="w-full h-auto object-cover hover:scale-[1.01] transition-transform duration-700 ease-out"
-                           loading="lazy"
-                        />
-                     </div>
-                  ))}
-               </div>
-            )}
-
             {/* Tab Navigation (Specifications Only) */}
             <div className="flex border-b-2 border-slate-200 dark:border-slate-700 mb-8">
                {['Specifications'].map((tab) => (
@@ -1488,6 +1517,22 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                <div className="lg:col-span-2 space-y-12">
+
+                  {/* Rich Banner Images - "A+" Style Content - Aligned with specs */}
+                  {product.media && product.media.length > 0 && (
+                     <div className="space-y-4 animate-in fade-in duration-1000 slide-in-from-bottom-4">
+                        {product.media.filter(m => m.type === 'image').map((img, idx) => (
+                           <div key={idx} className="w-full rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                              <img
+                                 src={img.url}
+                                 alt={img.alt_text || `${product.title} - Detail ${idx + 1}`}
+                                 className="w-full h-auto object-cover hover:scale-[1.01] transition-transform duration-700 ease-out"
+                                 loading="lazy"
+                              />
+                           </div>
+                        ))}
+                     </div>
+                  )}
 
                   {/* Specifications Tab Content */}
                   {activeTab === 'specifications' && (
@@ -1773,56 +1818,6 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         )}
                      </div>
                   ) : null}
-
-                  {/* Tags & Discovery - Persistent in sidebar */}
-                  {(product.tags?.length || product.use_case_tags?.length || product.occasion_tags?.length) && (
-                     <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-slate-800 dark:to-slate-800/50 rounded-[32px] p-8 border border-purple-100 dark:border-slate-700 shadow-sm animate-in slide-in-from-bottom duration-700">
-                        <div className="flex items-center gap-3 mb-6">
-                           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
-                              <span className="material-icons-round text-white">auto_awesome</span>
-                           </div>
-                           <h3 className="text-lg font-black text-slate-900 dark:text-white">Discovery</h3>
-                        </div>
-
-                        <div className="space-y-6">
-                           {product.occasion_tags && product.occasion_tags.length > 0 && (
-                              <div>
-                                 <span className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3 block">Perfect For</span>
-                                 <div className="flex flex-wrap gap-2">
-                                    {product.occasion_tags.map(tag => (
-                                       <span key={tag} className="px-4 py-2 bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 text-xs font-bold rounded-full shadow-sm border border-purple-100 dark:border-purple-800 hover:scale-105 transition-transform">
-                                          {tag}
-                                       </span>
-                                    ))}
-                                 </div>
-                              </div>
-                           )}
-                           {product.use_case_tags && product.use_case_tags.length > 0 && (
-                              <div>
-                                 <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-3 block">Best Used In</span>
-                                 <div className="flex flex-wrap gap-2">
-                                    {product.use_case_tags.map(tag => (
-                                       <a href={`/search?q=${tag}`} key={tag} className="px-4 py-2 bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full shadow-sm border border-blue-100 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all hover:scale-105">
-                                          {tag}
-                                       </a>
-                                    ))}
-                                 </div>
-                              </div>
-                           )}
-                           {product.tags && product.tags.length > 0 && (
-                              <div className="pt-4 border-t border-purple-200/50 dark:border-slate-700">
-                                 <div className="flex flex-wrap gap-2">
-                                    {product.tags.map(tag => (
-                                       <span key={tag} className="text-xs font-bold text-slate-500 hover:text-primary cursor-pointer transition-colors uppercase tracking-tight">
-                                          #{tag}
-                                       </span>
-                                    ))}
-                                 </div>
-                              </div>
-                           )}
-                        </div>
-                     </div>
-                  )}
                </div>
             </div>
 
@@ -1951,7 +1946,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            <button
                               onClick={(e) => {
                                  e.stopPropagation();
+                                 if (variantShowcaseMedia.length === 0) return;
                                  setActiveMediaIndex(prev => (prev - 1 + variantShowcaseMedia.length) % variantShowcaseMedia.length);
+                                 setUserHasSelected(true);
                               }}
                               className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/90 dark:bg-slate-800/90 shadow-md text-slate-600 dark:text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-105"
                            >
@@ -1960,7 +1957,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                            <button
                               onClick={(e) => {
                                  e.stopPropagation();
+                                 if (variantShowcaseMedia.length === 0) return;
                                  setActiveMediaIndex(prev => (prev + 1) % variantShowcaseMedia.length);
+                                 setUserHasSelected(true);
                               }}
                               className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/90 dark:bg-slate-800/90 shadow-md text-slate-600 dark:text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-105"
                            >
@@ -1979,13 +1978,15 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                  <video src={effectiveActiveMedia.video_url} autoPlay muted playsInline loop className="w-full h-full object-contain" />
                               ) : (
                                  <img
-                                    src={getOptimizedImageUrl(effectiveActiveMedia.image_url || product.image, 'detail')}
+                                    key={heroSrc}
+                                    src={getOptimizedImageUrl(heroSrc, 'detail')}
                                     onError={(e) => {
-                                       const raw = (effectiveActiveMedia.image_url || product.image || '').toString();
+                                       const raw = (heroSrc || '').toString();
                                        const el = e.currentTarget;
                                        if (!raw) return;
-                                       if ((el as any).dataset?.fallbackApplied) return;
-                                       (el as any).dataset.fallbackApplied = '1';
+                                       // When hovering variants quickly, React reuses this <img>; don't use a sticky
+                                       // flag that prevents fallback for subsequent src values.
+                                       if (el.src === raw) return;
                                        el.src = raw;
                                     }}
                                     alt={product.title}
@@ -2104,22 +2105,25 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                                    setActiveMediaIndex(0);
                                                 }
                                                 setSelectedOptions(prev => ({ ...prev, [option.name]: val }));
+                                                setUserHasSelected(true);
                                              }}
                                              onMouseEnter={() => {
                                                 // Auto-select variant when hovering
                                                 if (variant) {
                                                    setOverlayVariant(variant);
                                                 }
+                                                setActiveMediaIndex(0); // Reset index immediately on hover
                                                 setSelectedOptions(prev => ({ ...prev, [option.name]: val }));
+                                                setUserHasSelected(true);
                                              }}
                                              className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'border-orange-500 bg-orange-50/50 dark:bg-orange-900/10' : 'border-slate-100 dark:border-slate-800 hover:border-orange-200'}`}
                                           >
                                              <div className="flex items-center gap-3">
                                                 <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
                                                    <img
-                                                      src={getOptimizedImageUrl(variant?.image || product.image, 'thumb')}
+                                                      src={getOptimizedImageUrl(variant?.image_url || variant?.image || product.image, 'thumb')}
                                                       onError={(e) => {
-                                                         const raw = (variant?.image || product.image || '').toString();
+                                                         const raw = (variant?.image_url || variant?.image || product.image || '').toString();
                                                          const el = e.currentTarget;
                                                          if (!raw) return;
                                                          if ((el as any).dataset?.fallbackApplied) return;
@@ -2217,6 +2221,38 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                </div>
             )
          }
+
+         {/* Related searches (tags) - placed near global footer */}
+         {(() => {
+            const relatedSearchTags = Array.from(
+               new Set([
+                  ...(product.use_case_tags ?? []),
+                  ...(product.occasion_tags ?? []),
+                  ...(product.tags ?? []),
+               ])
+            ).filter(Boolean);
+
+            if (relatedSearchTags.length === 0) return null;
+
+            return (
+               <div className="mt-16">
+                  <div className="border-t border-slate-200 dark:border-slate-800 pt-10">
+                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">Related searches</h2>
+                     <div className="flex flex-wrap gap-3">
+                        {relatedSearchTags.map(tag => (
+                           <a
+                              key={tag}
+                              href={`/search?q=${encodeURIComponent(tag)}`}
+                              className="px-5 py-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                           >
+                              {tag}
+                           </a>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+            );
+         })()}
 
          {/* Message Modal */}
          {

@@ -74,6 +74,16 @@ function tryLocalAnswer(
     const q = question.toLowerCase().trim();
     const attributes = fetchedAttributes && fetchedAttributes.length > 0 ? fetchedAttributes : (product.attributes || []);
     const seller = vendorContext?.business_name || 'the seller';
+    const listingText = `${String(product.title || '')}\n${String(product.description || '')}`;
+
+    const findInListing = (regexes: RegExp[]): string | null => {
+        for (const re of regexes) {
+            const match = listingText.match(re);
+            if (!match) continue;
+            return (match[1] || match[0] || '').toString().trim() || null;
+        }
+        return null;
+    };
 
     // Helper to find attribute value by name keywords with optional exclusions and unit hints
     const findAttribute = (include: string[], exclude: string[] = [], unitHints: string[] = []): string | null => {
@@ -119,9 +129,69 @@ function tryLocalAnswer(
             template: (val: string) => val.toLowerCase() === 'yes' ? 'Yes, this product supports expandable storage.' : `Expandable storage: ${val}.`,
             alwaysLocal: false
         },
-        { triggers: ['battery', 'mah', 'runtime', 'power'], attrs: ['battery', 'power', 'mah', 'capacity', 'runtime'], exclude: ['storage', 'ram'], units: ['mah', 'wh', 'volts'], template: (val: string) => `The battery capacity is ${val}.`, alwaysLocal: true },
+        {
+            triggers: ['battery', 'mah', 'runtime', 'power'],
+            attrs: ['battery', 'power', 'mah', 'capacity', 'runtime'],
+            exclude: ['storage', 'ram'],
+            units: ['mah', 'wh', 'volts'],
+            template: (val: string) => `The battery capacity is ${val}.`,
+            extract: () => findInListing([/(\b\d{3,5}\s?mAh\b)/i, /(\b\d+(?:\.\d+)?\s?Wh\b)/i]),
+            alwaysLocal: true
+        },
         { triggers: ['ram'], attrs: ['ram', 'system memory'], template: (val: string) => `The RAM is ${val}.`, alwaysLocal: true },
-        { triggers: ['weight', 'heavy'], attrs: ['weight', 'mass'], units: ['kg', 'g', 'lb'], template: (val: string) => `The weight is ${val}.`, alwaysLocal: true },
+        {
+            triggers: ['weight', 'heavy'],
+            attrs: ['weight', 'mass'],
+            units: ['kg', 'g', 'lb'],
+            template: (val: string) => `The weight is ${val}.`,
+            extract: () => findInListing([/(\b\d+(?:\.\d+)?\s?(?:kg|g|lb)\b)/i]),
+            alwaysLocal: true
+        },
+        {
+            triggers: ['slim', 'thin', 'thickness', 'thick', 'depth', 'how slim', 'how thin'],
+            attrs: ['thickness', 'depth', 'thin', 'slim', 'dimensions', 'dimension'],
+            units: ['mm', 'cm', 'inch', 'inches', 'in'],
+            template: (val: string) => `Thickness: ${val}.`,
+            extract: () => findInListing([/(\b\d+(?:\.\d+)?\s?mm\b)/i, /(\b\d+(?:\.\d+)?\s?cm\b)/i]),
+            fallback: `Not specified by ${seller} in this listing.`,
+            alwaysLocal: true
+        },
+        {
+            triggers: ['processor', 'cpu', 'chip', 'chipset', 'soc'],
+            attrs: ['processor', 'cpu', 'chip', 'chipset', 'soc'],
+            template: (val: string) => `Processor: ${val}.`,
+            extract: () => findInListing([
+                /(\bSnapdragon\s*[\w\-]+\b)/i,
+                /(\bMediaTek\s*[\w\-]+\b)/i,
+                /(\bDimensity\s*[\w\-]+\b)/i,
+                /(\bHelio\s*[\w\-]+\b)/i,
+                /(\bExynos\s*[\w\-]+\b)/i,
+                /(\bApple\s*A\d+\b)/i
+            ]),
+            fallback: `Not specified by ${seller} in this listing.`,
+            alwaysLocal: true
+        },
+        {
+            triggers: ['wireless charging', 'wireless charge', 'qi charging', 'qi'],
+            attrs: ['wireless charging', 'qi', 'wireless'],
+            exclude: ['earbuds', 'headphones', 'speaker'],
+            template: (val: string) => `Wireless charging: ${val}.`,
+            extract: () => {
+                const txt = listingText.toLowerCase();
+                if (txt.includes('wireless charging') || txt.includes('wireless charge') || txt.includes('qi')) return 'Yes';
+                return null;
+            },
+            fallback: `Not specified by ${seller} in this listing.`,
+            alwaysLocal: true
+        },
+        {
+            triggers: ['amoled', 'oled', 'lcd', 'ips', 'display type', 'screen type', 'panel'],
+            attrs: ['display', 'screen', 'panel', 'amoled', 'oled', 'lcd', 'ips'],
+            template: (val: string) => `Display: ${val}.`,
+            extract: () => findInListing([/(\bAMOLED\b|\bOLED\b|\bIPS\b|\bLCD\b)/i]),
+            fallback: `Not specified by ${seller} in this listing.`,
+            alwaysLocal: true
+        },
         { triggers: ['warranty', 'guarantee'], attrs: ['warranty', 'guarantee'], template: (val: string) => `Warranty: ${val}.`, alwaysLocal: true },
         { triggers: ['charger', 'usb', 'box', 'includes', 'accessory'], attrs: ['charger', 'package', 'box', 'includes', 'contents', 'accessories'], template: (val: string) => `Included items: ${val}.`, fallback: `It is not specified if a charger or specific accessories are included. You can message ${seller} to confirm.`, alwaysLocal: true }
     ];
@@ -129,13 +199,17 @@ function tryLocalAnswer(
     for (const intent of specIntents) {
         if (intent.triggers.some(t => q.includes(t))) {
             const val = findAttribute(intent.attrs, intent.exclude || [], intent.units || []);
-            if (val) {
+            const extracted = !val && typeof (intent as any).extract === 'function' ? (intent as any).extract() : null;
+            const resolvedVal = val || extracted;
+            if (resolvedVal) {
                 // Handle "Yes/No" values gracefully in the general template if not specifically handled
-                if (val.toLowerCase() === 'yes') return `Yes, ${intent.attrs[0]} is supported.`;
-                if (val.toLowerCase() === 'no') return `No, it does not have ${intent.attrs[0]}.`;
-                return intent.template(val);
+                if (resolvedVal.toLowerCase() === 'yes') return `Yes, ${intent.attrs[0]} is supported.`;
+                if (resolvedVal.toLowerCase() === 'no') return `No, it does not have ${intent.attrs[0]}.`;
+                return intent.template(resolvedVal);
             }
-            if (intent.alwaysLocal && (q.includes(intent.triggers[0]) || q.includes('how much') || q.includes('what'))) return intent.fallback || `That information isn't specified in the listing. Please check with ${seller}.`;
+            if (intent.alwaysLocal && (q.includes(intent.triggers[0]) || q.includes('how much') || q.includes('what') || q.includes('does it') || q.includes('is it'))) {
+                return intent.fallback || `Not specified by ${seller} in this listing.`;
+            }
         }
     }
 

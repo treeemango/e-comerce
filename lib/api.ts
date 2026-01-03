@@ -399,6 +399,7 @@ export const fetchDealsProducts = async (
                 stock: item.stock ?? item.stock_quantity ?? undefined,
                 condition: item.condition || undefined,
                 media: mediaItems,
+                gallery_media: galleryMedia,
                 deliveryTimeEstimate: item.delivery_time_estimate || undefined,
                 deliveryTimeDays: item.delivery_time_days || undefined,
                 isExpressDelivery: item.is_express_delivery ?? false,

@@ -137,6 +137,7 @@ export interface ProductVariant {
     compare_at_price?: number;
     discountPercent?: number;
     image?: string;
+    image_url?: string; // New: matches database column name
     sku?: string;
     stock?: number;
     options: Record<string, string>; // e.g. { "Color": "Red", "Size": "L" }

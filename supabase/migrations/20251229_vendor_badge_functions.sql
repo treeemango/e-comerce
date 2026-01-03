@@ -28,7 +28,7 @@ BEGIN
         COALESCE(SUM(o.total_amount), 0) as total_value_shipped_6_months
     INTO vendor_data
     FROM public.vendors v
-    LEFT JOIN public.orders o ON v.id = o.seller_id AND o.status = 'delivered'
+    LEFT JOIN public.orders o ON v.user_id = o.seller_id AND o.status = 'delivered'
     WHERE v.id = p_vendor_id
     GROUP BY v.id, v.offers_free_delivery, v.delivery_scope, v.shipping_rating,
              v.shipping_value_sent, v.last_delivery_at, v.created_at;

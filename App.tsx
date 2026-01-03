@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import FeaturesBar from './components/FeaturesBar';
@@ -149,6 +149,8 @@ const App: React.FC = () => {
   const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
   const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
   const [hasPlatformReviews, setHasPlatformReviews] = useState(true); // Default to true until checked
+
+  const latestProductRequestIdRef = useRef<string | null>(null);
 
   const handleInstallAppClick = useCallback(async () => {
     try {
@@ -916,21 +918,51 @@ const App: React.FC = () => {
     trackSearch(query);
   };
 
-  const handleProductClick = (product: Product) => {
+  const handleProductClick = useCallback((product: Product) => {
     setSelectedProduct(product);
     setCurrentView('product-detail');
     setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
-  const handleRelatedProductClick = (product: Product) => {
+    const productId = product?.id ? String(product.id) : null;
+    if (!productId) return;
+
+    latestProductRequestIdRef.current = productId;
+    void (async () => {
+      try {
+        const hydrated = await fetchProductById(productId);
+        if (!hydrated) return;
+        if (latestProductRequestIdRef.current !== productId) return;
+        setSelectedProduct(hydrated);
+      } catch (err) {
+        console.error('Error hydrating product on click:', err);
+      }
+    })();
+  }, []);
+
+  const handleRelatedProductClick = useCallback((product: Product) => {
     setSelectedProduct(product);
     setCurrentView('product-detail');
     setBreadcrumbs([]); // Clear breadcrumbs on search
     setSearchQuery('');
     setActiveVendorStoreId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+
+    const productId = product?.id ? String(product.id) : null;
+    if (!productId) return;
+
+    latestProductRequestIdRef.current = productId;
+    void (async () => {
+      try {
+        const hydrated = await fetchProductById(productId);
+        if (!hydrated) return;
+        if (latestProductRequestIdRef.current !== productId) return;
+        setSelectedProduct(hydrated);
+      } catch (err) {
+        console.error('Error hydrating related product on click:', err);
+      }
+    })();
+  }, []);
 
   const handleAccountPageClick = (pageTitle: string) => {
     // Special handling for wishlist

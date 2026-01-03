@@ -129,9 +129,33 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 .map((m) => m.image_url || m.thumbnail_url)
                 .filter((src): src is string => !!src)
             : [];
-        const unique = Array.from(new Set([product.image, ...gallery].filter(Boolean)));
+        const variantImages = Array.isArray(productVariants)
+            ? productVariants.map((v) => v.image).filter((src): src is string => !!src)
+            : [];
+        const unique = Array.from(new Set([product.image, ...gallery, ...variantImages].filter(Boolean)));
         return unique.length ? unique : [''];
-    }, [product.gallery_media, product.image]);
+    }, [product.gallery_media, product.image, productVariants]);
+
+    const richBannerImages = useMemo(() => {
+        const fromMedia = Array.isArray(product.media)
+            ? product.media
+                .filter((m) => m && m.type === 'image' && typeof m.url === 'string' && m.url)
+                .map((m) => ({
+                    url: m.url,
+                    alt: (m as any).alt_text || (m as any).name || `${product.title} - Detail image`
+                }))
+            : [];
+
+        const legacyImages = Array.isArray((product as any).images)
+            ? ((product as any).images as unknown[])
+                .filter((img): img is string => typeof img === 'string' && !!img)
+                .map((url, idx) => ({ url, alt: `${product.title} - View ${idx + 1}` }))
+            : [];
+
+        const chosen = fromMedia.length > 0 ? fromMedia : legacyImages;
+        const unique = Array.from(new Map(chosen.map((x) => [x.url, x])).values());
+        return unique;
+    }, [product]);
 
     // Minimum swipe distance and max time for swipe detection
     const minSwipeDistance = 50;
@@ -889,7 +913,23 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                             ? 'border-primary ring-2 ring-primary/20 scale-105'
                                             : 'border-gray-50 dark:border-white/5 opacity-80 group-hover:opacity-100'
                                             }`}>
-                                            <img src={getOptimizedImageUrl(v.image!, 'thumb')} className="w-full h-full object-cover" alt="" />
+                                            {(() => {
+                                                const rawImg = v.image || '';
+                                                const thumbImg = rawImg ? getOptimizedImageUrl(rawImg, 'thumb') : '';
+                                                return (
+                                                    <img
+                                                        src={thumbImg}
+                                                        onError={(e) => {
+                                                            const el = e.currentTarget;
+                                                            if (!rawImg) return;
+                                                            if (el.getAttribute('src') === rawImg || el.src === rawImg) return;
+                                                            el.src = rawImg;
+                                                        }}
+                                                        className="w-full h-full object-cover"
+                                                        alt=""
+                                                    />
+                                                );
+                                            })()}
                                         </div>
                                         <div className="flex flex-col items-center">
                                             <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
@@ -982,13 +1022,21 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
             </div>
 
             {/* Mobile Rich Banner Images - Modern Vertical Stack */}
-            {product.images && product.images.length > 0 && (
+            {richBannerImages.length > 0 && (
                 <div className="px-4 mb-8 space-y-4 animate-in fade-in duration-1000 slide-in-from-bottom-4">
-                    {product.images.map((img, idx) => (
+                    {richBannerImages.map((img, idx) => (
                         <div key={idx} className="w-full rounded-[24px] overflow-hidden shadow-sm border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-surface-dark">
                             <img
-                                src={img}
-                                alt={`${product.title} - View ${idx + 1}`}
+                                key={img.url}
+                                src={getOptimizedImageUrl(img.url, 'detail')}
+                                onError={(e) => {
+                                    const el = e.currentTarget;
+                                    const raw = img.url;
+                                    if (!raw) return;
+                                    if (el.getAttribute('src') === raw || el.src === raw) return;
+                                    el.src = raw;
+                                }}
+                                alt={img.alt}
                                 className="w-full h-auto object-cover"
                                 loading="lazy"
                             />
@@ -1795,9 +1843,11 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                     src={thumbImg}
                                                     onError={(e) => {
                                                         const el = e.currentTarget;
-                                                        if ((el as any).dataset?.fallbackApplied) return;
-                                                        (el as any).dataset.fallbackApplied = '1';
-                                                        if (rawImg) el.src = rawImg;
+                                                        if (!rawImg) return;
+                                                        // Avoid a sticky fallback flag: this <img> node can be reused across variant changes.
+                                                        // If we're already on the raw URL, do nothing.
+                                                        if (el.getAttribute('src') === rawImg || el.src === rawImg) return;
+                                                        el.src = rawImg;
                                                     }}
                                                     className="w-full h-full object-contain"
                                                     alt=""
@@ -1882,9 +1932,10 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                                                                                     src={thumbImg}
                                                                                     onError={(e) => {
                                                                                         const el = e.currentTarget;
-                                                                                        if ((el as any).dataset?.fallbackApplied) return;
-                                                                                        (el as any).dataset.fallbackApplied = '1';
-                                                                                        if (rawImg) el.src = rawImg;
+                                                                                        if (!rawImg) return;
+                                                                                        // Avoid a sticky fallback flag: this <img> node can be reused across option changes.
+                                                                                        if (el.getAttribute('src') === rawImg || el.src === rawImg) return;
+                                                                                        el.src = rawImg;
                                                                                     }}
                                                                                     className="w-full h-full object-contain"
                                                                                     alt=""

@@ -359,14 +359,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
             )}
           </div>
 
-          {(hasStrikePrice || product.activeCoupon) && (
+          {/* Strike price and discount info - only show activeCoupon when NOT already displayed as deal_type badge */}
+          {(hasStrikePrice || (product.activeCoupon && product.deal_type !== 'coupon')) && (
             <div className="flex flex-col gap-1 mb-2 text-[11px]">
               {hasStrikePrice && (
                 <div className="flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
                   <span className="line-through text-slate-400 dark:text-slate-500 text-xs">
                     {originalPriceConverted?.converted || `${getCurrencySymbol(product.currency)}${product.originalPrice?.toFixed(2)}`}
                   </span>
-                  {computedDiscountPercent !== undefined && (
+                  {/* Only show discount percent badge when not a coupon deal (already shown on image) */}
+                  {computedDiscountPercent !== undefined && product.deal_type !== 'coupon' && (
                     <span className="px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-[10px]">
                       -{computedDiscountPercent}%
                     </span>
@@ -374,7 +376,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                 </div>
               )}
 
-              {product.activeCoupon && couponValue && (
+              {/* Only show activeCoupon details when not already displayed as deal_type coupon */}
+              {product.activeCoupon && couponValue && product.deal_type !== 'coupon' && (
                 <div className="flex flex-wrap items-center gap-1 text-rose-600 dark:text-rose-400 font-semibold">
                   <span className="material-icons !text-[14px]">local_offer</span>
                   {product.activeCoupon.label && (
