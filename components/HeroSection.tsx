@@ -84,6 +84,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
   const [deals, setDeals] = useState<LightningDealItem[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isBannerLoading, setIsBannerLoading] = useState(true);
   const [playedVideos, setPlayedVideos] = useState<string[]>([]);
   const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
 
@@ -102,7 +103,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
   useEffect(() => {
     loadDeals();
     // Fetch dynamic event banner
-    fetchEventBanner().then(setEventBanner).catch(console.error);
+    fetchEventBanner()
+      .then(setEventBanner)
+      .catch(console.error)
+      .finally(() => setIsBannerLoading(false));
   }, []);
 
   const loadDeals = async () => {
@@ -186,10 +190,18 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
     setCurrentSlide((prev) => (prev - 1 + deals.length) % deals.length);
   };
 
-  if (isLoading) {
+  // Show loading state while banner or deals are loading
+  if (isLoading || isBannerLoading) {
     return (
       <section className="mb-8 lg:mb-12 relative">
-        <div className="relative h-[450px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl bg-slate-900">
+        {/* Banner skeleton */}
+        <div className="hidden md:flex w-screen relative left-1/2 -translate-x-1/2 h-12 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 animate-pulse items-center">
+          <div className="mx-auto flex items-center gap-4">
+            <div className="h-8 w-8 bg-slate-600 rounded-xl" />
+            <div className="h-4 w-48 bg-slate-600 rounded" />
+          </div>
+        </div>
+        <div className="relative h-[450px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl bg-slate-900 mt-2">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 animate-shimmer"
             style={{ backgroundSize: '200% 100%' }} />
           <div className="absolute inset-0 flex flex-col md:flex-row items-center px-8 md:px-20 gap-12">
@@ -231,11 +243,15 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/event:animate-shimmer" />
 
           <div className="w-full flex items-center justify-between px-8 md:px-20 relative z-10">
-            <div className="flex items-center gap-6">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
-                <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-5 w-5" />
+            <div className={`flex items-center gap-6 ${eventBanner.layout === 'center' ? 'mx-auto' : ''}`}>
+              <div className="flex items-center gap-2">
+                {(eventBanner.iconKeys || [eventBanner.iconKey]).filter(Boolean).map((key, idx) => (
+                  <div key={idx} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg animate-float-slow" style={{ animationDelay: `${idx * 0.5}s` }}>
+                    <img src={getEventIconSrc(key as string)} alt="" className="h-5 w-5 object-contain" />
+                  </div>
+                ))}
               </div>
-              <div className="flex flex-col">
+              <div className={`flex flex-col ${eventBanner.layout === 'center' ? 'items-center' : ''}`}>
                 <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
                 <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex items-baseline gap-2">
                   <span className="line-clamp-1">{eventBanner.headline}</span>
@@ -372,25 +388,6 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                     )}
                   </div>
 
-                  <p className={`text-sm sm:text-base md:text-lg text-white/70 max-w-xl line-clamp-3 transition-all duration-700 delay-900 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-                    {deal.description || deal.metaDescription || (() => {
-                      // Smart contextual fallback based on available data
-                      const categoryText = deal.category_name || 'premium products';
-                      const hasDiscount = (deal.discountPercent || 0) > 0;
-                      const hasHighRating = (deal.rating || 0) >= 4.5;
-
-                      if (hasDiscount && hasHighRating) {
-                        return `Save ${deal.discountPercent}% on this top-rated ${categoryText}. Exceptional quality at an exclusive price.`;
-                      } else if (hasDiscount) {
-                        return `Exclusive ${deal.discountPercent}% discount on ${categoryText}. Limited time offer.`;
-                      } else if (hasHighRating) {
-                        return `Highly rated ${categoryText} with ${deal.rating?.toFixed(1)} stars. Premium quality guaranteed.`;
-                      } else {
-                        return `Discover the best of ${categoryText} at exclusive prices.`;
-                      }
-                    })()}
-                  </p>
-
                   <div className={`pt-3 sm:pt-4 md:pt-6 transition-all duration-700 delay-1000 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
                     <button
                       onClick={() => onProductClick?.({
@@ -505,6 +502,13 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
         }
         .animate-shimmer {
           animation: shimmer 3s linear infinite;
+        }
+        @keyframes float-slow {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-10px) rotate(5deg); }
+        }
+        .animate-float-slow {
+          animation: float-slow 4s ease-in-out infinite;
         }
       `}} />
     </section>

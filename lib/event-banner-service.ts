@@ -16,6 +16,8 @@ export interface EventBannerData {
     urgencyText?: string;
     hasCountdown?: boolean;
     iconKey?: string | null;
+    iconKeys?: string[] | null; // Multi-icon support
+    layout?: 'left' | 'center' | 'spaced'; // Layout configuration
     // AI-generated section titles
     lightningDealsTitle?: string | null;
     lightningDealsHeadline?: string | null;
@@ -220,6 +222,8 @@ export async function fetchEventBanner(countryCode?: string): Promise<EventBanne
             urgencyText: data.urgencyText,
             hasCountdown: data.hasCountdown,
             iconKey: data.iconKey,
+            iconKeys: data.iconKeys || (data.iconKey ? [data.iconKey] : null),
+            layout: data.layout || 'left',
             lightningDealsTitle: data.lightningDealsTitle,
             lightningDealsHeadline: data.lightningDealsHeadline,
             lightningDealsSubtitle: data.lightningDealsSubtitle,

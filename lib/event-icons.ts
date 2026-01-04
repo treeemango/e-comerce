@@ -6,7 +6,25 @@ export const EVENT_ICON_KEYS = [
   'moon',
   'flag',
   'diamond',
-  'fireworks'
+  'fireworks',
+  'shopping_bag',
+  'truck',
+  'star',
+  'crown',
+  'rocket',
+  'savings',
+  'flash',
+  'calendar',
+  'card',
+  'package',
+  'balloons',
+  'confetti',
+  'flag_ke',
+  'flag_ng',
+  'flag_za',
+  'flag_tz',
+  'flag_ug',
+  'flag_gh'
 ] as const;
 
 export type EventIconKey = (typeof EVENT_ICON_KEYS)[number];

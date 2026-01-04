@@ -1,0 +1,8 @@
+<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 0H24V8H0V0Z" fill="#E03C31"/>
+  <path d="M0 16H24V24H0V16Z" fill="#001489"/>
+  <path d="M0 8H24V16H0V8Z" fill="#FFFFFF"/>
+  <path d="M0 8.5L12 12L0 15.5V8.5Z" fill="#007749"/>
+  <path d="M0 9L11 12L0 15V9Z" fill="#FFB81C"/>
+  <path d="M0 0L24 0L24 24L0 24L0 0Z" stroke="currentColor" stroke-width="0.1" stroke-opacity="0.1"/>
+</svg>

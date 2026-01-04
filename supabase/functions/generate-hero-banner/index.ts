@@ -13,6 +13,8 @@ interface HeroBannerData {
     urgencyText?: string;    // "Ends Midnight!" or "Last Day!"
     hasCountdown?: boolean;  // Show countdown timer
     iconKey?: string;        // one of approved local icon keys
+    iconKeys?: string[];     // Array of icons for multi-layout
+    layout?: 'left' | 'center' | 'spaced';
     // AI-generated section titles
     lightningDealsTitle?: string;     // e.g. "🎒 School Season Steals"
     lightningDealsHeadline?: string;  // e.g. "Gear Up for Less!"
@@ -31,6 +33,24 @@ const APPROVED_ICON_KEYS = [
     'flag',
     'diamond',
     'fireworks',
+    'shopping_bag',
+    'truck',
+    'star',
+    'crown',
+    'rocket',
+    'savings',
+    'flash',
+    'calendar',
+    'card',
+    'package',
+    'balloons',
+    'confetti',
+    'flag_ke',
+    'flag_ng',
+    'flag_za',
+    'flag_tz',
+    'flag_ug',
+    'flag_gh'
 ] as const;
 
 function pickFallbackIconKey(eventName: string, vibe: string): string {
@@ -210,40 +230,30 @@ const EVENTS: EventInfo[] = [
 // ============================================================
 // EVENT DETECTION
 // ============================================================
-function getCurrentEvent(countryCode: string): EventInfo | null {
+function getCurrentEvents(countryCode: string): EventInfo[] {
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
     const currentDate = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     const countryUpper = countryCode.toUpperCase();
-
-    // Find matching events (country-specific first, then global)
     const matchingEvents: EventInfo[] = [];
 
     for (const event of EVENTS) {
-        // Check if event applies to this country
         const isGlobal = event.countries.length === 0;
         const isCountryMatch = event.countries.includes(countryUpper);
 
         if (!isGlobal && !isCountryMatch) continue;
 
-        // Check date range
         if (isDateInRange(currentDate, event.start, event.end)) {
             matchingEvents.push({
                 ...event,
-                // Boost priority for country-specific events
                 priority: isCountryMatch ? event.priority + 5 : event.priority
             });
         }
     }
 
-    if (matchingEvents.length === 0) return null;
-
-    // Sort by priority (highest first)
-    matchingEvents.sort((a, b) => b.priority - a.priority);
-
-    return matchingEvents[0];
+    return matchingEvents.sort((a, b) => b.priority - a.priority);
 }
 
 function isDateInRange(current: string, start: string, end: string): boolean {
@@ -282,55 +292,43 @@ const COUNTRY_NAMES: Record<string, string> = {
 // ============================================================
 // GROK BANNER GENERATION
 // ============================================================
-async function generateBannerWithGrok(event: EventInfo | null, countryCode: string): Promise<HeroBannerData> {
+async function generateBannerWithGrok(events: EventInfo[], countryCode: string): Promise<HeroBannerData> {
     const countryName = COUNTRY_NAMES[countryCode.toUpperCase()] || countryCode;
-    const eventName = event?.name || 'normal shopping day';
-    const vibe = event?.vibe || 'premium';
+    const primaryEvent = events[0];
+    const eventNames = events.length > 0 ? events.map(e => e.name).join(", ") : 'normal shopping day';
+    const vibe = primaryEvent?.vibe || 'premium';
 
-    const prompt = `You are a global e-commerce copywriter for JuaExpress (African-founded marketplace selling globally).
-Create a high-converting hero banner for ${countryName} during ${eventName}.
+    const prompt = `You are a dynamic e-commerce copywriter for JuaExpress.
+Create a high-converting hero banner for ${countryName}.
+Events happening now: ${eventNames}.
+Your goal:
+1. Create a combined theme if multiple events overlap.
+2. If you know any other local events for ${countryName} on ${new Date().toISOString().split('T')[0]}, include them.
+3. Be vibrant and local.
 
-Return JSON only (no markdown, no code blocks):
+Return JSON ONLY:
 {
-  "headline": "short, emotional, 5-8 words max, include ONE relevant emoji, use local slang if appropriate",
-  "subheadline": "benefit-focused, urgent, 8-12 words, mention savings or value",
-  "cta": "action button text, 2-4 words",
-  "backgroundColor": "hex code for main background (dark, rich color)",
-  "accentColor": "hex code for text/buttons (bright, contrasting)",
-  "vibe": "${vibe}",
-  "urgencyText": "short urgency phrase for limited events, e.g. 'Ends Tonight!' or 'Last 48 Hours!' or null if not time-sensitive",
-  "hasCountdown": true if this is a limited-time event that ends within 7 days, false otherwise,
-    "iconKey": "ONE of these only: bolt, backpack, gift, heart, moon, flag, diamond, fireworks",
-  "lightningDealsTitle": "Catchy title for flash deals, e.g. '🎒 School Season Steals'",
-  "lightningDealsHeadline": "Urgent headline for the section, e.g. 'Gear Up for Less!'",
-  "lightningDealsSubtitle": "Supporting text, e.g. 'Fresh finds for the new term'",
-  "trendingTitle": "Title for trending items, e.g. '📚 BACK TO SCHOOL PICKS'",
-  "trendingSubtitle": "Short subtext, e.g. 'WHAT STUDENTS LOVE'",
-  "searchQuery": "targeted search term for this event, e.g. 'Back to school backpacks' or 'Christmas party dresses'"
-}
-
-Examples by country/event (use local slang where appropriate):
-- Kenya New Year → Gold/Purple, "New Year, Fresh Deals 🎆 Mwaka Mpya, Bei Mpya"
-- Kenya Jamhuri Day → Green/Black/Red, "Deals Zuri Sana 🇰🇪 Proudly Kenyan Prices"
-- Nigeria Independence → Green/White, "Naija no dey carry last! 🇳🇬 Grab Big Deals"
-- USA July 4th → Red/White/Blue, "Stars, Stripes & Savings 🇺🇸"
-- India Diwali → Orange/Gold, "Festival of Lights ✨ Festival of Deals"
-- UAE Eid → Green/Gold, "Eid Mubarak 🌙 Blessed Savings Await"
-- Brazil Carnaval → Yellow/Green/Blue, "Carnaval de Ofertas! 🎭"
-- Valentine's Day → Pink/Red, "Love Doesn't Wait ❤️ Neither Should Savings"
-- Default/Normal → Deep purple/gold, "Discover Premium at Best Prices ✨"
-
-Important:
-- Make it feel local and culturally appropriate
-- Use emotional, urgent language that creates FOMO
-- For time-sensitive events, add urgency text like "Ends Jan 5!" or "Last Day!"
-- Colors should match the event/country theme
-- Keep it professional but exciting`;
+  "headline": string,
+  "subheadline": string,
+  "cta": string,
+  "backgroundColor": string (dark hex),
+  "accentColor": string (contrasting hex),
+  "vibe": string,
+  "urgencyText": string or null,
+  "hasCountdown": boolean,
+  "iconKey": string (one from approved list),
+  "iconKeys": string[] (up to 3 matching icons),
+  "layout": "left" | "center",
+  "lightningDealsTitle": string,
+  "lightningDealsHeadline": string,
+  "lightningDealsSubtitle": string,
+  "trendingTitle": string,
+  "trendingSubtitle": string,
+  "searchQuery": string
+}`;
 
     try {
-        console.log('[HERO-BANNER] Calling Grok API for:', eventName, 'in', countryName);
-        console.log('[HERO-BANNER] GROK_API_KEY present:', !!GROK_API_KEY);
-
+        console.log('[HERO-BANNER] Calling Grok for:', eventNames);
         const res = await fetch("https://api.x.ai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -344,31 +342,16 @@ Important:
             }),
         });
 
-        console.log('[HERO-BANNER] Grok API response status:', res.status);
-
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error('[HERO-BANNER] Grok API error:', res.status, res.statusText, errorText);
-            return getDefaultBanner(vibe);
-        }
+        if (!res.ok) throw new Error(`API returned ${res.status}`);
 
         const data = await res.json();
-        console.log('[HERO-BANNER] Grok API raw response:', JSON.stringify(data).slice(0, 500));
+        const content = data.choices?.[0]?.message?.content || '';
 
-        const content = data.choices?.[0]?.message?.content;
+        // Robust JSON extraction
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No JSON found in response");
 
-        if (!content) {
-            console.error('[HERO-BANNER] No content from Grok. Full response:', JSON.stringify(data));
-            return getDefaultBanner(vibe);
-        }
-
-        console.log('[HERO-BANNER] Grok content:', content.slice(0, 300));
-
-        // Parse JSON (handle potential markdown code blocks)
-        const jsonStr = content.replace(/```json|```/g, '').trim();
-        const banner = JSON.parse(jsonStr);
-
-        console.log('[HERO-BANNER] Parsed banner successfully:', banner.headline);
+        const banner = JSON.parse(jsonMatch[0]);
 
         return {
             headline: banner.headline || "Discover Premium Deals ✨",
@@ -379,7 +362,11 @@ Important:
             vibe: banner.vibe || vibe,
             urgencyText: banner.urgencyText || null,
             hasCountdown: banner.hasCountdown || false,
-            iconKey: normalizeIconKey(banner.iconKey, eventName, banner.vibe || vibe),
+            iconKey: normalizeIconKey(banner.iconKey, eventNames, banner.vibe || vibe),
+            iconKeys: Array.isArray(banner.iconKeys)
+                ? banner.iconKeys.map(k => normalizeIconKey(k, eventNames, vibe)).slice(0, 3)
+                : [normalizeIconKey(banner.iconKey, eventNames, vibe)],
+            layout: banner.layout || 'left',
             lightningDealsTitle: banner.lightningDealsTitle || null,
             lightningDealsHeadline: banner.lightningDealsHeadline || null,
             lightningDealsSubtitle: banner.lightningDealsSubtitle || null,
@@ -388,12 +375,13 @@ Important:
             searchQuery: banner.searchQuery || null
         };
     } catch (error) {
-        console.error('[HERO-BANNER] Error generating banner:', error);
-        return getDefaultBanner(vibe);
+        console.error('[HERO-BANNER] Generation Error:', error);
+        return getDefaultBanner(vibe, eventNames);
     }
 }
 
-function getDefaultBanner(vibe: string): HeroBannerData {
+function getDefaultBanner(vibe: string, eventName: string = 'default'): HeroBannerData {
+    const icon = pickFallbackIconKey(eventName, vibe);
     const defaults: Record<string, HeroBannerData> = {
         romantic: {
             headline: "Love on Sale ❤️",
@@ -402,6 +390,9 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             backgroundColor: "#4a1942",
             accentColor: "#ff6b9d",
             vibe: "romantic",
+            iconKey: icon,
+            iconKeys: [icon],
+            layout: 'left',
             lightningDealsTitle: "💝 Love Deals",
             lightningDealsHeadline: "Gifts That Say I Love You",
             lightningDealsSubtitle: "Perfect presents at perfect prices. Limited time!",
@@ -416,6 +407,9 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             backgroundColor: "#1a472a",
             accentColor: "#ffd700",
             vibe: "festive",
+            iconKey: icon,
+            iconKeys: [icon],
+            layout: 'left',
             lightningDealsTitle: "🎁 Festive Flash",
             lightningDealsHeadline: "Holiday Deals Disappearing Fast",
             lightningDealsSubtitle: "Grab these seasonal steals before midnight!",
@@ -430,6 +424,9 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             backgroundColor: "#1a1a2e",
             accentColor: "#22c55e",
             vibe: "patriotic",
+            iconKey: icon,
+            iconKeys: [icon],
+            layout: 'left',
             lightningDealsTitle: "🎉 National Deals",
             lightningDealsHeadline: "Celebrate with Massive Savings",
             lightningDealsSubtitle: "Proud prices for a proud nation!",
@@ -444,6 +441,9 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             backgroundColor: "#0f3460",
             accentColor: "#e2c044",
             vibe: "spiritual",
+            iconKey: icon,
+            iconKeys: [icon],
+            layout: 'left',
             lightningDealsTitle: "🌙 Blessed Deals",
             lightningDealsHeadline: "Sacred Savings Await",
             lightningDealsSubtitle: "Share the blessings with deals that give back.",
@@ -458,6 +458,9 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             backgroundColor: "#16213e",
             accentColor: "#00d4ff",
             vibe: "fun",
+            iconKey: icon,
+            iconKeys: [icon],
+            layout: 'left',
             lightningDealsTitle: "🔥 Hot Drops",
             lightningDealsHeadline: "Fresh Finds, Fresher Prices",
             lightningDealsSubtitle: "New season, new deals. Get them while hot!",
@@ -472,6 +475,9 @@ function getDefaultBanner(vibe: string): HeroBannerData {
             backgroundColor: "#1a1a2e",
             accentColor: "#f59e0b",
             vibe: "premium",
+            iconKey: icon,
+            iconKeys: [icon],
+            layout: 'left',
             lightningDealsTitle: "✨ Elite Deals",
             lightningDealsHeadline: "Premium Quality, Unreal Prices",
             lightningDealsSubtitle: "Luxury for less. Today only.",
@@ -507,22 +513,22 @@ serve(async (req: Request) => {
         countryCode = countryCode.toUpperCase();
         console.log('[HERO-BANNER] Request for country:', countryCode);
 
-        // Detect current event
-        const event = getCurrentEvent(countryCode);
-        const eventName = event?.name || "default";
-        console.log('[HERO-BANNER] Detected event:', eventName);
+        // Detect current events
+        const events = getCurrentEvents(countryCode);
+        const compositeKey = events.length > 0 ? events.map(e => e.name).join("|") : "default";
+        console.log('[HERO-BANNER] Composite Key:', compositeKey);
 
-        // Check cache first
+        // Check cache
         const { data: cached, error: cacheError } = await supabase.rpc('get_cached_hero_banner', {
             p_country_code: countryCode,
-            p_event_name: eventName
+            p_event_name: compositeKey
         });
 
         if (!cacheError && cached?.[0]?.cache_status !== 'miss') {
-            console.log('[HERO-BANNER] Cache hit:', cached[0].cache_status);
+            console.log('[HERO-BANNER] Cache hit');
             return new Response(JSON.stringify({
                 ...cached[0].banner_data,
-                eventName: cached[0].event_name,
+                eventName: compositeKey,
                 countryCode: countryCode,
                 fromCache: true
             }), {
@@ -530,27 +536,25 @@ serve(async (req: Request) => {
             });
         }
 
-        // Cache miss - generate new banner with Grok
-        console.log('[HERO-BANNER] Cache miss, generating with Grok...');
-        const banner = await generateBannerWithGrok(event, countryCode);
+        // Generate
+        console.log('[HERO-BANNER] Cache miss, generating...');
+        const banner = await generateBannerWithGrok(events, countryCode);
 
-        // Calculate expiration (end of day in UTC, or event end if sooner)
+        // Cache expiration
         const now = new Date();
         const endOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
 
-        // Store in cache
+        // Save cache
         await supabase.rpc('upsert_hero_banner_cache', {
             p_country_code: countryCode,
-            p_event_name: eventName,
+            p_event_name: compositeKey,
             p_banner_data: banner,
             p_expires_at: endOfDay.toISOString()
         });
 
-        console.log('[HERO-BANNER] Generated and cached new banner for', countryCode, eventName);
-
         return new Response(JSON.stringify({
             ...banner,
-            eventName: eventName,
+            eventName: compositeKey,
             countryCode: countryCode,
             fromCache: false
         }), {

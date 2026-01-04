@@ -59,6 +59,7 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
     const [deals, setDeals] = useState<LightningDealItem[]>([]);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [isBannerLoading, setIsBannerLoading] = useState(!propEventBanner);
     const [internalEventBanner, setInternalEventBanner] = useState<EventBannerData | null>(null);
 
     const eventBanner = propEventBanner || internalEventBanner;
@@ -67,7 +68,10 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
         loadDeals();
         // Fetch dynamic event banner if not provided by parent
         if (!propEventBanner) {
-            fetchEventBanner().then(setInternalEventBanner).catch(console.error);
+            fetchEventBanner()
+                .then(setInternalEventBanner)
+                .catch(console.error)
+                .finally(() => setIsBannerLoading(false));
         }
     }, [propEventBanner]);
 
@@ -107,10 +111,17 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
         return convertedValues[`deal-${idx}-price`]?.converted ?? currencyFormatPrice(fallback, preferredCurrency);
     };
 
-    if (loading) {
+    // Wait for both deals and banner to load
+    if (loading || isBannerLoading) {
         return (
-            <div className="w-full h-48 bg-gray-900 animate-pulse flex items-center justify-center">
-                <div className="text-white/20 text-xs font-bold tracking-widest uppercase">Loading Elite Deals...</div>
+            <div className="w-full h-56 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 animate-pulse flex flex-col items-center justify-center gap-3 rounded-xl mx-2">
+                <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 bg-slate-700 rounded-lg" />
+                    <div className="h-3 w-32 bg-slate-700 rounded" />
+                </div>
+                <div className="h-24 w-24 bg-slate-700 rounded-xl" />
+                <div className="h-4 w-48 bg-slate-700 rounded" />
+                <div className="text-white/20 text-[10px] font-bold tracking-widest uppercase mt-2">Loading Banner...</div>
             </div>
         );
     }
@@ -137,11 +148,15 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                         window.open(url.toString(), '_blank');
                     }}
                 >
-                    <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 backdrop-blur-md border border-white/20">
-                            <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-4 w-4" />
+                    <div className={`flex items-center gap-2 ${eventBanner.layout === 'center' ? 'mx-auto' : ''}`}>
+                        <div className="flex items-center gap-1.5">
+                            {(eventBanner.iconKeys || [eventBanner.iconKey]).filter(Boolean).map((key, idx) => (
+                                <div key={idx} className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 backdrop-blur-md border border-white/20 shadow-sm animate-pulse-slow">
+                                    <img src={getEventIconSrc(key as string)} alt="" className="h-4 w-4 object-contain" />
+                                </div>
+                            ))}
                         </div>
-                        <div className="flex flex-col">
+                        <div className={`flex flex-col ${eventBanner.layout === 'center' ? 'items-center' : ''}`}>
                             <span className="text-[8px] font-black uppercase tracking-widest text-white/70 leading-none">{eventBanner.eventName}</span>
                             <h3 className="text-[10px] font-black tracking-tight uppercase mt-0.5 line-clamp-1">{eventBanner.headline}</h3>
                         </div>
@@ -197,10 +212,6 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                                             <span className="text-[8px] font-bold text-red-100 px-1 py-0.5 bg-red-600 rounded-md shrink-0">-{deal.discountPercent}%</span>
                                         )}
                                     </div>
-
-                                    <p className="text-[10px] text-white/70 line-clamp-2 leading-relaxed max-w-[160px]">
-                                        {deal.description || deal.metaDescription || `Discover the best of ${deal.category_name || 'premium products'}`}
-                                    </p>
 
                                     <button
                                         onClick={() => onProductClick?.({
@@ -280,3 +291,19 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
         </div>
     );
 };
+
+const styles = `
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+`;
+
+if (typeof document !== 'undefined') {
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = styles;
+    document.head.appendChild(styleSheet);
+}
