@@ -43,7 +43,7 @@ export interface ResponsiveImageProps {
     /** Callback on load error */
     onError?: () => void;
     /** Aspect ratio for placeholder */
-    aspectRatio?: 'square' | '4:3' | '16:9' | '3:4' | 'auto';
+    aspectRatio?: 'square' | '4:3' | '16:9' | '3:4' | '4:5' | 'auto';
     /** Show blur placeholder while loading */
     showBlurPlaceholder?: boolean;
     /** Custom blur placeholder data URL */
@@ -86,6 +86,7 @@ function getAspectRatioPadding(ratio: ResponsiveImageProps['aspectRatio']): stri
         case '4:3': return '75%';
         case '16:9': return '56.25%';
         case '3:4': return '133.33%';
+        case '4:5': return '125%';
         default: return '100%';
     }
 }

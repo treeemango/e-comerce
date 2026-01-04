@@ -1,6 +1,21 @@
-import { SITE_CONFIG } from './seo-utils';
 import { SUPPORTED_CURRENCIES } from './currency';
 import { getPreferredCurrency } from './currency-service';
+
+export interface SiteBrandingConfig {
+    name: string;
+    url: string;
+    logo: string;
+    email?: string;
+    phone?: string;
+    socialMedia?: {
+        twitter?: string;
+        facebook?: string;
+        instagram?: string;
+        tiktok?: string;
+        pinterest?: string;
+        youtube?: string;
+    };
+}
 
 // Country-specific SEO configuration
 export interface CountrySEOConfig {
@@ -64,11 +79,11 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress UK',
         businessDescription: 'Leading UK e-commerce platform offering electronics, fashion, and lifestyle products with fast delivery across the United Kingdom.',
         contactInfo: {
-            phone: '+44 20 1234 5678',
-            email: 'uk@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
-                addressLocality: 'London',
-                addressRegion: 'England',
+                addressLocality: '',
+                addressRegion: '',
                 addressCountry: 'GB',
             }
         },
@@ -99,8 +114,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress Kenya',
         businessDescription: 'Kenya\'s leading e-commerce platform connecting buyers with quality products. Fast delivery across all major cities with local customer support.',
         contactInfo: {
-            phone: '+254 712 345 678',
-            email: 'kenya@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
                 addressLocality: 'Nairobi',
                 addressRegion: 'Nairobi County',
@@ -134,11 +149,11 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress Nigeria',
         businessDescription: 'Nigeria\'s trusted e-commerce platform offering quality products with nationwide delivery. Connect with verified sellers across all 36 states.',
         contactInfo: {
-            phone: '+234 812 345 6789',
-            email: 'nigeria@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
-                addressLocality: 'Lagos',
-                addressRegion: 'Lagos State',
+                addressLocality: '',
+                addressRegion: '',
                 addressCountry: 'NG',
             }
         },
@@ -169,11 +184,11 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress South Africa',
         businessDescription: 'South Africa\'s leading e-commerce platform offering international and local products with reliable delivery across all provinces.',
         contactInfo: {
-            phone: '+27 21 123 4567',
-            email: 'sa@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
-                addressLocality: 'Cape Town',
-                addressRegion: 'Western Cape',
+                addressLocality: '',
+                addressRegion: '',
                 addressCountry: 'ZA',
             }
         },
@@ -204,11 +219,11 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress Ghana',
         businessDescription: 'Ghana\'s premier e-commerce platform connecting buyers with quality products. Fast delivery nationwide with mobile money and card payments.',
         contactInfo: {
-            phone: '+233 24 123 4567',
-            email: 'ghana@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
-                addressLocality: 'Accra',
-                addressRegion: 'Greater Accra',
+                addressLocality: '',
+                addressRegion: '',
                 addressCountry: 'GH',
             }
         },
@@ -239,11 +254,11 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress Uganda',
         businessDescription: 'Uganda\'s trusted e-commerce platform offering quality products with nationwide delivery. Connect with verified sellers across all regions.',
         contactInfo: {
-            phone: '+256 414 123 456',
-            email: 'uganda@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
-                addressLocality: 'Kampala',
-                addressRegion: 'Central Region',
+                addressLocality: '',
+                addressRegion: '',
                 addressCountry: 'UG',
             }
         },
@@ -274,11 +289,11 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         businessName: 'JuaExpress Tanzania',
         businessDescription: 'Tanzania\'s leading e-commerce platform connecting buyers with quality products. Reliable delivery across mainland and Zanzibar.',
         contactInfo: {
-            phone: '+255 22 123 4567',
-            email: 'tanzania@juaexpress.com',
+            phone: '',
+            email: '',
             address: {
-                addressLocality: 'Dar es Salaam',
-                addressRegion: 'Dar es Salaam Region',
+                addressLocality: '',
+                addressRegion: '',
                 addressCountry: 'TZ',
             }
         },
@@ -361,7 +376,11 @@ export function setPreferredCountry(countryCode: string): void {
 /**
  * Generate country-specific meta tags
  */
-export function generateCountryMetaTags(countryConfig: CountrySEOConfig, pageType: 'home' | 'category' | 'product' = 'home') {
+export function generateCountryMetaTags(
+    countryConfig: CountrySEOConfig,
+    site: Pick<SiteBrandingConfig, 'name'>,
+    pageType: 'home' | 'category' | 'product' = 'home'
+) {
     const baseTitle = countryConfig.metaTitle;
     const baseDescription = countryConfig.metaDescription;
 
@@ -371,17 +390,17 @@ export function generateCountryMetaTags(countryConfig: CountrySEOConfig, pageTyp
     // Customize based on page type
     switch (pageType) {
         case 'category':
-            title = `Shop ${countryConfig.name} - ${SITE_CONFIG.name}`;
-            description = `Discover quality products in ${countryConfig.name}. Fast delivery, secure payments, and trusted sellers on ${SITE_CONFIG.name}.`;
+            title = `Shop ${countryConfig.name} - ${site.name}`;
+            description = `Discover quality products in ${countryConfig.name}. Fast delivery, secure payments, and trusted sellers on ${site.name}.`;
             break;
         case 'product':
-            title = `${SITE_CONFIG.name} ${countryConfig.name} - Quality Products Online`;
-            description = `Shop with confidence in ${countryConfig.name}. Fast delivery, secure payments, and excellent customer service on ${SITE_CONFIG.name}.`;
+            title = `${site.name} ${countryConfig.name} - Quality Products Online`;
+            description = `Shop with confidence in ${countryConfig.name}. Fast delivery, secure payments, and excellent customer service on ${site.name}.`;
             break;
     }
 
     return {
-        title: title.includes(SITE_CONFIG.name) ? title : `${title} | ${SITE_CONFIG.name}`,
+        title: title.includes(site.name) ? title : `${title} | ${site.name}`,
         description,
         keywords: countryConfig.keywords.join(', '),
         geoRegion: countryConfig.geoRegion,
@@ -393,34 +412,62 @@ export function generateCountryMetaTags(countryConfig: CountrySEOConfig, pageTyp
 /**
  * Generate country-specific business schema
  */
-export function generateCountryBusinessSchema(countryConfig: CountrySEOConfig) {
+export function generateCountryBusinessSchema(countryConfig: CountrySEOConfig, site: SiteBrandingConfig) {
+    const address: any = {
+        '@type': 'PostalAddress',
+        addressCountry: countryConfig.countryCode,
+        ...(countryConfig.contactInfo.address.addressLocality && countryConfig.contactInfo.address.addressLocality.trim()
+            ? { addressLocality: countryConfig.contactInfo.address.addressLocality }
+            : {}),
+        ...(countryConfig.contactInfo.address.addressRegion && countryConfig.contactInfo.address.addressRegion.trim()
+            ? { addressRegion: countryConfig.contactInfo.address.addressRegion }
+            : {}),
+    };
+
+    const contactPoint: any = {
+        '@type': 'ContactPoint',
+        contactType: 'customer service',
+        areaServed: countryConfig.countryCode,
+        availableLanguage: 'English',
+        ...((countryConfig.contactInfo.email && countryConfig.contactInfo.email.trim())
+            ? { email: countryConfig.contactInfo.email }
+            : (site.email && site.email.trim() ? { email: site.email } : {})),
+        ...((countryConfig.contactInfo.phone && countryConfig.contactInfo.phone.trim())
+            ? { telephone: countryConfig.contactInfo.phone }
+            : (site.phone && site.phone.trim() ? { telephone: site.phone } : {})),
+    };
+
+    const sameAs: string[] = [];
+    if (site.socialMedia?.facebook) sameAs.push(site.socialMedia.facebook);
+    if (site.socialMedia?.twitter) {
+        sameAs.push(site.socialMedia.twitter.startsWith('http')
+            ? site.socialMedia.twitter
+            : `https://twitter.com/${site.socialMedia.twitter.replace('@', '')}`);
+    }
+    if (site.socialMedia?.instagram) {
+        sameAs.push(site.socialMedia.instagram.startsWith('http')
+            ? site.socialMedia.instagram
+            : `https://instagram.com/${site.socialMedia.instagram.replace('@', '')}`);
+    }
+    if (site.socialMedia?.tiktok) {
+        sameAs.push(site.socialMedia.tiktok.startsWith('http')
+            ? site.socialMedia.tiktok
+            : `https://tiktok.com/${site.socialMedia.tiktok.replace('@', '')}`);
+    }
+    if (site.socialMedia?.pinterest) sameAs.push(site.socialMedia.pinterest);
+    if (site.socialMedia?.youtube) sameAs.push(site.socialMedia.youtube);
+
     return {
         '@context': 'https://schema.org',
         '@type': 'Organization',
         name: countryConfig.businessName,
-        alternateName: SITE_CONFIG.name,
-        url: `${SITE_CONFIG.url}?country=${countryConfig.countryCode.toLowerCase()}`,
-        logo: `${SITE_CONFIG.url}${SITE_CONFIG.logo}`,
+        alternateName: site.name,
+        url: `${site.url}?country=${countryConfig.countryCode.toLowerCase()}`,
+        logo: `${site.url}${site.logo}`,
         description: countryConfig.businessDescription,
-        address: {
-            '@type': 'PostalAddress',
-            addressLocality: countryConfig.contactInfo.address.addressLocality,
-            addressRegion: countryConfig.contactInfo.address.addressRegion,
-            addressCountry: countryConfig.countryCode,
-        },
-        contactPoint: {
-            '@type': 'ContactPoint',
-            telephone: countryConfig.contactInfo.phone,
-            email: countryConfig.contactInfo.email,
-            contactType: 'customer service',
-            areaServed: countryConfig.countryCode,
-            availableLanguage: 'English',
-        },
-        sameAs: [
-            SITE_CONFIG.socialMedia.facebook,
-            SITE_CONFIG.socialMedia.twitter,
-            SITE_CONFIG.socialMedia.instagram,
-        ],
+        address,
+        contactPoint,
+        ...(sameAs.length ? { sameAs } : {}),
         areaServed: {
             '@type': 'Country',
             name: countryConfig.name,

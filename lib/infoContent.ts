@@ -201,7 +201,7 @@ export const infoContent: Record<string, InfoPageContent> = {
             },
             {
                 title: 'Your Rights (GDPR & POPIA Compliance)',
-                content: 'Depending on your location, you have the right to: access your personal data, correct inaccurate data, delete your data ("right to be forgotten"), restrict or object to processing, data portability, and withdraw consent. For EU residents, we comply with GDPR. For South African residents, we comply with POPIA. To exercise these rights, contact privacy@juaexpress.com.',
+                content: 'Depending on your location, you have the right to: access your personal data, correct inaccurate data, delete your data ("right to be forgotten"), restrict or object to processing, data portability, and withdraw consent. For EU residents, we comply with GDPR. For South African residents, we comply with POPIA. To exercise these rights, contact juaexpress01@gmail.com.',
                 icon: 'gpp_maybe'
             },
             {

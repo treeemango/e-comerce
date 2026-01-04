@@ -70,7 +70,7 @@ BEGIN
         FROM (
             SELECT unnest(regexp_split_to_array(LOWER(unaccent(COALESCE(title, '') || ' ' || COALESCE(description, ''))), '\s+')) AS word
             FROM products
-            WHERE status = 'approved'
+            WHERE status IN ('approved', 'published')
         ) AS words
         WHERE length(word) > 2  -- Only filter by length
         

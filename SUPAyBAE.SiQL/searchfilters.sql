@@ -1,19 +1,29 @@
-
+CREATE OR REPLACE FUNCTION get_unified_search_filters(
+  search_query TEXT DEFAULT NULL,
+  visual_search_image_id UUID DEFAULT NULL,
+  category_ids UUID[] DEFAULT NULL,
+  brand_ids UUID[] DEFAULT NULL,
+  price_min NUMERIC DEFAULT NULL,
+  price_max NUMERIC DEFAULT NULL,
+  attribute_filters JSONB DEFAULT '{}'::jsonb,
+  similarity_threshold NUMERIC DEFAULT 0.65,
+  condition_filters TEXT[] DEFAULT NULL
+)
+RETURNS JSON AS $$
 DECLARE
   result JSON;
   visual_embedding vector;
 BEGIN
+  -- Fetch visual embedding if visual search is requested
   IF visual_search_image_id IS NOT NULL THEN
-    -- Try to fetch embedding from the media table
-    SELECT image_embedding INTO visual_embedding
-    FROM media 
-    WHERE id = visual_search_image_id;
+    SELECT m.image_embedding INTO visual_embedding
+    FROM media m
+    WHERE m.id = visual_search_image_id;
 
     IF visual_embedding IS NULL THEN
-      -- Fallback to product_images table
-      SELECT image_embedding INTO visual_embedding
-      FROM product_images 
-      WHERE id = visual_search_image_id;
+      SELECT pi.image_embedding INTO visual_embedding
+      FROM product_images pi
+      WHERE pi.id = visual_search_image_id;
     END IF;
   END IF;
 
@@ -21,10 +31,11 @@ BEGIN
     SELECT DISTINCT 
       p.id, 
       p.category_id, 
-      p.brand_id, 
+      p.brand_id,
+      p.seller_id,
+      p.condition,
       pv.price AS product_price, 
-      -- The vendors' user ID is explicitly named seller_user_id
-      v2.user_id AS seller_user_id,
+      p.delivery_locations,
       CASE
         WHEN visual_embedding IS NOT NULL AND p.embedding IS NOT NULL THEN 
           1 - (p.embedding <=> visual_embedding)
@@ -33,20 +44,19 @@ BEGIN
     FROM products p 
     LEFT JOIN product_variants pv 
       ON pv.product_id = p.id AND pv.is_default = TRUE
-    -- JOIN to vendors, aliased as v2, to get the vendor's user ID
-    LEFT JOIN vendors v2
-      ON v2.id = p.seller_id
+    LEFT JOIN shopify_categories c ON p.category_id = c.id
+    LEFT JOIN admin_2025_shopify_brands b ON p.brand_id = b.id
     
-    WHERE p.status IN ('published', 'approved') 
-      -- FIX 2: Check stock on the product_variants table (pv)
-      AND pv.stock > 0
-      
+    WHERE (LOWER(TRIM(p.status)) IN ('published', 'approved'))
+      AND (pv.stock IS NULL OR pv.stock >= 0) -- Loosen stock check, or make it pv.stock > 0 if you strictly want in-stock
       AND (
         search_query IS NULL OR search_query = ''
         OR to_tsvector('english', p.title) @@ plainto_tsquery('english', search_query)
         OR p.title ILIKE '%' || search_query || '%'
         OR p.description ILIKE '%' || search_query || '%'
         OR p.brand ILIKE '%' || search_query || '%'
+        OR c.name ILIKE '%' || search_query || '%'
+        OR b.name ILIKE '%' || search_query || '%'
       )
       AND (
         visual_embedding IS NULL
@@ -60,7 +70,7 @@ BEGIN
       )
       AND (category_ids IS NULL OR p.category_id = ANY(category_ids))
       AND (brand_ids IS NULL OR p.brand_id = ANY(brand_ids))
-      -- Price filtering must check if pv.price exists before comparison (or handle NULL gracefully)
+      AND (condition_filters IS NULL OR p.condition::text = ANY(condition_filters))
       AND (
           (price_min IS NULL OR pv.price IS NULL OR pv.price >= price_min) 
           AND (price_max IS NULL OR pv.price IS NULL OR pv.price <= price_max)
@@ -86,14 +96,13 @@ BEGIN
                   )
                 )
                 OR (jsonb_typeof(filters.attr_values) <> 'array'
-                    AND pav2.value_text = trim(both '\"' FROM filters.attr_values::text)
+                    AND pav2.value_text = trim(both '"' FROM filters.attr_values::text)
                 )
               )
           )
         )
       )
   ),
-  -- New CTE to count product attributes for filtering metadata
   attribute_counts_cte AS (
     SELECT
       sa.name AS attribute_name,
@@ -104,6 +113,37 @@ BEGIN
     JOIN shopify_attributes sa ON sa.id = pav.attribute_id
     WHERE COALESCE(sa.is_filterable, false)
     GROUP BY sa.name, pav.value_text 
+  ),
+  delivery_location_counts AS (
+    SELECT
+      loc AS location,
+      COUNT(DISTINCT sr.id) AS product_count
+    FROM search_results sr,
+    unnest(sr.delivery_locations) AS loc
+    WHERE loc IS NOT NULL AND loc <> ''
+    GROUP BY loc
+    ORDER BY COUNT(DISTINCT sr.id) DESC
+    LIMIT 50
+  ),
+  -- Vendor country counts - join vendors table to get country info
+  vendor_country_counts AS (
+    SELECT
+      v.address_country AS country,
+      COUNT(DISTINCT sr.id) AS product_count
+    FROM search_results sr
+    JOIN vendors v ON v.user_id = sr.seller_id
+    WHERE v.address_country IS NOT NULL AND v.address_country <> ''
+    GROUP BY v.address_country
+    ORDER BY COUNT(DISTINCT sr.id) DESC
+    LIMIT 50
+  ),
+  condition_counts AS (
+    SELECT
+      condition::text AS condition,
+      COUNT(DISTINCT sr.id) AS product_count
+    FROM search_results sr
+    WHERE condition IS NOT NULL
+    GROUP BY condition
   ),
   filter_data AS (
     SELECT
@@ -156,6 +196,29 @@ BEGIN
         ) attr_data
       ) AS attributes,
       (
+        SELECT COALESCE(json_agg(row_to_json(dl)), '[]'::json)
+        FROM (
+           SELECT location, product_count
+           FROM delivery_location_counts
+        ) dl
+      ) AS delivery_locations,
+      -- Vendor countries output
+      (
+        SELECT COALESCE(json_agg(row_to_json(vc)), '[]'::json)
+        FROM (
+           SELECT country, product_count
+           FROM vendor_country_counts
+        ) vc
+      ) AS vendor_countries,
+      (
+        SELECT COALESCE(json_agg(row_to_json(cd)), '[]'::json)
+        FROM (
+           SELECT condition, product_count
+           FROM condition_counts
+           ORDER BY product_count DESC
+        ) cd
+      ) AS conditions,
+      (
         SELECT COUNT(*)
         FROM search_results
         WHERE visual_similarity IS NOT NULL
@@ -173,6 +236,9 @@ BEGIN
     'brands', json_build_array(),
     'price_range', json_build_object('min', 0, 'max', 0, 'avg', 0, 'product_count', 0),
     'attributes', json_build_object(),
+    'delivery_locations', json_build_array(),
+    'vendor_countries', json_build_array(),
+    'conditions', json_build_array(),
     'visual_match_count', 0,
     'total_products', 0,
     'has_visual_search', false,
@@ -180,3 +246,7 @@ BEGIN
     'visual_similarity_threshold', similarity_threshold
   ));
 END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC, TEXT[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_unified_search_filters(TEXT, UUID, UUID[], UUID[], NUMERIC, NUMERIC, JSONB, NUMERIC, TEXT[]) TO anon;

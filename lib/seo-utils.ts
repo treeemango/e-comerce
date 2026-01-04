@@ -8,11 +8,13 @@ export const SITE_CONFIG = {
     name: 'JuaExpress',
     alternateNames: ['Jua', 'Jua Express', 'JuaExpress'],
     fullName: 'JuaExpress Marketplace',
+    legalName: 'JUA EXPRESS ONLINE',
+    businessRegistrationNumber: 'BN-J9S6OB8R',
     description: 'Your African shopping destination - Modern e-commerce with personalized recommendations, fast delivery, and exceptional customer service',
     url: typeof window !== 'undefined' ? window.location.origin : 'https://juaexpress.com',
     logo: '/icon-512.png',
     email: 'juaexpress01@gmail.com',
-    phone: '0792345628',
+    phone: '',
     country: 'Kenya',
     currency: 'KES',
     locale: 'en_KE',
@@ -31,19 +33,24 @@ export const SITE_CONFIG = {
  * This helps search engines and AI understand your business
  */
 export function generateOrganizationSchema() {
-    return {
+    const schema: any = {
         '@context': 'https://schema.org',
         '@type': 'Organization',
         name: SITE_CONFIG.fullName,
         alternateName: SITE_CONFIG.alternateNames,
+        legalName: SITE_CONFIG.legalName,
         url: SITE_CONFIG.url,
         logo: `${SITE_CONFIG.url}${SITE_CONFIG.logo}`,
         description: SITE_CONFIG.description,
         email: SITE_CONFIG.email,
-        telephone: SITE_CONFIG.phone,
         address: {
             '@type': 'PostalAddress',
             addressCountry: SITE_CONFIG.country,
+        },
+        identifier: {
+            '@type': 'PropertyValue',
+            propertyID: 'KE Business Registration Number',
+            value: SITE_CONFIG.businessRegistrationNumber,
         },
         sameAs: [
             SITE_CONFIG.socialMedia.facebook,
@@ -54,6 +61,12 @@ export function generateOrganizationSchema() {
             SITE_CONFIG.socialMedia.youtube,
         ],
     };
+
+    if (SITE_CONFIG.phone && SITE_CONFIG.phone.trim()) {
+        schema.telephone = SITE_CONFIG.phone;
+    }
+
+    return schema;
 }
 
 /**
@@ -635,7 +648,7 @@ export async function updateCountrySEO(countryConfig: any, pageType: 'home' | 'c
     // Update meta tags
     const metaTags = pageType === 'category' && categoryConfig
         ? generateCategoryMetaTags(categoryConfig, countryConfig)
-        : generateCountryMetaTags(countryConfig, pageType);
+        : generateCountryMetaTags(countryConfig, SITE_CONFIG, pageType);
 
     updatePageMeta({
         title: metaTags.title,
@@ -645,7 +658,7 @@ export async function updateCountrySEO(countryConfig: any, pageType: 'home' | 'c
     });
 
     // Inject country-specific structured data
-    const businessSchema = generateCountryBusinessSchema(countryConfig);
+    const businessSchema = generateCountryBusinessSchema(countryConfig, SITE_CONFIG);
     injectStructuredData(businessSchema, 'country-business-schema');
 
     // Inject category-specific schema if applicable

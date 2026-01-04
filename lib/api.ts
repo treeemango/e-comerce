@@ -1417,6 +1417,64 @@ export const fetchFilteredProducts = async (
     vendorId?: string,
     statusFilter?: ProductStatus | ProductStatus[] | 'all' | null
 ): Promise<Product[]> => {
+    const buildSearchPatterns = (raw: string): string[] => {
+        const cleaned = (raw || '').trim();
+        if (!cleaned) return [];
+
+        // Support simple OR groups using | in URLs (e.g. "uniform|stationery")
+        const rawPhrases = cleaned
+            .split('|')
+            .map(p => p.trim())
+            .filter(Boolean);
+
+        const stopwords = new Set([
+            'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'deals', 'deal', 'for', 'from',
+            'in', 'is', 'it', 'new', 'of', 'on', 'or', 'sale', 'sales', 'the', 'to', 'with'
+        ]);
+
+        const tokens: string[] = [];
+        for (const phrase of rawPhrases.length ? rawPhrases : [cleaned]) {
+            const words = phrase
+                .toLowerCase()
+                .split(/\s+/g)
+                .map(w => w.replace(/[^a-z0-9%]+/gi, ''))
+                .filter(w => w.length >= 2 && !stopwords.has(w));
+
+            // Phrase pattern: words in order, with gaps allowed ("back to school" -> "back%school")
+            if (words.length >= 2) {
+                tokens.push(words.join('%'));
+            }
+
+            // Individual word patterns
+            tokens.push(...words);
+        }
+
+        // De-dup + cap to keep the query string reasonable
+        const unique = Array.from(new Set(tokens))
+            .map(t => t.replace(/[(),]/g, ''))
+            .filter(Boolean)
+            .slice(0, 10);
+
+        // Fallback: if everything got stripped, use the raw query as a flexible pattern
+        if (unique.length === 0) {
+            const fallback = cleaned
+                .toLowerCase()
+                .replace(/\s+/g, '%')
+                .replace(/[(),]/g, '');
+            return fallback ? [fallback] : [];
+        }
+
+        return unique;
+    };
+
+    const buildSearchOrClauses = (raw: string): string => {
+        const fields = ['title', 'description', 'brand_name', 'category_name'] as const;
+        const patterns = buildSearchPatterns(raw);
+        return patterns
+            .flatMap(p => fields.map(f => `${f}.ilike.%${p}%`))
+            .join(',');
+    };
+
     const normalizeStatus = (value?: ProductStatus | ProductStatus[] | 'all' | null) => {
         if (value === 'all' || value === null) return null;
         const map: Record<string, ProductStatus> = {
@@ -1428,7 +1486,7 @@ export const fetchFilteredProducts = async (
             return value.map(v => map[v] || v);
         }
 
-        const resolved = value ?? ['approved', 'active'];
+        const resolved = value ?? ['approved', 'active', 'published'];
         return map[resolved as string] || resolved;
     };
 
@@ -1445,13 +1503,26 @@ export const fetchFilteredProducts = async (
         query = query.eq('status', normalizedStatus);
     }
 
-    // Apply text search if provided
-    if (searchQuery) {
-        query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,brand_name.ilike.%${searchQuery}%,category_name.ilike.%${searchQuery}%`);
-    }
+    const normalizedSearch = (searchQuery || '').trim();
+    const hasSearch = normalizedSearch.length > 0;
+    const hasVendor = typeof vendorId === 'string' && vendorId.length > 0;
 
-    // Apply vendor filter if provided
-    if (vendorId) {
+    // Apply vendor + search without clobbering .or() (compose a single boolean expression)
+    if (hasSearch && hasVendor) {
+        const searchClauses = buildSearchOrClauses(normalizedSearch);
+        if (searchClauses) {
+            query = query.or(
+                `and(vendor_id.eq.${vendorId},or(${searchClauses})),and(seller_id.eq.${vendorId},or(${searchClauses}))`
+            );
+        } else {
+            query = query.or(`vendor_id.eq.${vendorId},seller_id.eq.${vendorId}`);
+        }
+    } else if (hasSearch) {
+        const searchClauses = buildSearchOrClauses(normalizedSearch);
+        if (searchClauses) {
+            query = query.or(searchClauses);
+        }
+    } else if (hasVendor) {
         // Try vendor_id first (vendors.id), fallback to seller_id (user_id) for compatibility
         query = query.or(`vendor_id.eq.${vendorId},seller_id.eq.${vendorId}`);
     }

@@ -52,15 +52,19 @@ BEGIN
     FROM products p 
     LEFT JOIN product_variants pv 
       ON pv.product_id = p.id AND pv.is_default = TRUE
-    
-    WHERE p.status IN ('published', 'approved') 
-      AND pv.stock > 0
+    LEFT JOIN shopify_categories c ON p.category_id = c.id
+    LEFT JOIN admin_2025_shopify_brands b ON p.brand_id = b.id
+
+    WHERE (LOWER(TRIM(p.status)) IN ('published', 'approved'))
+      AND (pv.stock IS NULL OR pv.stock >= 0)
       AND (
         search_query IS NULL OR search_query = ''
         OR to_tsvector('english', p.title) @@ plainto_tsquery('english', search_query)
         OR p.title ILIKE '%' || search_query || '%'
         OR p.description ILIKE '%' || search_query || '%'
         OR p.brand ILIKE '%' || search_query || '%'
+        OR c.name ILIKE '%' || search_query || '%'
+        OR b.name ILIKE '%' || search_query || '%'
       )
       AND (
         visual_embedding IS NULL
@@ -135,7 +139,7 @@ BEGIN
       v.address_country AS country,
       COUNT(DISTINCT sr.id) AS product_count
     FROM search_results sr
-    JOIN vendors v ON v.id = sr.seller_id
+    JOIN vendors v ON v.user_id = sr.seller_id
     WHERE v.address_country IS NOT NULL AND v.address_country <> ''
     GROUP BY v.address_country
     ORDER BY COUNT(DISTINCT sr.id) DESC
