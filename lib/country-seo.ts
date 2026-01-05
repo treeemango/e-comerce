@@ -69,7 +69,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Europe',
         flag: '🇬🇧',
 
-        metaTitle: 'JuaExpress UK - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress UK | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'Discover premium electronics, fashion, and home goods on JuaExpress UK. Fast delivery across England, Scotland, Wales & Northern Ireland with secure payments.',
         keywords: ['online shopping UK', 'electronics UK', 'fashion UK', 'home delivery UK', 'secure payments', 'fast delivery'],
         geoRegion: 'GB',
@@ -104,7 +104,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Africa',
         flag: '🇰🇪',
 
-        metaTitle: 'JuaExpress Kenya - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress Kenya | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'Your trusted Kenyan online marketplace. Shop electronics, fashion, home goods with fast delivery across Nairobi, Mombasa, Kisumu & major towns. Secure payments in KES.',
         keywords: ['online shopping Kenya', 'electronics Kenya', 'fashion Kenya', 'Nairobi shopping', 'Mombasa online store', 'secure payments Kenya', 'fast delivery Kenya'],
         geoRegion: 'KE',
@@ -139,7 +139,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Africa',
         flag: '🇳🇬',
 
-        metaTitle: 'JuaExpress Nigeria - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress Nigeria | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'Nigeria\'s premier online marketplace. Shop electronics, fashion, home goods with fast delivery across Lagos, Abuja, Port Harcourt & all states. Pay with card or bank transfer.',
         keywords: ['online shopping Nigeria', 'electronics Nigeria', 'fashion Nigeria', 'Lagos shopping', 'Abuja online store', 'secure payments Nigeria', 'fast delivery Nigeria'],
         geoRegion: 'NG',
@@ -174,7 +174,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Africa',
         flag: '🇿🇦',
 
-        metaTitle: 'JuaExpress South Africa - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress South Africa | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'South Africa\'s modern online marketplace. Shop electronics, fashion, home goods with fast delivery across Johannesburg, Cape Town, Durban & major cities.',
         keywords: ['online shopping South Africa', 'electronics South Africa', 'fashion South Africa', 'Johannesburg shopping', 'Cape Town online store', 'secure payments South Africa'],
         geoRegion: 'ZA',
@@ -209,7 +209,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Africa',
         flag: '🇬🇭',
 
-        metaTitle: 'JuaExpress Ghana - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress Ghana | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'Ghana\'s trusted online marketplace. Shop electronics, fashion, home goods with fast delivery across Accra, Tema, Kumasi & all regions. Secure mobile money payments.',
         keywords: ['online shopping Ghana', 'electronics Ghana', 'fashion Ghana', 'Accra shopping', 'Tema online store', 'secure payments Ghana', 'mobile money Ghana'],
         geoRegion: 'GH',
@@ -244,7 +244,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Africa',
         flag: '🇺🇬',
 
-        metaTitle: 'JuaExpress Uganda - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress Uganda | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'Uganda\'s leading online marketplace. Shop electronics, fashion, home goods with fast delivery across Kampala, Entebbe, Jinja & major towns. Mobile money payments.',
         keywords: ['online shopping Uganda', 'electronics Uganda', 'fashion Uganda', 'Kampala shopping', 'Entebbe online store', 'secure payments Uganda', 'mobile money Uganda'],
         geoRegion: 'UG',
@@ -279,7 +279,7 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         region: 'Africa',
         flag: '🇹🇿',
 
-        metaTitle: 'JuaExpress Tanzania - Shop Electronics, Fashion & More Online',
+        metaTitle: 'JuaExpress Tanzania | Shop, Sell & Deliver across UK & Africa',
         metaDescription: 'Tanzania\'s modern online marketplace. Shop electronics, fashion, home goods with fast delivery across Dar es Salaam, Mwanza, Arusha & major cities.',
         keywords: ['online shopping Tanzania', 'electronics Tanzania', 'fashion Tanzania', 'Dar es Salaam shopping', 'Mwanza online store', 'secure payments Tanzania'],
         geoRegion: 'TZ',
