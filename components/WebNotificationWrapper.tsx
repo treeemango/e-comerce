@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useNotifications } from './NotificationContext';
 import { fetchUserCoupons, fetchBuyerOrders, fetchBuyerNotificationPreferences, getSellerUnreadCount, getWishlist, fetchLightningDeals, fetchSellerOrdersSummary, fetchSellerStats, fetchVendorFullProfile, WishlistProduct, LightningDealItem } from '../lib/api';
 import { UserCoupon, BuyerOrder, User, BuyerNotificationPreferences, SellerOrderSummary, SellerStats } from '../types';
@@ -37,290 +37,290 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
         showNotificationRef.current = showNotification;
     }, [onDataUpdate, showNotification]);
 
-    useEffect(() => {
-        let highFreqInterval: NodeJS.Timeout;
-        let lowFreqInterval: NodeJS.Timeout;
+    const loadHighFrequencyData = useCallback(async () => {
+        if (!user?.id) return;
+        try {
+            const isSeller = user.role === 'seller' || (user as any)?.role === 'vendor' || user.role === 'admin' || (user as any)?.is_seller === true;
+            const [orders, unreadCount, sellerOrders, sellerStats, vendorProfile] = await Promise.all([
+                fetchBuyerOrders(user.id),
+                getSellerUnreadCount(user.id),
+                isSeller ? fetchSellerOrdersSummary(user.id) : Promise.resolve([] as SellerOrderSummary[]),
+                isSeller ? fetchSellerStats(user.id) : Promise.resolve(null as SellerStats | null),
+                isSeller ? fetchVendorFullProfile(user.id) : Promise.resolve(null as any)
+            ]);
 
-        const loadHighFrequencyData = async () => {
-            if (!user?.id) return;
-            try {
-                const isSeller = user.role === 'seller' || (user as any)?.role === 'vendor' || user.role === 'admin' || (user as any)?.is_seller === true;
-                const [orders, unreadCount, sellerOrders, sellerStats, vendorProfile] = await Promise.all([
-                    fetchBuyerOrders(user.id),
-                    getSellerUnreadCount(user.id),
-                    isSeller ? fetchSellerOrdersSummary(user.id) : Promise.resolve([] as SellerOrderSummary[]),
-                    isSeller ? fetchSellerStats(user.id) : Promise.resolve(null as SellerStats | null),
-                    isSeller ? fetchVendorFullProfile(user.id) : Promise.resolve(null as any)
-                ]);
+            // Seller verification approved notification (once)
+            if (isSeller && vendorProfile && typeof vendorProfile.is_verified === 'boolean') {
+                const currentVerified = !!vendorProfile.is_verified;
+                const prevVerified = prevSellerVerifiedRef.current;
 
-                // Seller verification approved notification (once)
-                if (isSeller && vendorProfile && typeof vendorProfile.is_verified === 'boolean') {
-                    const currentVerified = !!vendorProfile.is_verified;
-                    const prevVerified = prevSellerVerifiedRef.current;
+                if (prevVerified === null) {
+                    prevSellerVerifiedRef.current = currentVerified;
+                } else {
+                    const storageKey = `seller_verified_notified_${user.id}`;
+                    const alreadyNotified = typeof window !== 'undefined' && window.localStorage
+                        ? window.localStorage.getItem(storageKey) === '1'
+                        : false;
 
-                    if (prevVerified === null) {
-                        prevSellerVerifiedRef.current = currentVerified;
-                    } else {
-                        const storageKey = `seller_verified_notified_${user.id}`;
-                        const alreadyNotified = typeof window !== 'undefined' && window.localStorage
-                            ? window.localStorage.getItem(storageKey) === '1'
-                            : false;
+                    if (!alreadyNotified && prevVerified === false && currentVerified === true) {
+                        showNotificationRef.current(
+                            '🎉 Congratulations! Your seller profile has been approved. Your store is now verified.',
+                            'success',
+                            8000,
+                            undefined,
+                            { target: 'seller-dashboard' }
+                        );
+                        try {
+                            window.localStorage?.setItem(storageKey, '1');
+                        } catch {
+                            // ignore
+                        }
+                    }
+                    prevSellerVerifiedRef.current = currentVerified;
+                }
+            }
 
-                        if (!alreadyNotified && prevVerified === false && currentVerified === true) {
+            if (hasInitialLoaded.current) {
+                // Order status change notification...
+                const ordersEnabled = prefsRef.current?.orders !== false;
+                if (ordersEnabled) {
+                    orders.slice(0, 5).forEach(order => {
+                        const prevStatus = prevOrdersStatus.current[order.id];
+                        const isParcel = order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel';
+                        const justShipped = prevStatus && prevStatus !== 'shipped' && order.status === 'shipped';
+
+                        if (isParcel && justShipped && order.delivery_otp) {
                             showNotificationRef.current(
-                                '🎉 Congratulations! Your seller profile has been approved. Your store is now verified.',
+                                `📦 Parcel Ready! Order #${order.id.slice(0, 8)} - Collection Code: ${order.delivery_otp}`,
                                 'success',
                                 8000,
-                                undefined,
-                                { target: 'seller-dashboard' }
+                                () => onDeepLink?.('order', order.id),
+                                { target: 'order', id: order.id }
                             );
-                            try {
-                                window.localStorage?.setItem(storageKey, '1');
-                            } catch {
-                                // ignore
-                            }
+                        } else if (prevStatus && order.status && prevStatus !== order.status) {
+                            showNotificationRef.current(
+                                `Order #${order.id.slice(0, 8)} status updated to ${order.status}!`,
+                                'info',
+                                5000,
+                                () => onDeepLink?.('order', order.id),
+                                { target: 'order', id: order.id }
+                            );
                         }
-                        prevSellerVerifiedRef.current = currentVerified;
-                    }
+                    });
                 }
 
-                if (hasInitialLoaded.current) {
-                    // Order status change notification...
-                    const ordersEnabled = prefsRef.current?.orders !== false;
-                    if (ordersEnabled) {
-                        orders.slice(0, 5).forEach(order => {
-                            const prevStatus = prevOrdersStatus.current[order.id];
-                            const isParcel = order.fulfillment_type === 'local_parcel' || order.shipping_method === 'local_parcel';
-                            const justShipped = prevStatus && prevStatus !== 'shipped' && order.status === 'shipped';
+                if (isSeller) {
+                    // New Orders
+                    if (sellerOrders.length > prevSellerOrdersCount.current) {
+                        const newCount = sellerOrders.length - prevSellerOrdersCount.current;
+                        showNotificationRef.current(
+                            `🚀 You have ${newCount} new order${newCount > 1 ? 's' : ''}!`,
+                            'success',
+                            5000,
+                            undefined,
+                            { target: 'seller-orders' }
 
-                            if (isParcel && justShipped && order.delivery_otp) {
-                                showNotificationRef.current(
-                                    `📦 Parcel Ready! Order #${order.id.slice(0, 8)} - Collection Code: ${order.delivery_otp}`,
-                                    'success',
-                                    8000,
-                                    () => onDeepLink?.('order', order.id),
-                                    { target: 'order', id: order.id }
-                                );
-                            } else if (prevStatus && order.status && prevStatus !== order.status) {
-                                showNotificationRef.current(
-                                    `Order #${order.id.slice(0, 8)} status updated to ${order.status}!`,
-                                    'info',
-                                    5000,
-                                    () => onDeepLink?.('order', order.id),
-                                    { target: 'order', id: order.id }
-                                );
-                            }
-                        });
+                        );
                     }
 
-                    if (isSeller) {
-                        // New Orders
-                        if (sellerOrders.length > prevSellerOrdersCount.current) {
-                            const newCount = sellerOrders.length - prevSellerOrdersCount.current;
-                            showNotificationRef.current(
-                                `🚀 You have ${newCount} new order${newCount > 1 ? 's' : ''}!`,
-                                'success',
-                                5000,
-                                undefined,
-                                { target: 'seller-orders' }
+                    sellerOrders.forEach(order => {
+                        const prevStatus = prevSellerOrdersStatus.current[order.order_id];
+                        const prevReturnStatus = prevSellerReturnsStatus.current[order.order_id];
 
-                            );
-                        }
-
-                        sellerOrders.forEach(order => {
-                            const prevStatus = prevSellerOrdersStatus.current[order.order_id];
-                            const prevReturnStatus = prevSellerReturnsStatus.current[order.order_id];
-
-                            if (prevStatus && order.order_status && prevStatus !== order.order_status) {
-                                if (order.order_status === 'paid') {
-                                    showNotificationRef.current(
-                                        `💰 Order #${order.order_id.slice(0, 8)} has been paid! Time to pack.`,
-                                        'success',
-                                        5000,
-                                        () => onDeepLink?.('order', order.order_id),
-                                        { target: 'order', id: order.order_id }
-                                    );
-                                } else {
-                                    showNotificationRef.current(
-                                        `Order #${order.order_id.slice(0, 8)} status updated to ${order.order_status}.`,
-                                        'info',
-                                        5000,
-                                        () => onDeepLink?.('order', order.order_id),
-                                        { target: 'order', id: order.order_id }
-                                    );
-                                }
-                            }
-
-                            if (prevReturnStatus !== undefined && order.return_status && prevReturnStatus !== order.return_status) {
+                        if (prevStatus && order.order_status && prevStatus !== order.order_status) {
+                            if (order.order_status === 'paid') {
                                 showNotificationRef.current(
-                                    `🔄 Return request for Order #${order.order_id.slice(0, 8)} is now ${order.return_status}.`,
-                                    'warning',
+                                    `💰 Order #${order.order_id.slice(0, 8)} has been paid! Time to pack.`,
+                                    'success',
+                                    5000,
+                                    () => onDeepLink?.('order', order.order_id),
+                                    { target: 'order', id: order.order_id }
+                                );
+                            } else {
+                                showNotificationRef.current(
+                                    `Order #${order.order_id.slice(0, 8)} status updated to ${order.order_status}.`,
+                                    'info',
                                     5000,
                                     () => onDeepLink?.('order', order.order_id),
                                     { target: 'order', id: order.order_id }
                                 );
                             }
-                        });
+                        }
 
-                        // Low Stock Alerts
-                        if (sellerStats && sellerStats.low_stock_count > prevLowStockCount.current) {
+                        if (prevReturnStatus !== undefined && order.return_status && prevReturnStatus !== order.return_status) {
                             showNotificationRef.current(
-                                `⚠️ Some items are running low on stock! Check your inventory.`,
+                                `🔄 Return request for Order #${order.order_id.slice(0, 8)} is now ${order.return_status}.`,
                                 'warning',
                                 5000,
-                                undefined,
-                                { target: 'inventory' }
+                                () => onDeepLink?.('order', order.order_id),
+                                { target: 'order', id: order.order_id }
                             );
                         }
+                    });
 
-                        // Funds available
-                        if (sellerStats && sellerStats.balance > prevBalance.current && prevBalance.current > 0) {
-                            showNotificationRef.current(
-                                `💸 New funds are now available for withdrawal!`,
-                                'success',
-                                5000,
-                                undefined,
-                                { target: 'finances' }
-                            );
-                        }
-                    }
-
-                    // New messages
-                    const messagesEnabled = prefsRef.current?.messages !== false;
-                    if (messagesEnabled && unreadCount > prevUnreadCount.current) {
+                    // Low Stock Alerts
+                    if (sellerStats && sellerStats.low_stock_count > prevLowStockCount.current) {
                         showNotificationRef.current(
-                            `You have new unread messages!`,
-                            'info',
+                            `⚠️ Some items are running low on stock! Check your inventory.`,
+                            'warning',
                             5000,
-                            () => onDeepLink?.('chat', 'inbox'),
-                            { target: 'chat', id: 'inbox' },
-                            user?.id ? `unread_messages_${user.id}` : undefined
+                            undefined,
+                            { target: 'inventory' }
                         );
                     }
-                }
 
-                // Update refs
-                const statusMap: Record<string, string> = {};
-                orders.slice(0, 5).forEach(o => { if (o.status) statusMap[o.id] = o.status; });
-                prevOrdersStatus.current = statusMap;
-                prevUnreadCount.current = unreadCount;
-
-                if (isSeller) {
-                    prevSellerOrdersCount.current = sellerOrders.length;
-                    const sStatusMap: Record<string, string> = {};
-                    const sReturnMap: Record<string, string> = {};
-                    sellerOrders.forEach(o => {
-                        sStatusMap[o.order_id] = o.order_status;
-                        if (o.return_status) sReturnMap[o.order_id] = o.return_status;
-                    });
-                    prevSellerOrdersStatus.current = sStatusMap;
-                    prevSellerReturnsStatus.current = sReturnMap;
-                    if (sellerStats) {
-                        prevLowStockCount.current = sellerStats.low_stock_count;
-                        prevBalance.current = sellerStats.balance || 0;
-                    }
-                }
-
-                // Pass critical updates up
-                onDataUpdateRef.current([], orders); // Coupons updated separately
-            } catch (err) {
-                console.error('Error loading high frequency data:', err);
-            }
-        };
-
-        const loadLowFrequencyData = async () => {
-            if (!user?.id) return;
-            try {
-                const [coupons, prefs, wishlist, deals] = await Promise.all([
-                    fetchUserCoupons(user.id),
-                    fetchBuyerNotificationPreferences(user.id),
-                    getWishlist(user.id),
-                    fetchLightningDeals(user.id, 20)
-                ]);
-
-                prefsRef.current = prefs;
-                const activeCoupons = coupons.filter(c => c.status === 'active' && !c.used_at);
-
-                if (hasInitialLoaded.current) {
-                    // New coupons
-                    const dealsEnabled = prefs?.deals !== false;
-                    if (dealsEnabled && activeCoupons.length > prevCouponsCount.current) {
-                        const newCount = activeCoupons.length - prevCouponsCount.current;
+                    // Funds available
+                    if (sellerStats && sellerStats.balance > prevBalance.current && prevBalance.current > 0) {
                         showNotificationRef.current(
-                            `${newCount} new offer${newCount > 1 ? 's' : ''} available! Check your rewards.`,
+                            `💸 New funds are now available for withdrawal!`,
                             'success',
                             5000,
                             undefined,
-                            { target: 'coupons' }
+                            { target: 'finances' }
                         );
-
                     }
-
-                    // Price drops
-                    const priceDropsEnabled = prefs?.price_drops !== false;
-                    if (priceDropsEnabled) {
-                        const newPriceDrops = wishlist.filter(item =>
-                            (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) &&
-                            !prevPriceDropIds.current.has(item.id.toString())
-                        );
-                        if (newPriceDrops.length > 0) {
-                            const first = newPriceDrops[0];
-                            showNotificationRef.current(
-                                `${newPriceDrops.length} item${newPriceDrops.length > 1 ? 's' : ''} in your wishlist had a price drop!`,
-                                'success',
-                                6000,
-                                newPriceDrops.length > 1
-                                    ? undefined
-                                    : (first?.id ? () => onDeepLink?.('product', first.id.toString()) : undefined),
-                                newPriceDrops.length > 1
-                                    ? { target: 'wishlist' }
-                                    : (first?.id ? { target: 'product', id: first.id.toString() } : undefined)
-                            );
-                            newPriceDrops.forEach(item => prevPriceDropIds.current.add(item.id.toString()));
-                        }
-                    }
-
-                    // Recommendations
-                    const recommendationsEnabled = prefs?.recommendations !== false;
-                    if (recommendationsEnabled) {
-                        const newRecommendations = deals.filter(deal =>
-                            (deal.personalization_score && deal.personalization_score >= 0.7) &&
-                            !prevRecommendedIds.current.has(deal.id)
-                        );
-                        if (newRecommendations.length > 0) {
-                            const first = newRecommendations[0];
-                            showNotificationRef.current(
-                                `New personalized deals found for you!`,
-                                'success',
-                                6000,
-                                undefined,
-                                { target: 'deals' }
-                            );
-
-                            newRecommendations.forEach(deal => prevRecommendedIds.current.add(deal.id));
-                        }
-                    }
-                } else {
-                    // Initial load: populate refs
-                    wishlist.forEach(item => {
-                        if (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) {
-                            prevPriceDropIds.current.add(item.id.toString());
-                        }
-                    });
-                    deals.forEach(deal => {
-                        if (deal.personalization_score && deal.personalization_score >= 0.7) {
-                            prevRecommendedIds.current.add(deal.id);
-                        }
-                    });
-                    hasInitialLoaded.current = true;
                 }
 
-                prevCouponsCount.current = activeCoupons.length;
-                onDataUpdateRef.current(activeCoupons, []); // Orders updated separately
-            } catch (err) {
-                console.error('Error loading low frequency data:', err);
+                // New messages
+                const messagesEnabled = prefsRef.current?.messages !== false;
+                if (messagesEnabled && unreadCount > prevUnreadCount.current) {
+                    showNotificationRef.current(
+                        `You have new unread messages!`,
+                        'info',
+                        5000,
+                        () => onDeepLink?.('chat', 'inbox'),
+                        { target: 'chat', id: 'inbox' },
+                        user?.id ? `unread_messages_${user.id}` : undefined
+                    );
+                }
             }
-        };
+
+            // Update refs
+            const statusMap: Record<string, string> = {};
+            orders.slice(0, 5).forEach(o => { if (o.status) statusMap[o.id] = o.status; });
+            prevOrdersStatus.current = statusMap;
+            prevUnreadCount.current = unreadCount;
+
+            if (isSeller) {
+                prevSellerOrdersCount.current = sellerOrders.length;
+                const sStatusMap: Record<string, string> = {};
+                const sReturnMap: Record<string, string> = {};
+                sellerOrders.forEach(o => {
+                    sStatusMap[o.order_id] = o.order_status;
+                    if (o.return_status) sReturnMap[o.order_id] = o.return_status;
+                });
+                prevSellerOrdersStatus.current = sStatusMap;
+                prevSellerReturnsStatus.current = sReturnMap;
+                if (sellerStats) {
+                    prevLowStockCount.current = sellerStats.low_stock_count;
+                    prevBalance.current = sellerStats.balance || 0;
+                }
+            }
+
+            // Pass critical updates up
+            onDataUpdateRef.current([], orders); // Coupons updated separately
+        } catch (err) {
+            console.error('Error loading high frequency data:', err);
+        }
+    }, [user?.id, onDeepLink]);
+
+    const loadLowFrequencyData = useCallback(async () => {
+        if (!user?.id) return;
+        try {
+            const [coupons, prefs, wishlist, deals] = await Promise.all([
+                fetchUserCoupons(user.id),
+                fetchBuyerNotificationPreferences(user.id),
+                getWishlist(user.id),
+                fetchLightningDeals(user.id, 20)
+            ]);
+
+            prefsRef.current = prefs;
+            const activeCoupons = coupons.filter(c => c.status === 'active' && !c.used_at);
+
+            if (hasInitialLoaded.current) {
+                // New coupons
+                const dealsEnabled = prefs?.deals !== false;
+                if (dealsEnabled && activeCoupons.length > prevCouponsCount.current) {
+                    const newCount = activeCoupons.length - prevCouponsCount.current;
+                    showNotificationRef.current(
+                        `${newCount} new offer${newCount > 1 ? 's' : ''} available! Check your rewards.`,
+                        'success',
+                        5000,
+                        undefined,
+                        { target: 'coupons' }
+                    );
+
+                }
+
+                // Price drops
+                const priceDropsEnabled = prefs?.price_drops !== false;
+                if (priceDropsEnabled) {
+                    const newPriceDrops = wishlist.filter(item =>
+                        (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) &&
+                        !prevPriceDropIds.current.has(item.id.toString())
+                    );
+                    if (newPriceDrops.length > 0) {
+                        const first = newPriceDrops[0];
+                        showNotificationRef.current(
+                            `${newPriceDrops.length} item${newPriceDrops.length > 1 ? 's' : ''} in your wishlist had a price drop!`,
+                            'success',
+                            6000,
+                            newPriceDrops.length > 1
+                                ? undefined
+                                : (first?.id ? () => onDeepLink?.('product', first.id.toString()) : undefined),
+                            newPriceDrops.length > 1
+                                ? { target: 'wishlist' }
+                                : (first?.id ? { target: 'product', id: first.id.toString() } : undefined)
+                        );
+                        newPriceDrops.forEach(item => prevPriceDropIds.current.add(item.id.toString()));
+                    }
+                }
+
+                // Recommendations
+                const recommendationsEnabled = prefs?.recommendations !== false;
+                if (recommendationsEnabled) {
+                    const newRecommendations = deals.filter(deal =>
+                        (deal.personalization_score && deal.personalization_score >= 0.7) &&
+                        !prevRecommendedIds.current.has(deal.id)
+                    );
+                    if (newRecommendations.length > 0) {
+                        const first = newRecommendations[0];
+                        showNotificationRef.current(
+                            `New personalized deals found for you!`,
+                            'success',
+                            6000,
+                            undefined,
+                            { target: 'deals' }
+                        );
+
+                        newRecommendations.forEach(deal => prevRecommendedIds.current.add(deal.id));
+                    }
+                }
+            } else {
+                // Initial load: populate refs
+                wishlist.forEach(item => {
+                    if (item.lower_than_similar || (item.discountPercent && item.discountPercent >= 20)) {
+                        prevPriceDropIds.current.add(item.id.toString());
+                    }
+                });
+                deals.forEach(deal => {
+                    if (deal.personalization_score && deal.personalization_score >= 0.7) {
+                        prevRecommendedIds.current.add(deal.id);
+                    }
+                });
+                hasInitialLoaded.current = true;
+            }
+
+            prevCouponsCount.current = activeCoupons.length;
+            onDataUpdateRef.current(activeCoupons, []); // Orders updated separately
+        } catch (err) {
+            console.error('Error loading low frequency data:', err);
+        }
+    }, [user?.id, onDeepLink]);
+
+    useEffect(() => {
+        let highFreqInterval: NodeJS.Timeout;
+        let lowFreqInterval: NodeJS.Timeout;
 
         if (user?.id) {
             loadHighFrequencyData();
@@ -336,14 +336,34 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
             if (highFreqInterval) clearInterval(highFreqInterval);
             if (lowFreqInterval) clearInterval(lowFreqInterval);
         };
-    }, [user?.id]);
+    }, [user?.id, loadHighFrequencyData, loadLowFrequencyData]);
 
-    // Real-time notifications_queue subscription
+    // Initial load summary
+    const hasInitialSummaryShown = useRef(false);
+
+    useEffect(() => {
+        if (!user?.id || !hasInitialLoaded.current || hasInitialSummaryShown.current) return;
+
+        const activeCoupons = prevCouponsCount.current;
+        if (activeCoupons > 0) {
+            showNotificationRef.current(
+                `Welcome back! You have ${activeCoupons} available coupon${activeCoupons > 1 ? 's' : ''} in your wallet.`,
+                'info',
+                8000,
+                undefined,
+                { target: 'coupons' }
+            );
+            hasInitialSummaryShown.current = true;
+        }
+    }, [user?.id, hasInitialLoaded.current]);
+
+    // Real-time notifications_queue and user_coupons subscription
     useEffect(() => {
         if (!user?.id) return;
 
         console.log('Starting real-time notification subscription for user:', user.id);
 
+        // Listen for system notifications
         const channel = supabase
             .channel(`user-notifications-${user.id}`)
             .on(
@@ -386,7 +406,7 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
                         action
                     );
 
-                    // Mark as sent in the queue (optional, but good for tracking)
+                    // Mark as sent in the queue
                     supabase
                         .from('notifications_queue')
                         .update({ status: 'sent' })
@@ -400,8 +420,36 @@ export const WebNotificationWrapper: React.FC<WebNotificationWrapperProps> = ({ 
                 console.log(`Notification subscription status for ${user.id}:`, status);
             });
 
+        // Listen for new coupons specifically
+        const couponsChannel = supabase
+            .channel(`user-coupons-${user.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'user_coupons',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload) => {
+                    console.log('New coupon received via real-time:', payload.new);
+                    // Trigger a re-fetch of coupons data
+                    loadLowFrequencyData();
+
+                    showNotificationRef.current(
+                        `🎉 New coupon received! Check your wallet for special discounts.`,
+                        'success',
+                        10000,
+                        undefined,
+                        { target: 'coupons' }
+                    );
+                }
+            )
+            .subscribe();
+
         return () => {
             supabase.removeChannel(channel);
+            supabase.removeChannel(couponsChannel);
         };
     }, [user?.id]);
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './mobile.css';
 import { Header } from './components/Header';
 import { TopAppBanner } from './components/TopAppBanner';
@@ -36,7 +36,7 @@ import { VendorProfileView } from './components/VendorProfileView';
 import { BuyerProfileView } from './components/BuyerProfileView';
 import { fetchProducts, fetchNavbarCategories, NavbarCategory, getSellerUnreadCount, fetchRecentViews, createConversation, fetchBuyerOrders, confirmOrderReceiptBuyer, getOrderQRCodeURL, raiseDeliveryDispute, fetchProductById, fetchPlatformReviewCount, ensureSupportConversation, fetchRelatedProducts } from '@/lib/api';
 import { Product, Review, UserCoupon, BuyerOrder, RelatedProduct } from '@/types';
-import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle, isAccountBanned } from '@/lib/auth';
+import { getCurrentUser, getUserProfile, signOut, AuthUser, signInWithGoogle, isAccountBanned, syncPublicUserProfileFromAuthUser } from '@/lib/auth';
 import { MobileNotificationWrapper } from './components/MobileNotificationWrapper';
 import type { NotificationAction } from '../components/NotificationContext';
 import { formatPrice, getUserCurrency, setUserCurrency } from '@/lib/currency';
@@ -62,6 +62,7 @@ import {
 
 
 import VisualSearchSheet from './components/VisualSearchSheet';
+import { MobileCouponsView } from './components/MobileCouponsView';
 import { OrderPrice } from '@/components/OrderPrice';
 import { detectUserCurrency } from '@/lib/currency-service';
 import { trackProductViewAuto } from '@/lib/tracking';
@@ -121,6 +122,51 @@ const App: React.FC = () => {
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [, setPreferredCurrency] = useState(getUserCurrency());
     const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
+    const [eventDealsTitle, setEventDealsTitle] = useState<string | null>(null);
+
+    const orderedDepartments = useMemo(() => {
+        const byId = new Map<string, { id: string; name: string; sort: number }>();
+
+        for (const category of categories) {
+            if (!category.department_id) continue;
+            const existing = byId.get(category.department_id);
+            if (!existing || category.department_sort_order < existing.sort) {
+                byId.set(category.department_id, {
+                    id: category.department_id,
+                    name: category.department_name,
+                    sort: category.department_sort_order,
+                });
+            }
+        }
+
+        return Array.from(byId.values())
+            .sort((a, b) => a.sort - b.sort)
+            .map(({ id, name }) => ({ id, name }));
+    }, [categories]);
+
+    const departmentToCategoryIds = useMemo(() => {
+        const map = new Map<string, Set<string>>();
+        for (const category of categories) {
+            if (!category.department_id || !category.category_id) continue;
+            const set = map.get(category.department_id) ?? new Set<string>();
+            set.add(category.category_id);
+            map.set(category.department_id, set);
+        }
+        return map;
+    }, [categories]);
+
+    const firstDepartmentWithProducts = useMemo(() => {
+        if (!orderedDepartments.length) return null;
+        if (!products.length) return orderedDepartments[0];
+
+        for (const dept of orderedDepartments) {
+            const categoryIds = departmentToCategoryIds.get(dept.id);
+            if (!categoryIds || categoryIds.size === 0) continue;
+            const hasAny = products.some((p) => p.categoryId && categoryIds.has(String(p.categoryId)));
+            if (hasAny) return dept;
+        }
+        return orderedDepartments[0];
+    }, [departmentToCategoryIds, orderedDepartments, products]);
 
     const { history: notificationHistory } = useNotifications();
     const notificationCount = userProfile?.id
@@ -140,25 +186,111 @@ const App: React.FC = () => {
     const [isInfoPageOpen, setIsInfoPageOpen] = useState(false);
     const [activeInfoPageSlug, setActiveInfoPageSlug] = useState<string>('support-center');
 
-    // Initial navigation pills or Categories Page toggle logic (swipe to navigate shortcut)
+    const openDepartmentOverlay = useCallback((departmentId: string, departmentName: string) => {
+        setCategoryViewOpen({ departmentId, departmentName });
+        setSelectedCategoryForSubs({ id: departmentId, name: departmentName });
+        setActiveCategoryId(departmentId);
+        setActiveSubcategoryId('all');
+    }, []);
+
+    const closeCategoryOverlay = useCallback(() => {
+        setCategoryViewOpen(null);
+        setSelectedCategoryForSubs(null);
+        setActiveSubcategoryId('all');
+        setActiveCategoryId('all');
+    }, []);
+
+    const shouldIgnoreSwipe = useCallback((e: TouchEvent) => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return false;
+
+        // Allow opting out via attribute (useful for carousels/chips)
+        if (target.closest('[data-swipe-ignore="true"]')) return true;
+
+        const tag = target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+        if (target.isContentEditable) return true;
+
+        // Avoid fighting with horizontal scrollers/carousels
+        let el: HTMLElement | null = target;
+        while (el) {
+            const style = window.getComputedStyle(el);
+            const overflowX = style.overflowX;
+            if ((overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 4) {
+                return true;
+            }
+            el = el.parentElement;
+        }
+
+        return false;
+    }, []);
+
+    const cycleDepartment = useCallback((
+        direction: 1 | -1,
+        options?: { wrap?: boolean; exitToMainOnRightUnderflow?: boolean }
+    ) => {
+        if (!orderedDepartments.length) return;
+
+        const wrap = options?.wrap ?? true;
+        const exitToMainOnRightUnderflow = options?.exitToMainOnRightUnderflow ?? false;
+
+        const currentId =
+            categoryViewOpen?.departmentId ||
+            (activeCategoryId !== 'all' && activeCategoryId !== '' ? activeCategoryId : orderedDepartments[0].id);
+
+        let currentIndex = orderedDepartments.findIndex((d) => d.id === currentId);
+        if (currentIndex < 0) currentIndex = 0;
+
+        // Special UX: swiping right past the first department exits back to main page
+        if (direction === -1 && exitToMainOnRightUnderflow && currentIndex === 0) {
+            closeCategoryOverlay();
+            return;
+        }
+
+        let nextIndex = currentIndex + direction;
+
+        if (wrap) {
+            nextIndex = (nextIndex + orderedDepartments.length) % orderedDepartments.length;
+        } else {
+            nextIndex = Math.min(Math.max(nextIndex, 0), orderedDepartments.length - 1);
+        }
+
+        const next = orderedDepartments[nextIndex];
+        openDepartmentOverlay(next.id, next.name);
+    }, [activeCategoryId, categoryViewOpen?.departmentId, closeCategoryOverlay, openDepartmentOverlay, orderedDepartments]);
+
+    // Swipe shortcut (modern): swipe-left opens category overlay; in overlay swipe cycles chip categories
     useSwipeGesture({
-        onSwipeRight: () => {
-            if (activeTab === 'home' && !selectedProduct && !isAccountOpen && !isSearchOpen && !categoryViewOpen) {
-                setActiveTab('categories');
-                window.history.pushState({ view: 'categories' }, '', window.location.href);
+        onSwipeLeft: () => {
+            if (selectedProduct || isAccountOpen || isSearchOpen) return;
+
+            if (categoryViewOpen) {
+                cycleDepartment(1, { wrap: true });
+                return;
+            }
+
+            if (activeTab === 'home' && orderedDepartments.length) {
+                setSearchQuery(null);
+                setActiveAccountSection(null);
+                const first = firstDepartmentWithProducts ?? orderedDepartments[0];
+                openDepartmentOverlay(first.id, first.name);
             }
         },
-        onSwipeLeft: () => {
-            if (activeTab === 'categories' && !selectedProduct && !isAccountOpen && !isSearchOpen && !categoryViewOpen) {
-                setActiveTab('home');
-                window.history.pushState({ view: 'home' }, '', window.location.href);
+        onSwipeRight: () => {
+            if (selectedProduct || isAccountOpen || isSearchOpen) return;
+            if (categoryViewOpen) {
+                cycleDepartment(-1, { wrap: false, exitToMainOnRightUnderflow: true });
             }
-        }
+        },
+        // Allow right-swipe anywhere (not just from left edge) for chip cycling
+        minEdgeOffset: 99999,
+        shouldIgnore: shouldIgnoreSwipe
     });
 
     const refreshUserProfile = useCallback(async () => {
         const user = await getCurrentUser();
         if (user?.id) {
+            await syncPublicUserProfileFromAuthUser(user);
             const profile = await getUserProfile(user.id);
 
             if (isAccountBanned(profile)) {
@@ -311,6 +443,7 @@ const App: React.FC = () => {
         const chatId = params.get('chat_id');
         const searchParam = params.get('search');
         const viewDeal = params.get('view') === 'deals';
+        const viewEventDeals = params.get('view') === 'event-deals';
 
         if (view === 'info-page') {
             setActiveInfoPageSlug(infoSlug || 'support-center');
@@ -340,6 +473,11 @@ const App: React.FC = () => {
             }
         } else if (viewDeal) {
             setActiveTab('deals');
+        } else if (viewEventDeals) {
+            const eventTitle = params.get('event') || 'Event Deals';
+            const search = params.get('search') || params.get('event') || '';
+            setEventDealsTitle(eventTitle);
+            if (search) handleSearch(search);
         } else if (productId) {
             // Deep link to product
             const loadDeepLinkProduct = async () => {
@@ -367,6 +505,22 @@ const App: React.FC = () => {
     useEffect(() => {
         const onPopState = (event: PopStateEvent) => {
             const view = (event.state as any)?.view;
+
+            // Support direct back/forward navigation for event-deals deep links
+            {
+                const params = new URLSearchParams(window.location.search);
+                const urlView = params.get('view');
+                if (urlView === 'event-deals') {
+                    const eventTitle = params.get('event') || 'Event Deals';
+                    const search = params.get('search') || params.get('event') || '';
+                    setEventDealsTitle(eventTitle);
+                    if (search) {
+                        handleSearch(search);
+                        return;
+                    }
+                }
+            }
+
             if (selectedProduct) {
                 setSelectedProduct(null);
                 return;
@@ -374,6 +528,7 @@ const App: React.FC = () => {
             if (isSearchOpen) {
                 setIsSearchOpen(false);
                 setSearchQuery(null);
+                setEventDealsTitle(null);
                 return;
             }
             if (isAccountOpen) {
@@ -992,45 +1147,12 @@ const App: React.FC = () => {
                 );
             }
             case 'coupons': {
+                if (!userProfile?.id) return null;
                 return (
-                    <AccountSection title="Coupons" description="View and apply your coupons" onBack={() => setActiveAccountSection(null)}>
-                        <div className="flex flex-col gap-3">
-                            {userCoupons.length > 0 ? (
-                                <div className="grid grid-cols-1 gap-3">
-                                    {userCoupons.map((userCoupon, idx) => (
-                                        <div key={userCoupon.id || idx} className="relative overflow-hidden group">
-                                            <div className="flex bg-gradient-to-br from-orange-500 to-primary text-white rounded-2xl shadow-lg border border-primary/20">
-                                                <div className="flex-1 p-4 border-r border-dashed border-white/30">
-                                                    <div className="text-[10px] uppercase font-bold tracking-widest opacity-80">{userCoupon.coupon.name}</div>
-                                                    <div className="text-2xl font-black mt-1">
-                                                        {userCoupon.coupon.discount_percentage
-                                                            ? `${userCoupon.coupon.discount_percentage}% OFF`
-                                                            : formatPrice(userCoupon.coupon.discount_amount || 0, 'USD') + ' OFF'
-                                                        }
-                                                    </div>
-                                                    <div className="text-[10px] mt-2 bg-white/20 inline-block px-1.5 py-0.5 rounded backdrop-blur-sm">
-                                                        Code: {userCoupon.coupon.code}
-                                                    </div>
-                                                </div>
-                                                <div className="w-20 flex flex-col items-center justify-center p-2 bg-black/5 hover:bg-black/10 transition">
-                                                    <span className="material-icons text-xl mb-1">qr_code_2</span>
-                                                    <div className="text-[9px] font-bold uppercase">U%SAME%</div>
-                                                </div>
-                                            </div>
-                                            {/* Decorative punch holes */}
-                                            <div className="absolute top-1/2 -left-2 w-4 h-4 rounded-full bg-background-light dark:bg-background-dark -translate-y-1/2"></div>
-                                            <div className="absolute top-1/2 -right-2 w-4 h-4 rounded-full bg-background-light dark:bg-background-dark -translate-y-1/2"></div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-8 bg-white dark:bg-surface-dark text-center">
-                                    <span className="material-icons text-gray-300 text-4xl mb-2">confirmation_number</span>
-                                    <p className="text-sm text-gray-500">No coupons yet. Check deals and promotions to earn rewards.</p>
-                                </div>
-                            )}
-                        </div>
-                    </AccountSection>
+                    <MobileCouponsView
+                        user={userProfile as any}
+                        onBack={() => setActiveAccountSection(null)}
+                    />
                 );
             }
             case 'credit': {
@@ -1428,7 +1550,15 @@ const App: React.FC = () => {
     const handleBackFromSearch = () => {
         setSearchQuery(null);
         setIsVisualSearchActive(false); // Reset visual search flag
+        setEventDealsTitle(null);
         setActiveTab('home');
+
+        // Clear search params from URL so reload doesn't restore search
+        const url = new URL(window.location.href);
+        url.searchParams.delete('search');
+        url.searchParams.delete('event');
+        url.searchParams.delete('view'); // In case it was view=deals etc
+        window.history.replaceState({ view: 'home' }, '', url.pathname);
     };
 
     const addToCart = (product: Product, quantity: number = 1) => {
@@ -1525,6 +1655,7 @@ const App: React.FC = () => {
         // Open category results in a new overlay page
         setCategoryViewOpen({ departmentId: categoryId, departmentName: categoryName });
         setSelectedCategoryForSubs({ id: categoryId, name: categoryName });
+        setActiveCategoryId(categoryId);
         setActiveSubcategoryId('all');
     };
 
@@ -1533,9 +1664,16 @@ const App: React.FC = () => {
     };
 
     const filteredProducts = products.filter(p => {
-        // First filter by main category (navbar)
-        if (activeCategoryId !== 'all' && activeCategoryId !== '' && p.categoryId !== activeCategoryId) {
-            return false;
+        // First filter by selected department/category
+        if (activeCategoryId !== 'all' && activeCategoryId !== '') {
+            const departmentCategoryIds = departmentToCategoryIds.get(activeCategoryId);
+            if (departmentCategoryIds) {
+                // activeCategoryId is a department id
+                if (!p.categoryId || !departmentCategoryIds.has(String(p.categoryId))) return false;
+            } else {
+                // activeCategoryId is a category/subcategory id
+                if (String(p.categoryId) !== activeCategoryId) return false;
+            }
         }
 
         // Then filter by subcategory if selected
@@ -1635,7 +1773,10 @@ const App: React.FC = () => {
                     vendorId={selectedVendorId}
                     onBack={() => {
                         setSelectedVendorId(null);
-                        // Optional: trigger refresh or something if needed
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('view');
+                        url.searchParams.delete('vendorId');
+                        window.history.replaceState({ view: activeTab }, '', url.pathname);
                     }}
                     onProductClick={handleProductClick}
                     onVisualSearch={setVisualSearchProduct}
@@ -1657,6 +1798,8 @@ const App: React.FC = () => {
                     notificationCount={notificationCount}
                     cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
                     isVisualSearch={isVisualSearchActive}
+                    eventBanner={eventDealsTitle ? eventBanner : null}
+                    headerTitleOverride={eventDealsTitle || undefined}
                 />
             );
         }
@@ -1680,6 +1823,7 @@ const App: React.FC = () => {
                         onBack={() => setActiveTab('home')}
                         onProductClick={handleProductClick}
                         onVisualSearch={setVisualSearchProduct}
+                        eventBanner={eventBanner}
                     />
                 );
             case 'best_sellers':
@@ -1877,22 +2021,12 @@ const App: React.FC = () => {
             {/* Category View Overlay - Full Screen */}
             {categoryViewOpen && (
                 <div className="absolute inset-0 z-50 bg-background-light dark:bg-background-dark flex flex-col">
-                    {/* Category Navigation */}
-                    <CategoryNav
-                        activeCategoryId={activeCategoryId}
-                        onSelectCategory={setActiveCategoryId}
-                        onNavigateToCategories={handleNavigateToCategories}
-                        onCategoryClick={handleCategoryClick}
-                    />
-
                     {/* Category View Header */}
                     <div className="flex-shrink-0 bg-white dark:bg-surface-dark border-b border-gray-200 dark:border-gray-700 px-3 py-1.5">
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={() => {
-                                    setCategoryViewOpen(null);
-                                    setSelectedCategoryForSubs(null);
-                                    setActiveSubcategoryId('all');
+                                    closeCategoryOverlay();
                                 }}
                                 className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                             >
@@ -1904,18 +2038,24 @@ const App: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Subcategory Carousel */}
-                    {selectedCategoryForSubs && (
-                        <SubcategoryCarousel
-                            categoryId={selectedCategoryForSubs.id}
-                            categoryName={selectedCategoryForSubs.name}
-                            onSelectSubcategory={handleSelectSubcategory}
-                            activeSubcategoryId={activeSubcategoryId}
-                        />
-                    )}
-
-                    {/* Category Products */}
+                    {/* Scrollable Content: category chips + subcategories + products */}
                     <div className="flex-grow overflow-y-auto bg-background-light dark:bg-background-dark">
+                        <CategoryNav
+                            activeCategoryId={activeCategoryId}
+                            onSelectCategory={setActiveCategoryId}
+                            onNavigateToCategories={handleNavigateToCategories}
+                            onCategoryClick={handleCategoryClick}
+                        />
+
+                        {selectedCategoryForSubs && (
+                            <SubcategoryCarousel
+                                categoryId={selectedCategoryForSubs.id}
+                                categoryName={selectedCategoryForSubs.name}
+                                onSelectSubcategory={handleSelectSubcategory}
+                                activeSubcategoryId={activeSubcategoryId}
+                            />
+                        )}
+
                         <HomeView
                             products={filteredProducts}
                             onProductClick={handleProductClick}
@@ -1931,7 +2071,12 @@ const App: React.FC = () => {
             {selectedProduct && (
                 <ProductDetails
                     product={selectedProduct}
-                    onBack={() => setSelectedProduct(null)}
+                    onBack={() => {
+                        setSelectedProduct(null);
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('product_id');
+                        window.history.replaceState({ view: activeTab }, '', url.pathname);
+                    }}
                     onProductClick={handleProductClick}
                     onVisualSearch={setVisualSearchProduct}
                     onAddToCart={() => addToCart(selectedProduct)}
@@ -1997,6 +2142,7 @@ const App: React.FC = () => {
                             // Use the first category ID as the main department ID
                             if (categoryIds.length > 0) {
                                 setCategoryViewOpen({ departmentId: categoryIds[0], departmentName: title });
+                                setActiveCategoryId(categoryIds[0]);
                                 setSelectedCategoryForSubs({ id: categoryIds[0], name: title });
                                 setActiveSubcategoryId('all');
                             }
@@ -2174,6 +2320,7 @@ const App: React.FC = () => {
                 </div>
             )}
 
+            setActiveCategoryId('all');
             {/* Auth Toast Notification */}
             {authToast && (
                 <div className="fixed bottom-24 left-4 right-4 z-[100] animate-in slide-in-from-bottom-full duration-300">
@@ -2202,15 +2349,16 @@ const App: React.FC = () => {
             />
 
             {isInfoPageOpen && (
-                <div className="absolute inset-0 z-[120] bg-white">
+                <div className="absolute inset-0 z-[120] bg-white overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
                     <InfoPageView
                         slug={activeInfoPageSlug}
                         onClose={() => {
-                            if ((window.history.state as any)?.view === 'info-page') {
-                                window.history.back();
-                            } else {
-                                setIsInfoPageOpen(false);
-                            }
+                            setIsInfoPageOpen(false);
+                            // Clear deep-link params so reload doesn't restore info page
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('view');
+                            url.searchParams.delete('slug');
+                            window.history.replaceState({ view: activeTab }, '', url.pathname);
                         }}
                         onNavigate={(slug) => {
                             setActiveInfoPageSlug(slug);

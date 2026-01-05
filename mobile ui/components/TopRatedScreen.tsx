@@ -35,7 +35,7 @@ export const TopRatedScreen: React.FC<TopRatedScreenProps> = ({
 
     return (
         <div className="flex flex-col h-full bg-background-light dark:bg-background-dark">
-            {/* Header */}
+            {/* Top Nav (Sticky) */}
             <div className="sticky top-0 z-20 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800">
                 <div className="flex items-center justify-between px-4 py-3">
                     <button
@@ -49,22 +49,23 @@ export const TopRatedScreen: React.FC<TopRatedScreenProps> = ({
                     </h1>
                     <div className="w-10" />
                 </div>
+            </div>
 
-                <div className="px-4 pb-3">
-                    <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/20 rounded-xl p-3 flex items-center gap-3">
-                        <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg shadow-yellow-400/20">
-                            <span className="material-icons text-white">grade</span>
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-yellow-700 dark:text-yellow-500 mb-0.5">Top Tier Quality</p>
-                            <p className="text-xs text-yellow-600 dark:text-yellow-600/80 font-medium">Hand-picked items with exceptional ratings</p>
-                        </div>
+            {/* Info Card (Scrollable) */}
+            <div className="px-4 pt-3">
+                <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/20 rounded-xl p-3 flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg shadow-yellow-400/20">
+                        <span className="material-icons text-white">grade</span>
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-700 dark:text-yellow-500 mb-0.5">Top Tier Quality</p>
+                        <p className="text-xs text-yellow-600 dark:text-yellow-600/80 font-medium">Hand-picked items with exceptional ratings</p>
                     </div>
                 </div>
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pt-2 px-4 pb-24">
+            <div className="flex-1 custom-scrollbar pt-2 px-4 pb-24">
                 {loading ? (
                     <div className="grid grid-cols-2 gap-4 animate-pulse">
                         {[...Array(6)].map((_, i) => (

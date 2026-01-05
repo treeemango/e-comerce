@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-import { createCoupon, fetchSellerProductsForCoupons } from '../../../lib/api';
+import { createCoupon, fetchSellerProductsForCoupons, fetchTrendingPlatformEventName } from '../../../lib/api';
 import { Product } from '../../../types';
 import { getCurrencySymbol, getSellerCurrency } from '../../../lib/seller-currency';
+import { detectUserCountry } from '../../../lib/event-banner-service';
 
 const FieldHelp: React.FC<{ text: string }> = ({ text }) => {
     const [open, setOpen] = React.useState(false);
@@ -48,6 +49,8 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
     const currencySymbol = getCurrencySymbol(sellerCurrency);
 
     const [couponName, setCouponName] = useState('');
+    const [trendingEventName, setTrendingEventName] = useState<string | null>(null);
+    const didAutofillNameRef = useRef(false);
     const [code, setCode] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
@@ -72,6 +75,30 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
             cancelled = true;
         };
     }, [sellerId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const country = await detectUserCountry().catch(() => 'GLOBAL');
+                const eventName = await fetchTrendingPlatformEventName(country);
+                if (cancelled) return;
+                setTrendingEventName(eventName);
+                if (!didAutofillNameRef.current && !couponName.trim() && eventName) {
+                    didAutofillNameRef.current = true;
+                    setCouponName(eventName.slice(0, 50));
+                }
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+        // Intentionally do not depend on couponName to avoid overriding user edits.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         const loadProducts = async () => {
@@ -165,6 +192,15 @@ const CreateCouponView: React.FC<CreateCouponViewProps> = ({ sellerId, onSuccess
                                 </div>
                             </div>
                             <p className="text-xs text-gray-500">Enter a name for the coupon with less than 50 characters.The coupon name will not be visible to customers.</p>
+                            {trendingEventName && (
+                                <button
+                                    type="button"
+                                    className="text-xs text-orange-600 hover:text-orange-700 font-semibold"
+                                    onClick={() => setCouponName(trendingEventName.slice(0, 50))}
+                                >
+                                    Trending: {trendingEventName}
+                                </button>
+                            )}
                             <div className="relative">
                                 <input
                                     type="text"

@@ -55,8 +55,8 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
 
     const selectedSubcategories = categories.filter(c => c.parent_category_id === selectedParentId);
 
-    const sidebarSkeletons = React.useMemo(() => Array.from({ length: 10 }), []);
-    const gridSkeletons = React.useMemo(() => Array.from({ length: 24 }), []);
+    const sidebarSkeletons = React.useMemo(() => Array.from({ length: 20 }), []);
+    const gridSkeletons = React.useMemo(() => Array.from({ length: 36 }), []);
 
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-black">

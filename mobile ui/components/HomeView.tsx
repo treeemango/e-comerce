@@ -97,8 +97,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
           </div>
 
           {/* Flash Deals Section - Horizontal */}
-          <div className="space-y-4">
-            <div className="px-4 flex items-center justify-between">
+          <div className="space-y-0 md:space-y-4">
+            <div className="hidden md:flex px-4 items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-price-red">bolt</span>
                 <h3 className="font-black text-lg tracking-tight uppercase">Flash Deals</h3>

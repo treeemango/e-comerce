@@ -57,6 +57,14 @@ export const SubcategoryCarousel: React.FC<SubcategoryCarouselProps> = ({
                 );
 
                 setSubcategories(uniqueSubcategories);
+
+                // Default to the first real subcategory (not "All") for a more modern UX.
+                // Users can still tap "All" manually if they want.
+                const hasActive = uniqueSubcategories.some(s => s.id === activeSubcategoryId);
+                const nextDefault = uniqueSubcategories.find(s => s.id !== 'all');
+                if ((!hasActive || activeSubcategoryId === 'all' || activeSubcategoryId === '') && nextDefault && nextDefault.id !== activeSubcategoryId) {
+                    onSelectSubcategory(nextDefault.id);
+                }
             } catch (error) {
                 console.error('Error fetching subcategories:', error);
                 // Fallback to empty or previous state

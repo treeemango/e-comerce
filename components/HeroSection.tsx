@@ -234,9 +234,25 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
             url.search = '';
             url.searchParams.set('view', 'event-deals');
             url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
-            if (eventBanner.searchQuery) {
-              url.searchParams.set('search', eventBanner.searchQuery);
-            }
+            // Ensure the banner's event + related banner text participate in filtering (supports OR via '|').
+            const rawParts = [
+              eventBanner.eventName || 'Event Deals',
+              eventBanner.searchQuery || '',
+              eventBanner.headline || '',
+              eventBanner.subheadline || '',
+              eventBanner.lightningDealsTitle || '',
+              eventBanner.trendingTitle || ''
+            ];
+            const parts = Array.from(
+              new Set(
+                rawParts
+                  .map(p => String(p || '').trim())
+                  .filter(Boolean)
+                  .map(p => p.slice(0, 60))
+              )
+            ).slice(0, 6);
+            const search = parts.join('|').slice(0, 240);
+            url.searchParams.set('search', search);
             window.open(url.toString(), '_blank');
           }}
         >
@@ -280,9 +296,9 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
               url.search = '';
               url.searchParams.set('view', 'event-deals');
               url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
-              if (eventBanner.searchQuery) {
-                url.searchParams.set('search', eventBanner.searchQuery);
-              }
+              const eventName = (eventBanner.eventName || 'Event Deals').trim();
+              const q = (eventBanner.searchQuery || '').trim();
+              url.searchParams.set('search', q ? `${eventName}|${q}` : eventName);
               window.open(url.toString(), '_blank');
             }}
           >

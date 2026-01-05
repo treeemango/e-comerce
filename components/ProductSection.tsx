@@ -6,10 +6,13 @@ import { fetchSearchFilters, fetchFilteredProducts, fetchNavbarCategories, Navba
 import ProductCardSkeleton from './ProductCardSkeleton';
 import { getCurrencySymbol, useCurrencyConverter, convertAmount, getUserCurrency } from '../lib/currency';
 import { type EventBannerData, getSectionTitles } from '@/lib/event-banner-service';
+import { applyEventBoostRanking } from '../lib/event-boost';
 
 interface ProductSectionProps {
   isFiveStarView?: boolean;
   searchQuery?: string;
+  enableEventBoost?: boolean;
+  eventBoostTerms?: string[];
   onProductClick: (product: Product) => void;
   products?: Product[];
   initialCategoryIds?: string[];
@@ -27,6 +30,8 @@ interface ProductSectionProps {
 const ProductSection: React.FC<ProductSectionProps> = ({
   isFiveStarView = false,
   searchQuery,
+  enableEventBoost,
+  eventBoostTerms,
   onProductClick,
   products: propProducts,
   initialCategoryIds = [],
@@ -385,13 +390,18 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 
   // Sort newest first (modern feed)
   const orderedProducts = useMemo(() => {
+    if (enableEventBoost && eventBoostTerms && eventBoostTerms.length > 0) {
+      // Event-deals: preserve baseline relevance (server order), apply a small bounded boost.
+      return applyEventBoostRanking([...uniqueDisplayedProducts], eventBoostTerms);
+    }
+
     return [...uniqueDisplayedProducts].sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       if (bTime !== aTime) return bTime - aTime;
       return (b.id?.toString() || '').localeCompare(a.id?.toString() || '');
     });
-  }, [uniqueDisplayedProducts]);
+  }, [uniqueDisplayedProducts, enableEventBoost, eventBoostTerms]);
 
   // Landing "Recommended" state: show skeleton while we wait for the initial feed
   const showRecommendedSkeleton =
@@ -925,23 +935,40 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 
                     {/* Delivery Content */}
                     {activeFilter === 'delivery' && searchFilters && searchFilters.delivery_locations && (
-                      <div className="flex flex-wrap gap-2">
-                        {searchFilters.delivery_locations.map((loc) => {
-                          const isSelected = appliedFilters.delivery_locations.includes(loc.location);
-                          return (
-                            <button
-                              key={loc.location}
-                              onClick={() => toggleDeliveryLocation(loc.location)}
-                              className={`px-4 py-2 rounded-full text-sm border transition-all ${isSelected
-                                ? 'bg-black border-black text-white'
-                                : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-gray-400'
-                                }`}
-                            >
-                              {loc.location} <span className="opacity-60 text-xs ml-1">({loc.product_count})</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <>
+                        <div className="flex flex-wrap gap-2">
+                          {searchFilters.delivery_locations.map((loc) => {
+                            const isSelected = appliedFilters.delivery_locations.includes(loc.location);
+                            return (
+                              <button
+                                key={loc.location}
+                                onClick={() => toggleDeliveryLocation(loc.location)}
+                                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm border transition-all ${isSelected
+                                  ? 'bg-black border-black text-white'
+                                  : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-gray-400'
+                                  }`}
+                              >
+                                <span className="material-icons text-sm opacity-60">location_on</span>
+                                {loc.location} <span className="opacity-60 text-xs ml-1">({loc.product_count})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Smart tip for country relationship */}
+                        {appliedFilters.vendor_countries.length > 0 && (
+                          <div className="mt-3 flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400">
+                            <span className="material-icons text-sm">info</span>
+                            <span>Showing locations in <strong>{appliedFilters.vendor_countries.join(', ')}</strong></span>
+                          </div>
+                        )}
+                        {appliedFilters.vendor_countries.length === 0 && searchFilters.vendor_countries && searchFilters.vendor_countries.length > 0 && (
+                          <div className="mt-3 flex items-center gap-2 text-xs text-purple-600 dark:text-purple-400">
+                            <span className="material-icons text-sm">lightbulb</span>
+                            <span>Select a <strong>Country</strong> first to narrow down delivery locations</span>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Country Content */}
@@ -1191,6 +1218,90 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                     </div>
                   )}
 
+                  {/* Country */}
+                  {searchFilters?.vendor_countries && searchFilters.vendor_countries.length > 0 && (
+                    <div>
+                      <h3 className="font-medium mb-3 text-gray-900 dark:text-white">Country</h3>
+                      <div className="space-y-2">
+                        {searchFilters.vendor_countries.map((vc) => {
+                          const isSelected = appliedFilters.vendor_countries.includes(vc.country);
+                          return (
+                            <label key={vc.country} className="flex items-center gap-3 cursor-pointer group">
+                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected
+                                ? 'bg-black border-black'
+                                : 'border-gray-300 group-hover:border-gray-400'
+                                }`}>
+                                {isSelected && <span className="material-icons text-white text-[10px]">check</span>}
+                              </div>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={isSelected}
+                                onChange={() => toggleVendorCountry(vc.country)}
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300">
+                                {vc.country}
+                                <span className="ml-1 text-xs text-gray-400">({vc.product_count})</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delivery */}
+                  {searchFilters?.delivery_locations && searchFilters.delivery_locations.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-gray-900 dark:text-white">Delivery</h3>
+                        {appliedFilters.vendor_countries.length > 0 && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">
+                            <span className="material-icons text-[10px]">filter_alt</span>
+                            {appliedFilters.vendor_countries.join(', ')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Tip when no country selected */}
+                      {appliedFilters.vendor_countries.length === 0 && searchFilters.vendor_countries && searchFilters.vendor_countries.length > 0 && (
+                        <div className="flex items-center gap-2 p-2 mb-3 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/10 dark:to-blue-900/10 border border-purple-100/50 dark:border-purple-800/30">
+                          <span className="material-icons text-purple-500 text-sm">lightbulb</span>
+                          <p className="text-[10px] text-gray-600 dark:text-gray-300">
+                            <span className="font-bold text-purple-600 dark:text-purple-400">Tip:</span> Select a country to filter locations
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {searchFilters.delivery_locations.map((loc) => {
+                          const isSelected = appliedFilters.delivery_locations.includes(loc.location);
+                          return (
+                            <label key={loc.location} className="flex items-center gap-3 cursor-pointer group">
+                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected
+                                ? 'bg-black border-black'
+                                : 'border-gray-300 group-hover:border-gray-400'
+                                }`}>
+                                {isSelected && <span className="material-icons text-white text-[10px]">check</span>}
+                              </div>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={isSelected}
+                                onChange={() => toggleDeliveryLocation(loc.location)}
+                              />
+                              <span className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
+                                <span className="material-icons text-gray-400 text-sm">location_on</span>
+                                {loc.location}
+                                <span className="ml-1 text-xs text-gray-400">({loc.product_count})</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Attributes */}
                   {searchFilters && Object.entries(searchFilters.attributes).map(([attrName, values]: [string, AttributeValue[]]) => {
                     const isColor = attrName.toLowerCase().includes('color') || attrName.toLowerCase().includes('colour');
@@ -1284,55 +1395,60 @@ const ProductSection: React.FC<ProductSectionProps> = ({
             </>
           )}
         </>
-      )}
+      )
+      }
 
 
 
 
 
-      {(isLoadingProducts || showRecommendedSkeleton) && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
-          <ProductCardSkeleton count={12} />
-        </div>
-      )}
+      {
+        (isLoadingProducts || showRecommendedSkeleton) && (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
+            <ProductCardSkeleton count={12} />
+          </div>
+        )
+      }
 
-      {!isLoadingProducts && !showRecommendedSkeleton && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
-          {visibleProducts.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-gray-500">
-              No items found{searchQuery && ` for "${searchQuery}"`}.
-            </div>
-          ) : (
-            <>
-              {visibleProducts.map(product => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  onProductClick={onProductClick}
-                  onAddToCart={onAddToCart}
-                />
-              ))}
+      {
+        !isLoadingProducts && !showRecommendedSkeleton && (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
+            {visibleProducts.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-gray-500">
+                No items found{searchQuery && ` for "${searchQuery}"`}.
+              </div>
+            ) : (
+              <>
+                {visibleProducts.map(product => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onProductClick={onProductClick}
+                    onAddToCart={onAddToCart}
+                  />
+                ))}
 
-              {hasMoreProducts && (
-                <div className="col-span-full flex justify-center">
-                  <div className="px-5 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex flex-col items-center gap-2 w-full sm:w-auto">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">More picks are waiting</span>
-                    <button
-                      onClick={() => setVisibleCount(prev => Math.min(displayedProducts.length, prev + gridColumns * 4))}
-                      className="group relative inline-flex items-center gap-2 px-6 sm:px-8 py-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-300"
-                    >
-                      <span className="relative z-10">See more</span>
-                      <span className="material-icons relative z-10 text-base">expand_more</span>
-                      <span className="absolute inset-0 rounded-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                    </button>
+                {hasMoreProducts && (
+                  <div className="col-span-full flex justify-center">
+                    <div className="px-5 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex flex-col items-center gap-2 w-full sm:w-auto">
+                      <span className="text-sm text-slate-600 dark:text-slate-300">More picks are waiting</span>
+                      <button
+                        onClick={() => setVisibleCount(prev => Math.min(displayedProducts.length, prev + gridColumns * 4))}
+                        className="group relative inline-flex items-center gap-2 px-6 sm:px-8 py-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-300"
+                      >
+                        <span className="relative z-10">See more</span>
+                        <span className="material-icons relative z-10 text-base">expand_more</span>
+                        <span className="absolute inset-0 rounded-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </section>
+                )}
+              </>
+            )}
+          </div>
+        )
+      }
+    </section >
   );
 };
 

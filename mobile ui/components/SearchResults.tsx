@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Product, AppliedFilters } from '@/types';
 import { fetchFilteredProducts, trackSearch } from '@/lib/api';
+import { applyEventBoostRanking, extractEventBoostTerms } from '@/lib/event-boost';
 import { ProductCard } from './ProductCard';
 import { FilterPanel } from './FilterPanel';
+import { type EventBannerData } from '@/lib/event-banner-service';
+import { getEventIconSrc } from '@/lib/event-icons';
 
 type SortOption = 'best_match' | 'newest' | 'rating' | 'price_low' | 'price_high';
 
@@ -18,6 +21,10 @@ interface SearchResultsProps {
     notificationCount?: number;
     cartCount?: number;
     isVisualSearch?: boolean; // Hide AI keywords when true
+
+    // Optional: event-deals themed header/banner (mobile parity with web)
+    eventBanner?: EventBannerData | null;
+    headerTitleOverride?: string;
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({
@@ -30,7 +37,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     userName,
     notificationCount = 0,
     cartCount = 0,
-    isVisualSearch = false
+    isVisualSearch = false,
+    eventBanner,
+    headerTitleOverride
 }) => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isSortOpen, setIsSortOpen] = useState(false);
@@ -47,8 +56,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
         vendor_countries: []
     });
 
+    const showEventBanner = !!eventBanner && eventBanner.eventName !== 'default';
+    const isEventDealsView = showEventBanner && !!headerTitleOverride;
+
     // Display text - hide AI keywords for visual search
-    const displayQuery = isVisualSearch ? 'Visual Search' : query;
+    const displayQuery = isVisualSearch ? 'Visual Search' : (headerTitleOverride || query);
 
     const sortLabel = React.useMemo(() => {
         switch (sortBy) {
@@ -97,7 +109,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
             try {
                 await trackSearch(query);
                 const results = await fetchFilteredProducts(query, appliedFilters);
-                setSearchResults(results);
+                if (isEventDealsView) {
+                    const terms = extractEventBoostTerms(query, [
+                        eventBanner?.eventName,
+                        eventBanner?.headline,
+                        eventBanner?.subheadline,
+                        eventBanner?.cta,
+                    ]);
+                    setSearchResults(applyEventBoostRanking(results, terms));
+                } else {
+                    setSearchResults(results);
+                }
             } catch (error) {
                 console.error('Search error:', error);
             } finally {
@@ -112,6 +134,37 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
         <div className="flex flex-col h-full bg-white dark:bg-black relative">
             {/* Unified Search Results Header */}
             <header className="bg-white/80 dark:bg-black/80 backdrop-blur-xl sticky top-0 z-40 border-b border-gray-100 dark:border-gray-800">
+                {showEventBanner && (
+                    <div
+                        className="h-10 flex items-center justify-between px-4 text-white overflow-hidden"
+                        style={{
+                            background: `linear-gradient(90deg, ${eventBanner!.backgroundColor}, ${eventBanner!.accentColor}dd)`
+                        }}
+                    >
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                                {(eventBanner!.iconKeys || [eventBanner!.iconKey]).filter(Boolean).slice(0, 2).map((key, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 backdrop-blur-md border border-white/20 shadow-sm"
+                                    >
+                                        <img src={getEventIconSrc(key as string)} alt="" className="h-4 w-4 object-contain" />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-[8px] font-black uppercase tracking-widest text-white/70 leading-none truncate">{eventBanner!.eventName}</span>
+                                <span className="text-[10px] font-black tracking-tight uppercase mt-0.5 line-clamp-1 truncate">{eventBanner!.headline || 'Event Deals'}</span>
+                            </div>
+                        </div>
+
+                        <div className="px-3 py-1 bg-white text-black text-[8px] font-black rounded-full shadow-lg shrink-0">
+                            {eventBanner!.cta || 'Shop Now'}
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-3 px-4 py-3">
                     <button
                         onClick={onBack}
@@ -269,11 +322,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         </div>
                     </div>
 
-                    {/* Results Grid */}
                     <div className="px-4">
                         {loading ? (
                             <div className="grid grid-cols-2 gap-3">
-                                {[1, 2, 3, 4].map(n => (
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
                                     <div key={n} className="aspect-[3/4] rounded-3xl bg-gray-100 dark:bg-gray-900 animate-pulse"></div>
                                 ))}
                             </div>

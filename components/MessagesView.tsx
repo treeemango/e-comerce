@@ -4,6 +4,38 @@ import { getConversations, getConversationMessages, sendMessage, markMessagesRea
 import { getAttachmentUrl, uploadMessageAttachment, getMessageAttachments, MessageAttachment } from '../lib/attachments-api';
 import { supabase } from '../lib/supabase';
 
+const MessageImageAttachment: React.FC<{ src?: string; alt: string }> = ({ src, alt }) => {
+    const [loaded, setLoaded] = useState(false);
+    const [errored, setErrored] = useState(false);
+
+    const showSkeleton = !loaded && !errored;
+
+    return (
+        <div className="relative w-full max-w-xs h-64 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+            {showSkeleton && (
+                <div className="absolute inset-0 animate-pulse">
+                    <div className="w-full h-full bg-gray-200/70 dark:bg-gray-700/60" />
+                </div>
+            )}
+
+            {errored ? (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                    <span className="material-icons text-2xl">broken_image</span>
+                </div>
+            ) : (
+                <img
+                    src={src}
+                    alt={alt}
+                    loading="lazy"
+                    className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                    onLoad={() => setLoaded(true)}
+                    onError={() => setErrored(true)}
+                />
+            )}
+        </div>
+    );
+};
+
 interface MessagesViewProps {
     user: User;
     activeConversationId?: string | null;
@@ -853,15 +885,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
                                                                         rel="noopener noreferrer"
                                                                         className="block rounded-lg overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
                                                                     >
-                                                                        <img
-                                                                            src={attachment.signedUrl}
-                                                                            alt={attachment.file_name}
-                                                                            className="max-w-xs max-h-64 object-cover rounded-lg bg-gray-50"
-                                                                            onError={(e) => {
-                                                                                // Fallback for broken images
-                                                                                (e.target as HTMLImageElement).src = 'https://placehold.co/400x300?text=Image+Unavailable';
-                                                                            }}
-                                                                        />
+                                                                        <MessageImageAttachment src={attachment.signedUrl} alt={attachment.file_name} />
                                                                     </a>
                                                                 ) : (
                                                                     <a

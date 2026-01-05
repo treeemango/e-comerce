@@ -552,6 +552,23 @@ serve(async (req: Request) => {
             p_expires_at: endOfDay.toISOString()
         });
 
+        // Broadcast newly detected platform events to sellers (once per country+event).
+        if (compositeKey && compositeKey !== 'default') {
+            try {
+                const { data: didBroadcast, error: broadcastError } = await supabase.rpc('broadcast_platform_event_to_sellers', {
+                    p_country_code: countryCode,
+                    p_event_name: compositeKey
+                });
+                if (broadcastError) {
+                    console.warn('[HERO-BANNER] Seller broadcast RPC error:', broadcastError);
+                } else {
+                    console.log('[HERO-BANNER] Seller broadcast result:', didBroadcast);
+                }
+            } catch (e) {
+                console.warn('[HERO-BANNER] Seller broadcast failed:', e);
+            }
+        }
+
         return new Response(JSON.stringify({
             ...banner,
             eventName: compositeKey,

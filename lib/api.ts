@@ -769,6 +769,26 @@ export interface SearchKeywordEntry {
     updated_at?: string;
 }
 
+const isNonHumanSearchToken = (value: string): boolean => {
+    const trimmed = value.trim();
+    if (!trimmed) return true;
+
+    const lower = trimmed.toLowerCase();
+    if (lower === '{search_term_string}' || lower === 'search_term_string') return true;
+
+    // Generic schema/template placeholders like {query}, {search_term_string}
+    if (/^\{[a-z0-9_]+\}$/i.test(trimmed)) return true;
+
+    // Sometimes stored with surrounding text
+    if (lower.includes('{search_term_string}') || lower.includes('search_term_string')) return true;
+
+    return false;
+};
+
+const filterHumanKeywords = <T extends { keyword: string }>(items: T[] | null | undefined): T[] => {
+    return (items || []).filter(item => !isNonHumanSearchToken(item.keyword));
+};
+
 export const fetchSuggestions = async (query: string): Promise<SearchSuggestion[]> => {
     if (!query || query.length < 2) return [];
 
@@ -784,7 +804,7 @@ export const fetchSuggestions = async (query: string): Promise<SearchSuggestion[
         return [];
     }
 
-    return data || [];
+    return filterHumanKeywords(data);
 };
 
 export const fetchPopularSearches = async (limit = 8): Promise<SearchKeywordEntry[]> => {
@@ -798,7 +818,7 @@ export const fetchPopularSearches = async (limit = 8): Promise<SearchKeywordEntr
         console.error('Error fetching popular searches:', error);
         return [];
     }
-    return data || [];
+    return filterHumanKeywords(data);
 };
 
 export const fetchRecentSearches = async (limit = 6): Promise<SearchKeywordEntry[]> => {
@@ -812,13 +832,16 @@ export const fetchRecentSearches = async (limit = 6): Promise<SearchKeywordEntry
         console.error('Error fetching recent searches:', error);
         return [];
     }
-    return data || [];
+    return filterHumanKeywords(data);
 };
 
 export const trackSearch = async (keyword: string): Promise<void> => {
     try {
+        const trimmed = keyword.trim();
+        if (isNonHumanSearchToken(trimmed)) return;
+
         const { error } = await supabase
-            .rpc('track_search_usage', { search_term: keyword });
+            .rpc('track_search_usage', { search_term: trimmed });
 
         if (error) {
             // Silently log tracking errors - these are non-critical analytics
@@ -1482,7 +1505,16 @@ export const fetchFilteredProducts = async (
     };
 
     const buildSearchOrClauses = (raw: string): string => {
-        const fields = ['title', 'description', 'brand_name', 'category_name'] as const;
+        // Include active coupon label/code so event-tagged coupons can be found from event banners.
+        // PostgREST supports JSON path filters using `column->>key`.
+        const fields = [
+            'title',
+            'description',
+            'brand_name',
+            'category_name',
+            'activeCoupon->>label',
+            'activeCoupon->>code'
+        ];
         const patterns = buildSearchPatterns(raw);
         return patterns
             .flatMap(p => fields.map(f => `${f}.ilike.%${p}%`))
@@ -3283,6 +3315,43 @@ export const fetchActiveCoupons = async (limit = 30): Promise<PromoCoupon[]> => 
     }
 
     return (data || []).filter(c => !c.total_quantity || (c.claimed_quantity ?? 0) < c.total_quantity);
+};
+
+// ============================================================
+// PLATFORM EVENTS (Trending event name)
+// ============================================================
+export const fetchTrendingPlatformEventName = async (countryCode?: string): Promise<string | null> => {
+    try {
+        const normalizeCountry = (value?: string) => {
+            const v = (value || '').trim();
+            return v ? v.toUpperCase() : 'GLOBAL';
+        };
+
+        const requested = normalizeCountry(countryCode);
+        const countriesToTry = Array.from(new Set([requested, 'GLOBAL']));
+
+        for (const cc of countriesToTry) {
+            const { data, error } = await supabase
+                .from('platform_event_broadcast_state')
+                .select('last_event_name')
+                .eq('country_code', cc)
+                .maybeSingle();
+
+            if (error) {
+                // If RLS blocks or table doesn't exist yet, just skip.
+                continue;
+            }
+
+            const name = (data?.last_event_name || '').trim();
+            if (name && name.toLowerCase() !== 'default') {
+                return name;
+            }
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
 };
 
 // --- Automatic Discounts ---
@@ -5165,7 +5234,7 @@ export const getConversations = async (userId: string, includeSupport: boolean =
             filteredData = filteredData.filter((c: any) => c.seller_id === userId || c.seller_uid === userId || c.seller === userId);
         }
 
-        return filteredData.map((c: any) => {
+        const mapped = filteredData.map((c: any) => {
             const isSeller = role === 'seller'
                 ? true
                 : role === 'buyer'
@@ -5175,10 +5244,14 @@ export const getConversations = async (userId: string, includeSupport: boolean =
             const id = c.id || c.conversation_id;
             const lastMessage = c.last_message || c.latest_message_content;
 
+            const sellerId = c.seller_id || c.seller_uid || c.seller;
+            const buyerId = c.buyer_id || c.buyer_uid || c.buyer;
+            const otherUserId = isSeller ? buyerId : sellerId;
+
             return {
                 id: id,
-                seller_id: c.seller_id || c.seller_uid || c.seller,
-                buyer_id: c.buyer_id || c.buyer_uid || c.buyer,
+                seller_id: sellerId,
+                buyer_id: buyerId,
                 product_id: c.product_id,
                 subject: c.subject,
                 last_message: lastMessage,
@@ -5194,7 +5267,66 @@ export const getConversations = async (userId: string, includeSupport: boolean =
                     : (c.seller_avatar_url || c.seller_avatar),
                 product_title: c.product_title,
                 product_image: c.product_primary_image || c.product_image
-            };
+            } as Conversation & { __other_user_id?: string };
+        });
+
+        // Best-effort fill missing avatars (e.g., Google/Gmail users) from public.users
+        const missingAvatarUserIds = Array.from(new Set(
+            filteredData
+                .map((c: any) => {
+                    const isSeller = role === 'seller'
+                        ? true
+                        : role === 'buyer'
+                            ? false
+                            : (c.seller_id === userId || c.seller_uid === userId || c.seller === userId);
+                    const sellerId = c.seller_id || c.seller_uid || c.seller;
+                    const buyerId = c.buyer_id || c.buyer_uid || c.buyer;
+                    const otherUserId = isSeller ? buyerId : sellerId;
+                    const otherAvatar = isSeller
+                        ? (c.buyer_avatar_url || c.buyer_avatar)
+                        : (c.seller_avatar_url || c.seller_avatar);
+                    if (c.subject === 'Support Request') return null;
+                    if (otherAvatar) return null;
+                    return otherUserId || null;
+                })
+                .filter(Boolean)
+        ));
+
+        if (missingAvatarUserIds.length === 0) {
+            return mapped;
+        }
+
+        const { data: usersData, error: usersError } = await supabase
+            .from('users')
+            .select('id, avatar_url')
+            .in('id', missingAvatarUserIds);
+
+        if (usersError || !usersData) {
+            return mapped;
+        }
+
+        const avatarById = new Map<string, string>();
+        for (const row of usersData as any[]) {
+            if (row?.id && row?.avatar_url) {
+                avatarById.set(String(row.id), String(row.avatar_url));
+            }
+        }
+
+        // Patch mapped conversations with fetched avatars
+        return mapped.map((conv: any) => {
+            if (conv.subject === 'Support Request') return conv;
+            if (conv.other_user_avatar) return conv;
+
+            const isSeller = role === 'seller'
+                ? true
+                : role === 'buyer'
+                    ? false
+                    : (conv.seller_id === userId);
+
+            const otherUserId = isSeller ? conv.buyer_id : conv.seller_id;
+            const fallbackAvatar = otherUserId ? avatarById.get(String(otherUserId)) : null;
+            if (!fallbackAvatar) return conv;
+            return { ...conv, other_user_avatar: fallbackAvatar };
         });
     } catch (error) {
         console.error('Error fetching conversations:', error);

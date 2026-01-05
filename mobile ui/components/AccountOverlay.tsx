@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { UserCoupon, BuyerOrder } from '@/types';
-import { formatPrice } from '@/lib/currency';
+import { useCurrencyConverter, getCurrencySymbol, getUserCurrency } from '@/lib/currency';
 
 interface AccountOverlayProps {
     onClose: () => void;
@@ -29,6 +29,31 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
 }) => {
     const isAuthed = !!onSignOut && userName !== 'Guest';
     const couponCount = userCoupons.length;
+
+    const priceValues = useMemo(() => {
+        return userCoupons
+            .filter(c => c.coupon.discount_amount)
+            .map(c => ({
+                amount: c.coupon.discount_amount!,
+                currency: 'USD',
+                key: c.id
+            }));
+    }, [userCoupons]);
+
+    const { convertedValues, isLoading: isConverting } = useCurrencyConverter(priceValues);
+
+    const formatCouponDiscount = (coupon: UserCoupon['coupon'], id: string) => {
+        if (coupon.discount_amount) {
+            const converted = convertedValues[id];
+            if (converted?.converted) return converted.converted;
+
+            const symbol = getCurrencySymbol(getUserCurrency());
+            if (isConverting) return `${symbol}...`;
+            return `${symbol}${coupon.discount_amount}`;
+        }
+        if (coupon.discount_percentage) return `${coupon.discount_percentage}% OFF`;
+        return 'Reward';
+    };
 
     return (
         <div className="fixed inset-0 z-[100] animate-in fade-in duration-300" onClick={onClose}>
@@ -124,18 +149,24 @@ export const AccountOverlay: React.FC<AccountOverlayProps> = ({
                                 <div
                                     key={`coupon-${coupon.id || idx}`}
                                     onClick={() => onNavigate?.('coupons')}
-                                    className="shrink-0 w-[200px] p-4 rounded-2xl bg-gradient-to-br from-primary/5 to-orange-500/10 border border-primary/10 flex flex-col gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                                    className="shrink-0 w-[200px] p-4 rounded-2xl bg-gradient-to-br from-primary/10 via-orange-500/5 to-transparent border border-primary/10 flex flex-col gap-1.5 cursor-pointer active:scale-95 transition-all shadow-sm group"
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                                            <span className="material-icons-round text-sm">local_offer</span>
+                                    <div className="flex items-center justify-between">
+                                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                            <span className="material-icons-round text-sm">confirmation_number</span>
                                         </div>
-                                        <span className="text-[9px] font-black text-primary uppercase tracking-wider truncate">{coupon.coupon.name}</span>
+                                        <span className="text-[10px] font-black text-primary bg-primary/5 px-2 py-0.5 rounded-full uppercase tracking-tighter">Save More</span>
                                     </div>
-                                    <div className="text-[16px] font-black text-black dark:text-white tracking-tight">
-                                        {coupon.coupon.discount_percentage ? `${coupon.coupon.discount_percentage}% REDUCTION` : `${formatPrice(coupon.coupon.discount_amount || 0, 'USD')} OFF`}
+                                    <div className="mt-1">
+                                        <div className="text-[18px] font-black text-black dark:text-white tracking-tight leading-tight">
+                                            {formatCouponDiscount(coupon.coupon, coupon.id)}
+                                        </div>
+                                        <span className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate block">{coupon.coupon.name}</span>
                                     </div>
-                                    <span className="text-[8px] font-black text-gray-400 uppercase tracking-[0.1em]">Tap to apply at checkout</span>
+                                    <div className="mt-2 flex items-center gap-1.5 pt-2 border-t border-primary/5">
+                                        <span className="material-icons text-[10px] text-emerald-500">verified</span>
+                                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tighter">Ready for Checkout</span>
+                                    </div>
                                 </div>
                             ))}
                             {recentOrders.slice(0, 1).map((order, idx) => (

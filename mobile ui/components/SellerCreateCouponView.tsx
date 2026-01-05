@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { createCoupon, fetchSellerProductsForCoupons } from '../../lib/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { createCoupon, fetchSellerProductsForCoupons, fetchTrendingPlatformEventName } from '../../lib/api';
 import { Product } from '../../types';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getSellerCurrency } from '../../lib/seller-currency';
+import { detectUserCountry } from '../../lib/event-banner-service';
 
 const FieldHelp: React.FC<{ text: string }> = ({ text }) => {
     const [open, setOpen] = useState(false);
@@ -94,6 +95,8 @@ export const SellerCreateCouponView: React.FC<SellerCreateCouponViewProps> = ({ 
 
     // Form Data
     const [name, setName] = useState('');
+    const [trendingEventName, setTrendingEventName] = useState<string | null>(null);
+    const didAutofillNameRef = useRef(false);
     const [code, setCode] = useState('');
     const [discountType, setDiscountType] = useState<'amount' | 'percent'>('amount');
     const [discountValue, setDiscountValue] = useState('');
@@ -119,6 +122,30 @@ export const SellerCreateCouponView: React.FC<SellerCreateCouponViewProps> = ({ 
             cancelled = true;
         };
     }, [sellerId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const country = await detectUserCountry().catch(() => 'GLOBAL');
+                const eventName = await fetchTrendingPlatformEventName(country);
+                if (cancelled) return;
+                setTrendingEventName(eventName);
+                if (!didAutofillNameRef.current && !name.trim() && eventName) {
+                    didAutofillNameRef.current = true;
+                    setName(eventName.slice(0, 50));
+                }
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+        // Intentionally do not depend on `name` to avoid overriding user edits.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         const loadProducts = async () => {
@@ -217,6 +244,15 @@ export const SellerCreateCouponView: React.FC<SellerCreateCouponViewProps> = ({ 
                                 <FieldHelp text="Internal name for your reference. Customers won't see this name." />
                             </div>
                             <p className="text-xs text-gray-500">Enter a name under 50 characters. This name is not shown to buyers.</p>
+                            {trendingEventName && (
+                                <button
+                                    type="button"
+                                    className="text-xs text-orange-500 font-bold"
+                                    onClick={() => setName(trendingEventName.slice(0, 50))}
+                                >
+                                    Trending: {trendingEventName}
+                                </button>
+                            )}
                             <input
                                 value={name}
                                 onChange={e => setName(e.target.value)}

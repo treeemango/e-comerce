@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Product } from '@/types';
 import PreviewModal from './PreviewModal';
 import SimilarItemsModal from './SimilarItemsModal';
-import { formatPriceParts, getCurrencySymbol, formatPriceWithConversion, formatPrice, useCurrencyConverter } from '@/lib/currency';
+import { formatPriceParts, getCurrencySymbol, formatPriceWithConversion, formatPrice, useCurrencyConverter, getUserCurrency } from '@/lib/currency';
 import { useMemo } from 'react';
 import ResponsiveImage from './ResponsiveImage';
 
@@ -22,17 +22,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
   const [timeRemaining, setTimeRemaining] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
 
   const priceValues = useMemo(() => {
+    const userCurrency = getUserCurrency();
     const vals = [
-      { id: 'price', amount: product.price, currency: product.currency || 'USD' }
+      { id: 'price', amount: product.price, currency: product.currency || userCurrency }
     ];
     if (product.originalPrice) {
-      vals.push({ id: 'originalPrice', amount: product.originalPrice, currency: product.currency || 'USD' });
+      vals.push({ id: 'originalPrice', amount: product.originalPrice, currency: product.currency || userCurrency });
     }
     if (product.rrp) {
-      vals.push({ id: 'rrp', amount: product.rrp, currency: product.currency || 'USD' });
+      vals.push({ id: 'rrp', amount: product.rrp, currency: product.currency || userCurrency });
     }
     if (product.activeCoupon?.amount) {
-      vals.push({ id: 'coupon', amount: product.activeCoupon.amount, currency: product.currency || 'USD' });
+      vals.push({ id: 'coupon', amount: product.activeCoupon.amount, currency: product.currency || userCurrency });
     }
     return vals;
   }, [product.price, product.originalPrice, product.currency, product.activeCoupon?.amount]);

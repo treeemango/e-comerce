@@ -118,6 +118,61 @@ export interface AuthUser {
     banned_until?: string;
 }
 
+const getAuthAvatarUrl = (user: User | null | undefined): string | null => {
+    if (!user) return null;
+    const meta: any = (user as any).user_metadata;
+    const candidate =
+        (typeof meta?.avatar_url === 'string' && meta.avatar_url) ||
+        (typeof meta?.picture === 'string' && meta.picture) ||
+        (typeof meta?.avatarURL === 'string' && meta.avatarURL) ||
+        null;
+    const trimmed = typeof candidate === 'string' ? candidate.trim() : '';
+    return trimmed ? trimmed : null;
+};
+
+/**
+ * Best-effort sync of auth metadata (Google/Gmail avatar, display name) into public.users.
+ * This enables other parts of the app (e.g. Messages list) to display real avatars.
+ */
+export const syncPublicUserProfileFromAuthUser = async (user: User | null): Promise<void> => {
+    try {
+        if (!user?.id) return;
+
+        const avatarUrl = getAuthAvatarUrl(user);
+        const metaName = typeof (user as any)?.user_metadata?.name === 'string'
+            ? String((user as any).user_metadata.name).trim()
+            : '';
+
+        if (!avatarUrl && !metaName) return;
+
+        const { data, error } = await supabase
+            .from('users')
+            .select('id, name, avatar_url')
+            .eq('id', user.id)
+            .single();
+
+        if (error || !data) return;
+
+        const updates: Partial<{ name: string; avatar_url: string }> = {};
+        if (avatarUrl && (!data.avatar_url || String(data.avatar_url).trim() === '')) {
+            updates.avatar_url = avatarUrl;
+        }
+        if (metaName && (!data.name || String(data.name).trim() === '')) {
+            updates.name = metaName;
+        }
+
+        if (Object.keys(updates).length === 0) return;
+
+        await supabase
+            .from('users')
+            .update(updates)
+            .eq('id', user.id);
+    } catch (e) {
+        // Non-blocking
+        console.warn('Non-blocking: failed to sync public user profile from auth user', e);
+    }
+};
+
 export const isAccountBanned = (profile: { account_status?: string; banned_until?: string } | null): boolean => {
     if (!profile) return false;
     if (profile.account_status === 'banned') return true;

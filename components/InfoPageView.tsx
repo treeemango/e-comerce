@@ -59,7 +59,7 @@ const InfoPageView: React.FC<InfoPageViewProps> = ({ slug, onClose, onNavigate }
     ];
 
     return (
-        <div className="bg-white min-h-screen pb-20">
+        <div className="bg-white min-h-screen pb-20 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Simple Header for Info Page */}
             <div className="border-b border-gray-100 bg-gray-50/50 sticky top-0 z-10 backdrop-blur-md">
                 <div className="max-w-screen-2xl mx-auto px-4 h-16 flex items-center justify-between">

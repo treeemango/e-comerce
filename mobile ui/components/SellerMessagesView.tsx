@@ -11,6 +11,41 @@ import { getMessageAttachments, uploadMessageAttachment, type MessageAttachment 
 import { SellerConversation, SellerMessage } from '../../types';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+
+const MessageImageAttachment: React.FC<{ src?: string; alt: string; className?: string }> = ({ src, alt, className }) => {
+    const [loaded, setLoaded] = useState(false);
+    const [errored, setErrored] = useState(false);
+
+    const showSkeleton = !loaded && !errored;
+
+    return (
+        <div className={cn('relative w-full h-40 bg-gray-100 dark:bg-gray-900', className)}>
+            {showSkeleton && (
+                <div className="absolute inset-0 animate-pulse">
+                    <div className="w-full h-full bg-gray-200/70 dark:bg-gray-800/60" />
+                </div>
+            )}
+
+            {errored ? (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                    <span className="material-icons text-2xl">broken_image</span>
+                </div>
+            ) : (
+                <img
+                    src={src}
+                    alt={alt}
+                    loading="lazy"
+                    className={cn(
+                        'w-full h-40 object-cover transition-opacity duration-200',
+                        loaded ? 'opacity-100' : 'opacity-0'
+                    )}
+                    onLoad={() => setLoaded(true)}
+                    onError={() => setErrored(true)}
+                />
+            )}
+        </div>
+    );
+};
 import { isAIFeatureEnabled } from '../../lib/ai-feature-flags';
 
 interface SellerMessagesViewProps {
@@ -887,11 +922,7 @@ export const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId
                                                                 )}
                                                             >
                                                                 {isImage ? (
-                                                                    <img
-                                                                        src={att.signedUrl}
-                                                                        alt={att.file_name}
-                                                                        className="w-full h-40 object-cover"
-                                                                    />
+                                                                    <MessageImageAttachment src={att.signedUrl} alt={att.file_name} />
                                                                 ) : (
                                                                     <div className={cn(
                                                                         "p-3 flex items-center gap-2",

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { FollowedStore } from '../types';
 import { getFollowedStores, unfollowStore } from '../lib/api';
-import { getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol, useCurrencyConverter } from '@/lib/currency';
 
 interface FollowedStoresViewProps {
     userId?: string;
@@ -37,10 +37,23 @@ const FollowedStoresView: React.FC<FollowedStoresViewProps> = ({ userId, onProdu
         setStores(prev => prev.filter(store => store.vendor_id !== storeId));
     };
 
+    const priceValues = useMemo(() => {
+        const vals: { id: string; amount: number; currency: string }[] = [];
+        stores.forEach(store => {
+            store.latest_products?.forEach(product => {
+                vals.push({ id: `store-${store.vendor_id}-prod-${product.id}`, amount: product.price, currency: 'USD' });
+            });
+        });
+        return vals;
+    }, [stores]);
+
+    const { convertedValues } = useCurrencyConverter(priceValues);
+
     if (!userId) {
         return (
-            <div className="p-8 text-center">
-                <p className="text-gray-500">Please sign in to view your followed stores.</p>
+            <div className="p-8 text-center text-slate-500">
+                <span className="material-icons text-4xl mb-4">account_circle</span>
+                <p>Please sign in to view your followed stores.</p>
             </div>
         );
     }
@@ -48,91 +61,109 @@ const FollowedStoresView: React.FC<FollowedStoresViewProps> = ({ userId, onProdu
     if (loading) {
         return (
             <div className="p-8 text-center">
-                <p className="text-gray-500">Loading...</p>
+                <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">Loading your favorite stores...</p>
             </div>
         );
     }
 
     if (stores.length === 0) {
         return (
-            <div className="p-8 text-center">
-                <p className="text-gray-500">You haven't followed any stores yet.</p>
+            <div className="p-12 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                <span className="material-icons text-4xl text-slate-300 mb-4">storefront</span>
+                <h3 className="text-lg font-bold text-slate-900 mb-1 uppercase tracking-tight">No Followed Stores</h3>
+                <p className="text-slate-500 text-sm">Start following vendors to keep up with their latest products!</p>
             </div>
         );
     }
 
     return (
-        <div className="container mx-auto p-4">
-            <h2 className="text-2xl font-bold mb-6">Followed Stores</h2>
-            <div className="grid gap-6">
+        <div className="max-w-6xl mx-auto px-4 py-8">
+            <h2 className="text-3xl font-black mb-10 text-slate-900 tracking-tight uppercase italic flex items-center gap-3">
+                <span className="bg-orange-600 p-2 rounded-xl shadow-lg">
+                    <span className="material-icons text-white text-2xl">favorite</span>
+                </span>
+                Favorite Stores
+            </h2>
+            <div className="grid gap-8">
                 {stores.map((store) => (
-                    <div key={store.vendor_id} className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
-                        <div className="flex justify-between items-start">
+                    <div key={store.vendor_id} className="bg-white border border-gray-100 rounded-3xl p-6 hover:shadow-2xl hover:shadow-slate-200/50 transition-all group overflow-hidden relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 -mr-16 -mt-16 bg-orange-500/5 rounded-full blur-3xl group-hover:bg-orange-500/10 transition-all duration-700" />
+
+                        <div className="flex flex-col md:flex-row justify-between items-start gap-6">
                             {store.logo_url && (
-                                <div className="mr-6 flex-shrink-0">
+                                <div className="flex-shrink-0">
                                     <img
                                         src={store.logo_url}
                                         alt={store.business_name}
-                                        className="w-16 h-16 rounded-full object-cover border border-gray-200"
+                                        className="w-20 h-20 rounded-2xl object-cover border border-gray-100 shadow-sm"
                                     />
                                 </div>
                             )}
 
-                            <div className="flex-1">
-                                <h3 className="text-xl font-semibold mb-2">{store.business_name}</h3>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-2xl font-black mb-2 text-slate-900 group-hover:text-orange-600 transition-colors uppercase italic truncate">{store.business_name}</h3>
                                 {store.business_description && (
-                                    <p className="text-gray-600 mb-4">{store.business_description}</p>
+                                    <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{store.business_description}</p>
                                 )}
 
-                                <div className="flex gap-6 text-sm text-gray-500 mb-4">
-                                    <span className="flex items-center gap-1 font-bold text-slate-900 dark:text-white">
-                                        <span className="material-icons text-[14px] text-slate-900 dark:text-slate-100">star</span>
+                                <div className="flex flex-wrap gap-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 mb-6">
+                                    <span className="flex items-center gap-1.5 text-slate-900">
+                                        <span className="material-icons text-[16px] text-orange-500">star</span>
                                         {store.vendor_rating?.toFixed(1)} ({store.review_count} reviews)
                                     </span>
-                                    <span>{store.total_products} products</span>
-                                    <span>{store.business_country}</span>
+                                    <span className="bg-slate-50 px-3 py-1 rounded-full border border-slate-100">{store.total_products} products</span>
+                                    <span className="bg-slate-50 px-3 py-1 rounded-full border border-slate-100 flex items-center gap-1">
+                                        <span className="material-icons text-[14px]">public</span>
+                                        {store.business_country}
+                                    </span>
                                 </div>
 
                                 {store.latest_products && store.latest_products.length > 0 && (
                                     <div className="mt-4">
-                                        <h4 className="font-medium mb-2">Latest Products</h4>
-                                        <div className="grid grid-cols-4 gap-4">
-                                            {store.latest_products.map((product) => (
-                                                <div
-                                                    key={product.id}
-                                                    className="cursor-pointer hover:opacity-80 transition-opacity"
-                                                    onClick={() => onProductClick?.(product.id)}
-                                                >
-                                                    <img
-                                                        src={product.image}
-                                                        alt={product.title}
-                                                        className="w-full h-24 object-cover rounded mb-2"
-                                                    />
-                                                    <div className="text-sm truncate">{product.title}</div>
-                                                    <div className="font-semibold">{getCurrencySymbol('USD')}{product.price}</div>
-                                                </div>
-                                            ))}
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 italic">Latest Drops</h4>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                            {store.latest_products.map((product) => {
+                                                const converted = convertedValues[`store-${store.vendor_id}-prod-${product.id}`];
+                                                return (
+                                                    <div
+                                                        key={product.id}
+                                                        className="cursor-pointer group/item"
+                                                        onClick={() => onProductClick?.(product.id)}
+                                                    >
+                                                        <div className="relative aspect-square mb-3 overflow-hidden rounded-2xl bg-slate-50">
+                                                            <img
+                                                                src={product.image}
+                                                                alt={product.title}
+                                                                className="w-full h-full object-cover transition-transform duration-500 group-hover/item:scale-110"
+                                                            />
+                                                        </div>
+                                                        <div className="text-[11px] font-bold text-slate-900 truncate uppercase mb-1">{product.title}</div>
+                                                        <div className="text-xs font-black text-orange-600 uppercase tracking-tight">
+                                                            {converted?.converted || `${getCurrencySymbol('USD')}${product.price}`}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="mt-4 text-sm text-gray-500">
-                                    Following since {new Date(store.followed_at).toLocaleDateString()}
+                                <div className="mt-6 pt-4 border-t border-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">
+                                    Subscribed since {new Date(store.followed_at).toLocaleDateString()}
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-2 items-end ml-4">
+                            <div className="flex flex-row md:flex-col gap-3 items-end w-full md:w-auto mt-4 md:mt-0">
                                 <a
                                     href={`/?view=vendor-store&vendorId=${store.vendor_id}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200 transition-colors block text-center"
+                                    className="flex-1 md:w-full px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-center italic"
                                 >
                                     Visit Store
                                 </a>
                                 <button
                                     onClick={() => handleUnfollow(store.vendor_id)}
-                                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                    className="px-6 py-3 bg-slate-50 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-500 transition-all italic border border-slate-100"
                                 >
                                     Unfollow
                                 </button>

@@ -1257,54 +1257,6 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 </div>
             </div>
 
-            {/* Product Discovery Tags - Persistent independent block */}
-            {
-                (product.tags?.length || product.use_case_tags?.length || product.occasion_tags?.length) && (
-                    <div className="px-4 mb-6">
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-surface-dark dark:to-surface-dark p-6 rounded-[32px] border border-purple-100/50 dark:border-white/5 shadow-premium">
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className="material-icons text-purple-500 text-sm">auto_awesome</span>
-                                <div className="text-[11px] font-black text-gray-900 dark:text-white uppercase tracking-widest">Product Discovery</div>
-                            </div>
-
-                            <div className="space-y-5">
-                                {product.occasion_tags && product.occasion_tags.length > 0 && (
-                                    <div>
-                                        <span className="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-2.5 block">Perfect For</span>
-                                        <div className="flex flex-wrap gap-2">
-                                            {product.occasion_tags.map(tag => (
-                                                <span key={tag} className="px-3 py-1.5 bg-white dark:bg-white/5 text-purple-600 dark:text-purple-400 text-[10px] font-black rounded-xl border border-purple-100 dark:border-purple-800/50 shadow-sm">
-                                                    {tag}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {product.use_case_tags && product.use_case_tags.length > 0 && (
-                                    <div>
-                                        <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-2.5 block">Best For</span>
-                                        <div className="flex flex-wrap gap-2">
-                                            {product.use_case_tags.map(tag => (
-                                                <span key={tag} className="px-3 py-1.5 bg-white dark:bg-white/5 text-blue-600 dark:text-blue-400 text-[10px] font-black rounded-xl border border-blue-100 dark:border-blue-800/50 shadow-sm">
-                                                    {tag}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {product.tags && product.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 pt-4 border-t border-purple-100/30 dark:border-white/5">
-                                        {product.tags.map(tag => (
-                                            <span key={tag} className="text-[10px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-tighter">#{tag}</span>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
             {/* Premium Seller Section */}
             {
                 (product.vendor?.business_name || vendorInfo?.business_name) && (
@@ -1523,6 +1475,48 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                         </div>
                     </div>
                 )}
+
+                {/* Related Searches - Tags Section */}
+                {(() => {
+                    const relatedSearchTags = Array.from(
+                        new Set([
+                            ...(product.use_case_tags ?? []),
+                            ...(product.occasion_tags ?? []),
+                            ...(product.tags ?? []),
+                        ])
+                    ).filter(Boolean);
+
+                    if (relatedSearchTags.length === 0) return null;
+
+                    return (
+                        <div className="mt-6 px-4 pb-8 animate-in fade-in duration-500">
+                            <div className="border-t border-gray-100 dark:border-gray-800 pt-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="material-icons text-purple-500 text-lg">search</span>
+                                    <h3 className="font-black text-gray-900 dark:text-white text-base uppercase tracking-tight">Related searches</h3>
+                                    <span className="text-[8px] font-black uppercase tracking-widest bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded">
+                                        AI
+                                    </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {relatedSearchTags.map(tag => (
+                                        <a
+                                            key={tag}
+                                            href={`/?search=${encodeURIComponent(tag)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="group flex items-center gap-1.5 px-3 py-2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-200 hover:border-purple-400 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-700 dark:hover:text-purple-300 transition-all duration-200 shadow-sm active:scale-95"
+                                        >
+                                            <span className="material-icons text-xs text-gray-400 group-hover:text-purple-500 transition-colors">search</span>
+                                            {tag}
+                                            <span className="material-icons text-[10px] text-gray-300 group-hover:text-purple-400 transition-colors">open_in_new</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Floating Cart Icon (Bottom Right) - Only show if items exist or after adding */}

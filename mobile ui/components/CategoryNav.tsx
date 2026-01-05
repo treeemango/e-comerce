@@ -45,7 +45,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSe
   // Smooth scroll to active category
   useEffect(() => {
     if (!loading && categories.length > 0 && scrollRef.current) {
-      const activeIndex = categories.findIndex(cat => cat.subcategory_id === activeCategoryId);
+      const activeIndex = categories.findIndex(cat => cat.subcategory_id === activeCategoryId || cat.parent_category_id === activeCategoryId);
       if (activeIndex !== -1) {
         const container = scrollRef.current;
         const buttons = container.querySelectorAll('button');
@@ -66,7 +66,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSe
 
   return (
     <nav
-      className="w-full bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-gray-100/50 dark:border-gray-800/50 sticky top-0 z-30"
+      className="w-full bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-gray-100/50 dark:border-gray-800/50"
       role="navigation"
       aria-label="Product categories"
     >
@@ -91,7 +91,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({ activeCategoryId, onSe
 
         {/* Category Buttons - Glass Chips */}
         {(loading ? skeletons : categories).map((item, idx) => {
-          const isActive = activeCategoryId === (item?.subcategory_id || '');
+          const isActive = activeCategoryId === (item?.subcategory_id || '') || activeCategoryId === (item?.parent_category_id || '');
 
           return (
             <button

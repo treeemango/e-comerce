@@ -278,13 +278,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       return null;
    }, [displayPrice, displayRRP, product.discountPercent, currentVariant]);
 
-   const promoLine = useMemo(() => {
-      if (product.promoText) return product.promoText;
-      if (product.promoCode) return `Extra 15% off orders $49+ with code: ${product.promoCode}`;
-      return null;
-   }, [product.promoCode, product.promoText]);
 
-   const showPromo = Boolean(promoLine);
+
 
    useEffect(() => {
       let cancelled = false;
@@ -586,6 +581,9 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          vals.push({ id: 'deliveryCost', amount: product.delivery_cost, currency: currencyCode });
       }
 
+      // Add common promo thresholds
+      vals.push({ id: 'promoThreshold', amount: 49, currency: 'USD' });
+
       return vals;
    }, [displayPrice, displayRRP, product.delayCredit, product.activeCoupon?.amount, productCoupons, quantityDiscounts, product.auto_discount_type, product.auto_discount_value, product.auto_discount_min_requirement, productVariants, currencyCode]);
 
@@ -596,6 +594,17 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       if (conv?.converted) return conv.converted;
       return formatPrice(fallbackAmount, fallbackCurrency);
    };
+
+   const promoLine = useMemo(() => {
+      if (product.promoText) return product.promoText;
+      if (product.promoCode) {
+         const threshold = getPrice('promoThreshold', 49, 'USD');
+         return `Extra 15% off orders ${threshold}+ with code: ${product.promoCode}`;
+      }
+      return null;
+   }, [product.promoCode, product.promoText, convertedValues['promoThreshold']]);
+
+   const showPromo = Boolean(promoLine);
 
    useEffect(() => {
       if (product?.id) {
@@ -1875,9 +1884,14 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                      </h2>
                   </div>
                   {!isLoadingUseCase && product.use_case_tags?.[0] && (
-                     <a href={`/search?q=${product.use_case_tags[0]}`} className="text-sm font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 flex items-center gap-1">
+                     <a
+                        href={`/?search=${encodeURIComponent(product.use_case_tags[0])}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 flex items-center gap-1 hover:gap-2 transition-all"
+                     >
                         See all
-                        <span className="material-icons text-sm">arrow_forward</span>
+                        <span className="material-icons text-sm">open_in_new</span>
                      </a>
                   )}
                </div>
@@ -2275,15 +2289,25 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             return (
                <div className="mt-16">
                   <div className="border-t border-slate-200 dark:border-slate-800 pt-10">
-                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">Related searches</h2>
+                     <div className="flex items-center gap-3 mb-6">
+                        <span className="material-icons text-purple-500 text-2xl">search</span>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Related searches</h2>
+                        <span className="text-[10px] font-black uppercase tracking-widest bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded">
+                           AI Curated
+                        </span>
+                     </div>
                      <div className="flex flex-wrap gap-3">
                         {relatedSearchTags.map(tag => (
                            <a
                               key={tag}
-                              href={`/search?q=${encodeURIComponent(tag)}`}
-                              className="px-5 py-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                              href={`/?search=${encodeURIComponent(tag)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group px-5 py-2.5 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-purple-400 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-700 dark:hover:text-purple-300 transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
                            >
+                              <span className="material-icons text-sm text-slate-400 group-hover:text-purple-500 transition-colors">search</span>
                               {tag}
+                              <span className="material-icons text-xs text-slate-300 group-hover:text-purple-400 transition-colors">open_in_new</span>
                            </a>
                         ))}
                      </div>

@@ -12,7 +12,8 @@ import { Product, User, LoyaltyProfile, VisualCategory, Breadcrumb, AdminPermiss
 import { fetchProductsWithVendors, fetchUserLoyaltyProfile, trackSearch, createConversation, ensureSupportConversation, checkAdminPermission, fetchSellerProfile, fetchDealsProducts, fetchNavbarCategories, fetchTopPlatformReviews, DealCategoryNavItem, NavbarCategory, fetchProductById, fetchCategoryBySlug } from '@/lib/api';
 import { fetchEventBanner, type EventBannerData, getSectionTitles } from '@/lib/event-banner-service';
 import { getEventIconSrc } from '@/lib/event-icons';
-import { getCurrentUser, getUserProfile, isAccountBanned, onAuthStateChange, signOut } from './lib/auth';
+import { extractEventBoostTerms } from './lib/event-boost';
+import { getCurrentUser, getUserProfile, isAccountBanned, onAuthStateChange, signOut, syncPublicUserProfileFromAuthUser } from './lib/auth';
 import { useSEO } from './lib/useSEO';
 import { getCategoryPageSEO, getSearchPageSEO, generateItemListSchema, generateReviewCollectionSchema, generateOrganizationRatingSchema, SITE_CONFIG } from './lib/seo-utils';
 import { useCountrySEO } from './hooks/useCountrySEO';
@@ -210,6 +211,15 @@ const App: React.FC = () => {
   const [eventBanner, setEventBanner] = useState<EventBannerData | null>(null);
 
   const eventSectionTitles = useMemo(() => getSectionTitles(eventBanner || null), [eventBanner]);
+
+  const eventBoostTerms = useMemo(() => {
+    return extractEventBoostTerms(searchQuery, [
+      eventBanner?.eventName,
+      eventBanner?.headline,
+      eventBanner?.subheadline,
+      eventBanner?.cta,
+    ]);
+  }, [searchQuery, eventBanner?.eventName, eventBanner?.headline, eventBanner?.subheadline, eventBanner?.cta]);
 
   // Fetch event banner on mount for dynamic section titles
   useEffect(() => {
@@ -455,13 +465,14 @@ const App: React.FC = () => {
       loadCategoryFromPath();
     } else if (viewParam === 'event-deals') {
       setCurrentView('event-deals');
-      setSearchQuery(searchParam || '');
+      const eventTitle = params.get('event');
+      // If banner didn't provide an explicit search term, use the event name so results are filterable.
+      setSearchQuery(searchParam || eventTitle || '');
       setSelectedVendorId(undefined);
       setActiveVendorStoreId(null);
       setActiveCategoryIds([]);
       setVisualSubcategories([]);
       setBreadcrumbs([]);
-      const eventTitle = params.get('event');
       setProductSectionTitle(eventTitle || 'Event Deals');
     } else if (searchParam) {
       handleSearch(searchParam);
@@ -629,13 +640,13 @@ const App: React.FC = () => {
 
       if (view === 'event-deals') {
         setCurrentView('event-deals');
-        setSearchQuery(searchParam || '');
+        const eventTitle = params.get('event');
+        setSearchQuery(searchParam || eventTitle || '');
         setSelectedVendorId(undefined);
         setActiveVendorStoreId(null);
         setActiveCategoryIds([]);
         setVisualSubcategories([]);
         setBreadcrumbs([]);
-        const eventTitle = params.get('event');
         setProductSectionTitle(eventTitle || 'Event Deals');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -804,7 +815,7 @@ const App: React.FC = () => {
       }
 
       if (action.target === 'coupons') {
-        setAccountPageTitle('Coupons');
+        setAccountPageTitle('Coupon codes');
         setCurrentView('account-page');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -863,6 +874,7 @@ const App: React.FC = () => {
     const checkAuth = async () => {
       const currentUser = await getCurrentUser();
       if (currentUser) {
+        await syncPublicUserProfileFromAuthUser(currentUser);
         const profile = await getUserProfile(currentUser.id);
         if (isAccountBanned(profile)) {
           setAuthNotice('Your account has been banned. Please contact support.');
@@ -944,6 +956,8 @@ const App: React.FC = () => {
         console.log('Initial metadata role:', session.user.user_metadata?.role);
 
         setAuthNotice(null);
+
+        await syncPublicUserProfileFromAuthUser(session.user);
 
         const profile = await getUserProfile(session.user.id);
         if (isAccountBanned(profile)) {
@@ -1185,9 +1199,9 @@ const App: React.FC = () => {
     setSelectedVendorId(undefined);
     setActiveVendorStoreId(null);
     setBreadcrumbs([]);
-    // If we are on a deep link view, clear query params
-    if (window.location.search) {
-      window.history.replaceState(window.history.state, '', window.location.pathname);
+    // Clear query params and reset path to home
+    if (window.location.search || window.location.pathname !== '/') {
+      window.history.replaceState({}, '', '/');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1737,6 +1751,8 @@ const App: React.FC = () => {
               products={products}
               onAddToCart={addToCart}
               eventBanner={eventBanner}
+              enableEventBoost={true}
+              eventBoostTerms={eventBoostTerms}
             />
           </>
         )}
@@ -2034,7 +2050,7 @@ const App: React.FC = () => {
         {currentView === 'info-page' && (
           <InfoPageView
             slug={activeInfoPageSlug}
-            onClose={() => setCurrentView('home')}
+            onClose={handleHomeClick}
             onNavigate={setActiveInfoPageSlug}
           />
         )}

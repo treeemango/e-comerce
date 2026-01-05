@@ -38,7 +38,7 @@ export const BestSellersScreen: React.FC<BestSellersScreenProps> = ({
 
     return (
         <div className="flex flex-col h-full bg-background-light dark:bg-background-dark">
-            {/* Header */}
+            {/* Top Nav (Sticky) */}
             <div className="sticky top-0 z-20 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800">
                 <div className="flex items-center justify-between px-4 py-3">
                     <button
@@ -52,34 +52,34 @@ export const BestSellersScreen: React.FC<BestSellersScreenProps> = ({
                     </h1>
                     <div className="w-10" />
                 </div>
+            </div>
 
-                {/* Tab Switcher */}
-                <div className="px-4 pb-3">
-                    <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl">
-                        <button
-                            onClick={() => setActiveTab('week')}
-                            className={`flex-1 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'week'
-                                    ? 'bg-white dark:bg-gray-800 text-primary shadow-lg shadow-primary/5'
-                                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            Weekly
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('month')}
-                            className={`flex-1 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'month'
-                                    ? 'bg-white dark:bg-gray-800 text-primary shadow-lg shadow-primary/5'
-                                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            Monthly
-                        </button>
-                    </div>
+            {/* Tabs (Scrollable) */}
+            <div className="px-4 pt-3">
+                <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl">
+                    <button
+                        onClick={() => setActiveTab('week')}
+                        className={`flex-1 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'week'
+                                ? 'bg-white dark:bg-gray-800 text-primary shadow-lg shadow-primary/5'
+                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        Weekly
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('month')}
+                        className={`flex-1 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'month'
+                                ? 'bg-white dark:bg-gray-800 text-primary shadow-lg shadow-primary/5'
+                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        Monthly
+                    </button>
                 </div>
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pt-2 px-4 pb-24">
+            <div className="flex-1 custom-scrollbar pt-2 px-4 pb-24">
                 {loading ? (
                     <div className="grid grid-cols-2 gap-4 animate-pulse">
                         {[...Array(6)].map((_, i) => (

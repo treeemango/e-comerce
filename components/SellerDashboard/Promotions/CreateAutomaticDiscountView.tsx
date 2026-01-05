@@ -1,8 +1,9 @@
 
-import React, { useEffect, useState } from 'react';
-import { createAutomaticDiscount } from '../../../lib/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { createAutomaticDiscount, fetchTrendingPlatformEventName } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 import { getCurrencySymbol, getSellerCurrency } from '../../../lib/seller-currency';
+import { detectUserCountry } from '../../../lib/event-banner-service';
 
 const FieldHelp: React.FC<{ text: string }> = ({ text }) => {
     const [open, setOpen] = React.useState(false);
@@ -28,7 +29,6 @@ const FieldHelp: React.FC<{ text: string }> = ({ text }) => {
         </span>
     );
 };
-
 interface CreateAutomaticDiscountViewProps {
     sellerId: string;
     onCancel: () => void;
@@ -58,6 +58,8 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                 : 'pr-16';
 
     const [name, setName] = useState('');
+    const [trendingEventName, setTrendingEventName] = useState<string | null>(null);
+    const didAutofillNameRef = useRef(false);
     const [discountType, setDiscountType] = useState<'percentage' | 'fixed_amount' | 'buy_x_get_y'>('percentage');
     const [discountValueInput, setDiscountValueInput] = useState<string>('10');
     const [buyQtyInput, setBuyQtyInput] = useState<string>('2');
@@ -79,6 +81,31 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
             cancelled = true;
         };
     }, [sellerId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const country = await detectUserCountry().catch(() => 'GLOBAL');
+                const eventName = await fetchTrendingPlatformEventName(country);
+                if (cancelled) return;
+
+                setTrendingEventName(eventName);
+                if (!didAutofillNameRef.current && !name.trim() && eventName) {
+                    didAutofillNameRef.current = true;
+                    setName(eventName.slice(0, 50));
+                }
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+        // Intentionally do not depend on `name` to avoid overriding user edits.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const toNumberOrZero = (value: string) => {
         const trimmed = value.trim();
@@ -138,6 +165,15 @@ const CreateAutomaticDiscountView: React.FC<CreateAutomaticDiscountViewProps> = 
                                 <label className="block text-sm font-bold text-gray-700">Discount Name</label>
                                 <FieldHelp text="Shown to customers at checkout. Use a clear name like 'Black Friday 10% OFF'." />
                             </div>
+                            {trendingEventName && (
+                                <button
+                                    type="button"
+                                    className="text-xs text-orange-600 hover:text-orange-700 font-semibold mb-2"
+                                    onClick={() => setName(trendingEventName.slice(0, 50))}
+                                >
+                                    Trending: {trendingEventName}
+                                </button>
+                            )}
                             <input
                                 type="text"
                                 required
