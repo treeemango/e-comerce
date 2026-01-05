@@ -72,7 +72,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                               : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
                               }`}
                         >
-                              <FlagIcon emoji={country.flag} label={country.name} fallbackText={country.code} className="w-4 h-4" />
+                           <FlagIcon emoji={country.flag} label={country.name} fallbackText={country.code} className="w-4 h-4" />
                            <span className="hidden sm:inline">{country.code}</span>
                         </button>
                      ))}
@@ -85,7 +85,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                   </h1>
 
                   <p className="text-lg text-gray-400 mb-8 max-w-xl leading-relaxed">
-                     Join the fastest-growing multi-country e-commerce platform. Reach customers in 9+ countries with zero upfront costs.
+                     Join the premier marketplace bridging the UK and Africa. Reach customers across borders with zero upfront costs and dedicated support.
                   </p>
 
                   <ul className="space-y-4 mb-12">
@@ -207,7 +207,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                <div className="text-center mb-16">
                   <span className="text-xs font-black text-primary uppercase tracking-[0.3em] mb-4 block">Why Choose Us</span>
                   <h2 className="text-4xl font-black text-gray-900 tracking-tight mb-4">Why Sell on JuaExpress?</h2>
-                  <p className="text-gray-500 max-w-2xl mx-auto">Join the leading multi-country marketplace and grow your business across UK and Africa</p>
+                  <p className="text-gray-500 max-w-2xl mx-auto">Join the premier marketplace bridging the UK and Africa with high-trust logistics and millions of active buyers.</p>
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -237,7 +237,7 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
             <div className="max-w-screen-xl mx-auto text-center relative z-10">
                <span className="text-xs font-black text-primary uppercase tracking-[0.3em] mb-4 block">Global Reach</span>
                <h2 className="text-4xl font-black text-white mb-4 tracking-tight">Sell Across 9+ Countries</h2>
-               <p className="text-gray-400 mb-12 max-w-2xl mx-auto">One platform, multiple markets. List once and reach customers across UK and Africa.</p>
+               <p className="text-gray-400 mb-12 max-w-2xl mx-auto">One platform, unlimited reach. List your products and sell to customers across the UK and African individual markets.</p>
 
                <div className="flex flex-wrap justify-center gap-4">
                   {[

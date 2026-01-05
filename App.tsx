@@ -260,9 +260,9 @@ const App: React.FC = () => {
   const seoConfig = useMemo(() => {
     if (currentView === 'home') {
       return {
-        title: 'JuaExpress - Premium Multi-Country E-Commerce Marketplace',
-        description: 'Shop JuaExpress for premium electronics, fashion, and home goods across UK and Africa. Experience seamless multi-country shopping with secure payments and ultra-fast delivery.',
-        keywords: 'jua, jua express, JuaExpress, online shopping Africa, UK marketplace, Kenya e-commerce, electronics Nairobi, fashion Lagos',
+        title: 'JuaExpress | Shop, Sell & Deliver across UK & Africa',
+        description: 'The premier marketplace bridging UK and African markets. Experience elite trust, secure checkout, and fast delivery for electronics, fashion, and home goods.',
+        keywords: 'jua express, shop UK, shop Kenya, Africa marketplace, sell online, delivery partner',
 
 
       };

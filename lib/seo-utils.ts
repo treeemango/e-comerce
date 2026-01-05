@@ -7,10 +7,10 @@ import { slugify } from './utils';
 export const SITE_CONFIG = {
     name: 'JuaExpress',
     alternateNames: ['Jua', 'Jua Express', 'JuaExpress'],
-    fullName: 'JuaExpress Marketplace',
+    fullName: 'JuaExpress | Shop, Sell & Deliver',
     legalName: 'JUA EXPRESS ONLINE',
     businessRegistrationNumber: 'BN-J9S6OB8R',
-    description: 'Your African shopping destination - Modern e-commerce with personalized recommendations, fast delivery, and exceptional customer service',
+    description: 'The premier marketplace for UK and Africa - Shop, Sell & Deliver with confidence.',
     url: typeof window !== 'undefined' ? window.location.origin : 'https://juaexpress.com',
     logo: '/icon-512.png',
     email: 'juaexpress01@gmail.com',

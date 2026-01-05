@@ -1,7 +1,7 @@
 {
   "name": "JuaExpress",
   "short_name": "JuaExpress",
-  "description": "Your African shopping destination - Modern e-commerce with personalized recommendations, fast delivery, and exceptional customer service",
+  "description": "Shop, Sell & Deliver across UK & Africa - The premier marketplace for electronics, fashion, and home goods with elite trust and fast delivery.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -10,7 +10,12 @@
   "scope": "/",
   "prefer_related_applications": false,
   "mobile_web_app_capable": "yes",
-  "categories": ["shopping", "lifestyle", "business", "productivity"],
+  "categories": [
+    "shopping",
+    "lifestyle",
+    "business",
+    "productivity"
+  ],
   "lang": "en",
   "dir": "ltr",
   "shortcuts": [
@@ -20,7 +25,11 @@
       "description": "Browse our latest products",
       "url": "/?shortcut=shop",
       "icons": [
-        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
       ]
     },
     {
@@ -29,7 +38,11 @@
       "description": "View your saved items",
       "url": "/wishlist?shortcut=wishlist",
       "icons": [
-        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
       ]
     },
     {
@@ -38,7 +51,11 @@
       "description": "Review your cart and checkout",
       "url": "/cart?shortcut=cart",
       "icons": [
-        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
       ]
     },
     {
@@ -47,7 +64,11 @@
       "description": "Manage your account and orders",
       "url": "/account?shortcut=account",
       "icons": [
-        { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
       ]
     }
   ],

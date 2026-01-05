@@ -33,7 +33,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
   return (
     <div className="w-full pb-8">
       {/* SEO: Hidden H1 for brand recognition */}
-      <h1 className="sr-only">JuaExpress - Premium Multi-Country E-Commerce Marketplace</h1>
+      <h1 className="sr-only">JuaExpress | Shop, Sell & Deliver across UK & Africa</h1>
 
       {showPromotions && (
         <div className="space-y-6">
