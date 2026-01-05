@@ -52,6 +52,25 @@ interface PlatformReviewsModalProps {
 export const PlatformReviewsModal: React.FC<PlatformReviewsModalProps> = ({ isOpen, onClose, reviews: backendReviews }) => {
     if (!isOpen) return null;
 
+    const allReviews = backendReviews || [];
+    const ratingValues = allReviews
+        .map((r) => Number(r.platform_rating ?? r.rating))
+        .filter((n) => Number.isFinite(n) && n > 0);
+    const averageRating = ratingValues.length
+        ? Math.round((ratingValues.reduce((acc, n) => acc + n, 0) / ratingValues.length) * 10) / 10
+        : null;
+    const totalReviews = allReviews.length;
+    const distributionBase = ratingValues.length;
+    const distribution = ratingValues.reduce((acc, value) => {
+        const star = Math.min(5, Math.max(1, Math.round(value)));
+        acc[star] = (acc[star] || 0) + 1;
+        return acc;
+    }, {} as Record<number, number>);
+    const getStarPercent = (star: number) => {
+        if (!distributionBase) return 0;
+        return Math.round(((distribution[star] || 0) / distributionBase) * 100);
+    };
+
     const displayReviews = (backendReviews || []).map(rev => ({
         name: rev.user_name || 'Verified Buyer',
         rating: rev.platform_rating || rev.rating,
@@ -98,7 +117,10 @@ export const PlatformReviewsModal: React.FC<PlatformReviewsModalProps> = ({ isOp
                                         <span className="material-icons text-white/80 text-sm">auto_awesome</span>
                                         <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Our Pride</span>
                                     </div>
-                                    <div className="text-6xl font-black tracking-tight mb-2">4.9<span className="text-2xl opacity-60">/5</span></div>
+                                    <div className="text-6xl font-black tracking-tight mb-2">
+                                        {averageRating !== null ? averageRating.toFixed(1) : '—'}
+                                        <span className="text-2xl opacity-60">/5</span>
+                                    </div>
                                     <p className="text-sm font-medium text-blue-100">The most trusted destination for Pan-African commerce.</p>
                                 </div>
                                 <div className="absolute -right-8 -bottom-8 w-48 h-48 bg-white/10 rounded-full blur-3xl group-hover:scale-125 transition-transform duration-700" />
@@ -106,7 +128,7 @@ export const PlatformReviewsModal: React.FC<PlatformReviewsModalProps> = ({ isOp
                             </div>
 
                             <div className="bg-white dark:bg-zinc-900 rounded-[32px] p-6 shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden relative">
-                                <div className="text-3xl font-black text-gray-900 dark:text-white mb-1 tracking-tight">50K+</div>
+                                <div className="text-3xl font-black text-gray-900 dark:text-white mb-1 tracking-tight">{totalReviews.toLocaleString()}</div>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Verified Reviews</p>
                                 <div className="absolute top-0 right-0 p-4 opacity-10">
                                     <span className="material-icons text-4xl">reviews</span>
@@ -129,11 +151,11 @@ export const PlatformReviewsModal: React.FC<PlatformReviewsModalProps> = ({ isOp
                                         <div className="flex-1 h-1.5 bg-gray-50 dark:bg-zinc-800 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-gradient-to-r from-orange-400 to-primary rounded-full"
-                                                style={{ width: star === 5 ? '85%' : star === 4 ? '10%' : '2%' }}
+                                                style={{ width: `${getStarPercent(star)}%` }}
                                             />
                                         </div>
                                         <span className="text-[10px] font-bold text-gray-400 w-8 text-right">
-                                            {star === 5 ? '85%' : star === 4 ? '10%' : '2%'}
+                                            {getStarPercent(star)}%
                                         </span>
                                     </div>
                                 ))}

@@ -150,9 +150,22 @@ const App: React.FC = () => {
   const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
   const [isPlatformReviewsOpen, setIsPlatformReviewsOpen] = useState(false);
   const [platformReviews, setPlatformReviews] = useState<Review[]>([]);
-  const [hasPlatformReviews, setHasPlatformReviews] = useState(true); // Default to true until checked
+  const [hasPlatformReviews, setHasPlatformReviews] = useState(false);
 
   const latestProductRequestIdRef = useRef<string | null>(null);
+
+  const pendingRoleDeepLinkRef = useRef<{ type: 'chat' | 'order'; id: string } | null>(null);
+  const userRef = useRef<User | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const isSellerUser = (u: User | null): boolean => {
+    if (!u) return false;
+    const role = (u as any)?.role;
+    return role === 'seller' || role === 'vendor' || (u as any)?.is_seller === true;
+  };
 
   const handleInstallAppClick = useCallback(async () => {
     try {
@@ -283,8 +296,13 @@ const App: React.FC = () => {
       };
     } else if (currentView === 'platform-reviews') {
       const reviews = platformReviews || [];
-      const overallRating = 4.9;
-      const totalReviews = reviews.length || 50000;
+      const totalReviews = reviews.length;
+      const ratingValues = reviews
+        .map((r) => Number(r.platform_rating ?? r.rating))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      const overallRating = ratingValues.length
+        ? Math.round((ratingValues.reduce((acc, n) => acc + n, 0) / ratingValues.length) * 10) / 10
+        : null;
 
       const reviewData = reviews.slice(0, 10).map(review => ({
         rating: review.platform_rating || review.rating,
@@ -294,21 +312,27 @@ const App: React.FC = () => {
         verified: true,
       }));
 
+      const description = totalReviews > 0 && overallRating !== null
+        ? `Read ${totalReviews.toLocaleString()} authentic reviews and feedback from our Pan-African community. Rated ${overallRating}/5 stars — See why thousands trust JuaExpress for their shopping needs.`
+        : 'Read authentic reviews and feedback from our Pan-African community.';
+
       return {
         title: 'Platform Trust & Community Reviews | JuaExpress',
-        description: `Read ${totalReviews.toLocaleString()}+ authentic reviews and feedback from our Pan-African community. Rated ${overallRating}/5 stars - See why thousands trust JuaExpress for their shopping needs.`,
+        description,
         keywords: 'JuaExpress reviews, platform rating, customer feedback, verified reviews, African marketplace trust, online shopping reviews',
         url: `${SITE_CONFIG.url}/reviews`,
-        structuredData: [
-          generateOrganizationRatingSchema(reviewData, overallRating, totalReviews),
-          generateReviewCollectionSchema(
-            'Platform Trust & Community Reviews | JuaExpress',
-            `Read ${totalReviews.toLocaleString()}+ authentic reviews and feedback from our Pan-African community. Rated ${overallRating}/5 stars - See why thousands trust JuaExpress for their shopping needs.`,
-            reviewData,
-            overallRating,
-            totalReviews
-          )
-        ],
+        structuredData: (totalReviews > 0 && overallRating !== null)
+          ? [
+            generateOrganizationRatingSchema(reviewData, overallRating, totalReviews),
+            generateReviewCollectionSchema(
+              'Platform Trust & Community Reviews | JuaExpress',
+              description,
+              reviewData,
+              overallRating,
+              totalReviews
+            )
+          ]
+          : [],
       };
     }
     return {};
@@ -321,11 +345,19 @@ const App: React.FC = () => {
     const loadProducts = async () => {
       const data = await fetchProductsWithVendors();
       setProducts(dedupeProducts(data));
-
-      // Check if platform reviews exist (simplified for now)
-      setHasPlatformReviews(true); // Default to true, can be updated later
     };
     loadProducts();
+
+    // Check platform review availability (no hardcoded defaults)
+    void (async () => {
+      try {
+        const reviews = await fetchTopPlatformReviews(1);
+        setHasPlatformReviews((reviews || []).length > 0);
+      } catch (err) {
+        console.warn('Unable to check platform review availability:', err);
+        setHasPlatformReviews(false);
+      }
+    })();
     // Auth context will be handled by the auth state listener
   }, [dedupeProducts]);
 
@@ -434,6 +466,7 @@ const App: React.FC = () => {
     } else if (searchParam) {
       handleSearch(searchParam);
     } else if (chatId) {
+      pendingRoleDeepLinkRef.current = { type: 'chat', id: chatId };
       setAccountPageTitle('Messages');
       setCurrentView('account-page');
       setActiveConversationId(chatId === 'inbox' ? null : chatId);
@@ -480,6 +513,7 @@ const App: React.FC = () => {
       };
       loadDeepLinkProduct();
     } else if (orderId) {
+      pendingRoleDeepLinkRef.current = { type: 'order', id: orderId };
       setAccountPageTitle('Your orders');
       setCurrentView('account-page');
     } else if (!viewParam && !productId && !orderId && !chatId) {
@@ -498,6 +532,12 @@ const App: React.FC = () => {
       } else if (infoSlugs.has(pathSlug)) {
         setActiveInfoPageSlug(pathSlug);
         setCurrentView('info-page');
+      } else if (pathname.startsWith('/info/')) {
+        const infoSlug = pathname.replace('/info/', '');
+        if (infoSlugs.has(infoSlug)) {
+          setActiveInfoPageSlug(infoSlug);
+          setCurrentView('info-page');
+        }
       }
     }
   }, []);
@@ -509,6 +549,7 @@ const App: React.FC = () => {
       const searchParam = params.get('search');
       const productId = params.get('product_id');
       const orderId = params.get('order_id');
+      const chatId = params.get('chat_id');
 
       const pathnameRaw = window.location.pathname || '/';
       const pathname = pathnameRaw.length > 1 ? pathnameRaw.replace(/\/+$/, '') : '/';
@@ -614,6 +655,12 @@ const App: React.FC = () => {
         return;
       }
 
+      if (chatId) {
+        pendingRoleDeepLinkRef.current = { type: 'chat', id: chatId };
+        handleInAppDeepLink('chat', chatId);
+        return;
+      }
+
       if (view === 'wishlist') {
         setCurrentView('wishlist');
         return;
@@ -636,8 +683,8 @@ const App: React.FC = () => {
       }
 
       if (orderId) {
-        setAccountPageTitle('Your orders'); // Correct title for BuyerOrdersView
-        setCurrentView('account-page');
+        pendingRoleDeepLinkRef.current = { type: 'order', id: orderId };
+        handleInAppDeepLink('order', orderId);
         return;
       }
 
@@ -674,6 +721,14 @@ const App: React.FC = () => {
           setCurrentView('info-page');
           return;
         }
+        if (pathname.startsWith('/info/')) {
+          const infoSlug = pathname.replace('/info/', '');
+          if (infoSlugs.has(infoSlug)) {
+            setActiveInfoPageSlug(infoSlug);
+            setCurrentView('info-page');
+            return;
+          }
+        }
       }
 
       // Default fallback
@@ -699,16 +754,38 @@ const App: React.FC = () => {
         console.error('Error handling in-app deep link (product):', err);
       }
     } else if (type === 'order') {
-      setAccountPageTitle('Your orders'); // Correct title for BuyerOrdersView
-      setCurrentView('account-page');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (isSellerUser(userRef.current)) {
+        setCurrentView('seller-dashboard');
+        setDashboardTab('manage-orders');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setAccountPageTitle('Your orders'); // Correct title for BuyerOrdersView
+        setCurrentView('account-page');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } else if (type === 'chat') {
-      setAccountPageTitle('Messages');
-      setCurrentView('account-page');
-      setActiveConversationId(id && id !== 'inbox' ? id : null);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (isSellerUser(userRef.current)) {
+        setCurrentView('seller-dashboard');
+        setDashboardTab('messages');
+        setActiveConversationId(id && id !== 'inbox' ? id : null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setAccountPageTitle('Messages');
+        setCurrentView('account-page');
+        setActiveConversationId(id && id !== 'inbox' ? id : null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
   }, []);
+
+  // If the app started via a deep link before auth loaded, re-route once we know we are a seller.
+  useEffect(() => {
+    if (!isSellerUser(userRef.current)) return;
+    const pending = pendingRoleDeepLinkRef.current;
+    if (!pending) return;
+    pendingRoleDeepLinkRef.current = null;
+    handleInAppDeepLink(pending.type, pending.id);
+  }, [user?.id, user?.role, handleInAppDeepLink]);
 
   useEffect(() => {
     console.log('[App.tsx] Registering juax:notification-action listener');
@@ -1528,9 +1605,9 @@ const App: React.FC = () => {
             <HeroSection onProductClick={handleProductClick} />
             <FeaturesBar
               onClick={() => {
-                window.open('/?view=platform-reviews', '_blank');
+                handleInfoPageClick('support-center');
               }}
-              hasReviews={hasPlatformReviews}
+              hasReviews={true}
             />
             <LightningDealsRow
               userId={user?.id}
@@ -1571,14 +1648,14 @@ const App: React.FC = () => {
                 <div className="w-full h-20 md:h-24 px-4 sm:px-6 lg:px-8 flex items-center">
                   <div className="mx-auto w-full max-w-7xl flex items-center justify-center">
                     <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
-                      <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-6 w-6" />
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <div className="text-[10px] font-semibold tracking-[0.2em] uppercase text-white/75 leading-none">{eventSectionTitles.lightningDeals.title}</div>
-                      <div className="mt-1 text-lg md:text-xl font-extrabold tracking-tight leading-tight">{eventSectionTitles.lightningDeals.headline}</div>
-                      <div className="mt-0.5 text-sm text-white/85 leading-snug">{eventSectionTitles.lightningDeals.subtitle}</div>
-                    </div>
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
+                        <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-6 w-6" />
+                      </div>
+                      <div className="flex flex-col items-start">
+                        <div className="text-[10px] font-semibold tracking-[0.2em] uppercase text-white/75 leading-none">{eventSectionTitles.lightningDeals.title}</div>
+                        <div className="mt-1 text-lg md:text-xl font-extrabold tracking-tight leading-tight">{eventSectionTitles.lightningDeals.headline}</div>
+                        <div className="mt-0.5 text-sm text-white/85 leading-snug">{eventSectionTitles.lightningDeals.subtitle}</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1622,7 +1699,7 @@ const App: React.FC = () => {
           <>
             {eventBanner && eventBanner.eventName !== 'default' && (
               <div
-                className="relative left-1/2 -translate-x-1/2 w-screen h-12 flex items-center justify-between z-20 text-white overflow-hidden"
+                className="relative left-1/2 -translate-x-1/2 w-screen z-20 text-white overflow-hidden"
                 style={{
                   background: (eventBanner.backgroundColor && eventBanner.accentColor)
                     ? `linear-gradient(135deg, ${eventBanner.backgroundColor}, ${eventBanner.accentColor})`
@@ -1630,21 +1707,24 @@ const App: React.FC = () => {
                 }}
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-none" />
-                <div className="w-full flex items-center justify-between px-4 sm:px-6 lg:px-8 relative z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
-                      <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-5 w-5" />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
-                      <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex items-baseline gap-2">
-                        <span className="line-clamp-1">{eventBanner.headline}</span>
-                        <span className="opacity-60 font-bold text-xs lowercase italic hidden lg:inline">— {eventBanner.subheadline}</span>
+                <div className="relative z-10 w-full px-4 sm:px-6 lg:px-8 py-2">
+                  <div className="mx-auto w-full max-w-7xl flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
+                        <img src={getEventIconSrc(eventBanner.iconKey)} alt="" className="h-5 w-5" />
+                      </div>
+                      <div className="flex flex-col text-center sm:text-left">
+                        <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
+                        <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex flex-wrap items-baseline justify-center sm:justify-start gap-x-2">
+                          <span className="line-clamp-1">{eventBanner.headline}</span>
+                          <span className="opacity-60 font-bold text-xs lowercase italic hidden lg:inline">— {eventBanner.subheadline}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl whitespace-nowrap">{eventBanner.cta}</span>
+
+                    <span className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl whitespace-nowrap">
+                      {eventBanner.cta}
+                    </span>
                   </div>
                 </div>
               </div>

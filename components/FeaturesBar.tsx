@@ -5,13 +5,15 @@ interface FeaturesBarProps {
   hasReviews?: boolean;
 }
 
-const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick, hasReviews = true }) => {
+const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick, hasReviews = false }) => {
+  const isEnabled = typeof onClick === 'function';
+
   return (
     <section className="mb-10 group">
       <button
-        onClick={hasReviews ? onClick : undefined}
-        disabled={!hasReviews}
-        className={`w-full bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-zinc-950 rounded-[2.5rem] p-6 lg:p-10 shadow-2xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 transition-all duration-500 overflow-hidden relative text-left ${hasReviews ? 'hover:border-primary/30 cursor-pointer active:scale-[0.99]' : 'cursor-default opacity-80'
+        onClick={isEnabled ? onClick : undefined}
+        disabled={!isEnabled}
+        className={`w-full bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-zinc-950 rounded-[2.5rem] p-6 lg:p-10 shadow-2xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 transition-all duration-500 overflow-hidden relative text-left ${isEnabled ? 'hover:border-primary/30 cursor-pointer active:scale-[0.99]' : 'cursor-default opacity-80'
           }`}
       >
         {/* Decorative background glow */}
@@ -32,13 +34,9 @@ const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick, hasReviews = true })
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <span key={i} className="material-icons text-lg text-orange-400">star</span>
-                  ))}
-                </div>
-                <div className="h-4 w-px bg-gray-200 dark:bg-zinc-800" />
-                <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">4.9/5 Based on 50K+ reviews</span>
+                <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">
+                  {hasReviews ? 'Policies & help center' : 'Policies & important details'}
+                </span>
               </div>
             </div>
           </div>
@@ -64,18 +62,9 @@ const FeaturesBar: React.FC<FeaturesBarProps> = ({ onClick, hasReviews = true })
               </div>
             </div>
 
-            <div className={`flex items-center gap-4 group/cta ${hasReviews ? 'opacity-100' : 'opacity-40 grayscale'}`}>
-              <div className="flex -space-x-3">
-                {[12, 23, 34, 45].map((i) => (
-                  <div key={i} className="w-10 h-10 rounded-full border-4 border-white dark:border-zinc-900 bg-gray-200 overflow-hidden shadow-premium transition-transform hover:-translate-y-1">
-                    <img src={`https://i.pravatar.cc/100?img=${i}`} alt="" className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-              <div className={`flex items-center gap-2 text-primary font-black text-xs uppercase tracking-[0.2em] transition-transform ${hasReviews ? 'group-hover/cta:translate-x-1' : ''}`}>
-                Read Community Voices
-                {hasReviews && <span className="material-icons">arrow_forward</span>}
-              </div>
+            <div className={`flex items-center gap-2 text-primary font-black text-xs uppercase tracking-[0.2em] ${isEnabled ? '' : 'opacity-40 grayscale'}`}>
+              Read Policies & Support
+              {isEnabled && <span className="material-icons">arrow_forward</span>}
             </div>
           </div>
         </div>

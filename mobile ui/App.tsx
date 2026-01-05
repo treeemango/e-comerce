@@ -49,6 +49,7 @@ import { MobileFeedbackSheet } from './components/MobileFeedbackSheet';
 import MobileWriteReviewSheet from './components/MobileWriteReviewSheet';
 import { PlatformReviewsView } from './components/PlatformReviewsView';
 import { fetchTopPlatformReviews } from '@/lib/api';
+import InfoPageView from '../components/InfoPageView';
 import OrderTrackingTimeline from './components/OrderTrackingTimeline';
 import {
     getExistingPushSubscription,
@@ -135,6 +136,9 @@ const App: React.FC = () => {
     const [hasPlatformReviews, setHasPlatformReviews] = useState(true);
     const [inspiredProducts, setInspiredProducts] = useState<RelatedProduct[]>([]);
     const [inspiredLoading, setInspiredLoading] = useState(false);
+
+    const [isInfoPageOpen, setIsInfoPageOpen] = useState(false);
+    const [activeInfoPageSlug, setActiveInfoPageSlug] = useState<string>('support-center');
 
     // Initial navigation pills or Categories Page toggle logic (swipe to navigate shortcut)
     useSwipeGesture({
@@ -300,6 +304,7 @@ const App: React.FC = () => {
         // Handle initial URL state for deep linking
         const params = new URLSearchParams(window.location.search);
         const view = params.get('view');
+        const infoSlug = params.get('slug');
         const productId = params.get('product_id');
         const orderId = params.get('order_id');
         const vendorId = params.get('vendorId');
@@ -307,7 +312,10 @@ const App: React.FC = () => {
         const searchParam = params.get('search');
         const viewDeal = params.get('view') === 'deals';
 
-        if (view === 'platform-reviews') {
+        if (view === 'info-page') {
+            setActiveInfoPageSlug(infoSlug || 'support-center');
+            setIsInfoPageOpen(true);
+        } else if (view === 'platform-reviews') {
             const loadReviews = async () => {
                 const reviews = await fetchTopPlatformReviews(20);
                 setPlatformReviews(reviews);
@@ -317,9 +325,19 @@ const App: React.FC = () => {
         } else if (view === 'vendor-store' && vendorId) {
             setSelectedVendorId(vendorId);
         } else if (chatId) {
-            setIsAccountOpen(false);
-            setActiveAccountSection('messages');
-            setActiveBuyerConversationId(chatId === 'inbox' ? null : chatId);
+            const role = userProfile?.role?.toString?.().toLowerCase?.();
+            const sellerRoles = new Set(['seller', 'vendor', 'admin', 'staff']);
+            const isSeller = !!role && sellerRoles.has(role);
+            if (isSeller) {
+                setActiveTab('you');
+                setSellerView('dashboard');
+                setIsAccountOpen(false);
+                setActiveSellerConversationId(chatId || 'inbox');
+            } else {
+                setIsAccountOpen(false);
+                setActiveAccountSection('messages');
+                setActiveBuyerConversationId(chatId === 'inbox' ? null : chatId);
+            }
         } else if (viewDeal) {
             setActiveTab('deals');
         } else if (productId) {
@@ -344,7 +362,7 @@ const App: React.FC = () => {
             setIsAccountOpen(false);
             setActiveAccountSection('orders');
         }
-    }, []);
+    }, [userProfile]);
 
     useEffect(() => {
         const onPopState = (event: PopStateEvent) => {
@@ -373,6 +391,18 @@ const App: React.FC = () => {
             if (isPlatformReviewsOpen) {
                 setIsPlatformReviewsOpen(false);
                 setPlatformReviews([]);
+                return;
+            }
+
+            if (isInfoPageOpen) {
+                setIsInfoPageOpen(false);
+                return;
+            }
+
+            if (view === 'info-page') {
+                const slug = (event.state as any)?.slug;
+                setActiveInfoPageSlug(typeof slug === 'string' ? slug : 'support-center');
+                setIsInfoPageOpen(true);
                 return;
             }
             if (view === 'platform-reviews') {
@@ -406,10 +436,20 @@ const App: React.FC = () => {
         window.addEventListener('popstate', onPopState);
         window.history.replaceState({ view: activeTab }, '', window.location.href);
         return () => window.removeEventListener('popstate', onPopState);
-    }, [activeTab, isAccountOpen, isSearchOpen, onboardingType, selectedProduct]);
+    }, [activeTab, isAccountOpen, isSearchOpen, onboardingType, selectedProduct, isPlatformReviewsOpen, isInfoPageOpen]);
+
+    const openInfoPage = useCallback((slug: string) => {
+        setActiveInfoPageSlug(slug);
+        setIsInfoPageOpen(true);
+        window.history.pushState({ view: 'info-page', slug }, '', `?view=info-page&slug=${encodeURIComponent(slug)}`);
+    }, []);
 
     const handleInAppDeepLink = useCallback(async (type: 'product' | 'order' | 'chat', id: string) => {
         console.log(`Handling in-app deep link: ${type} ${id}`);
+        const role = userProfile?.role?.toString?.().toLowerCase?.();
+        const sellerRoles = new Set(['seller', 'vendor', 'admin', 'staff']);
+        const isSeller = !!role && sellerRoles.has(role);
+
         if (type === 'product') {
             try {
                 const product = await fetchProductById(id);
@@ -423,15 +463,28 @@ const App: React.FC = () => {
                 console.error('Error handling in-app deep link (product):', err);
             }
         } else if (type === 'order') {
-            setIsAccountOpen(false);
-            setActiveAccountSection('orders');
-            // If we supported expanding order details directly, we would do it here.
+            if (isSeller) {
+                setActiveTab('you');
+                setSellerView('dashboard');
+                setIsAccountOpen(false);
+            } else {
+                setIsAccountOpen(false);
+                setActiveAccountSection('orders');
+                // If we supported expanding order details directly, we would do it here.
+            }
         } else if (type === 'chat') {
-            setIsAccountOpen(false);
-            setActiveAccountSection('messages');
-            setActiveBuyerConversationId(id === 'inbox' ? null : id);
+            if (isSeller) {
+                setActiveTab('you');
+                setSellerView('dashboard');
+                setIsAccountOpen(false);
+                setActiveSellerConversationId(id || 'inbox');
+            } else {
+                setIsAccountOpen(false);
+                setActiveAccountSection('messages');
+                setActiveBuyerConversationId(id === 'inbox' ? null : id);
+            }
         }
-    }, []);
+    }, [userProfile]);
 
     useEffect(() => {
         const handler = (event: Event) => {
@@ -471,11 +524,7 @@ const App: React.FC = () => {
             }
 
             if (action.target === 'chat') {
-                setIsAccountOpen(false);
-                setActiveAccountSection('messages');
-                if (action.id && action.id !== 'inbox') {
-                    setActiveBuyerConversationId(action.id);
-                }
+                handleInAppDeepLink('chat', action.id || 'inbox');
                 return;
             }
 
@@ -488,8 +537,7 @@ const App: React.FC = () => {
             }
 
             if (action.target === 'order') {
-                setIsAccountOpen(false);
-                setActiveAccountSection('orders');
+                handleInAppDeepLink('order', action.id || '');
                 return;
             }
 
@@ -1158,12 +1206,21 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                {[{ icon: 'school', label: 'Seller academy' }, { icon: 'live_help', label: 'FAQ' }, { icon: 'policy', label: 'Policies' }].map((item) => (
-                                    <div key={item.label} className="rounded-2xl p-3 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 flex items-start gap-2">
-                                        <span className="material-icons-outlined text-primary">{item.icon}</span>
-                                        <div className="text-sm font-semibold text-black dark:text-white leading-tight">{item.label}</div>
-                                    </div>
-                                ))}
+                                {[{ icon: 'school', label: 'Seller academy' }, { icon: 'live_help', label: 'FAQ' }, { icon: 'policy', label: 'Policies' }].map((item) => {
+                                    const isPolicies = item.label === 'Policies';
+                                    return (
+                                        <button
+                                            key={item.label}
+                                            type="button"
+                                            onClick={isPolicies ? () => openInfoPage('support-center') : undefined}
+                                            disabled={!isPolicies}
+                                            className={`rounded-2xl p-3 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 flex items-start gap-2 text-left ${isPolicies ? 'hover:bg-gray-50 active:scale-95 transition' : 'opacity-80 cursor-default'}`}
+                                        >
+                                            <span className="material-icons-outlined text-primary">{item.icon}</span>
+                                            <div className="text-sm font-semibold text-black dark:text-white leading-tight">{item.label}</div>
+                                        </button>
+                                    );
+                                })}
                                 <button
                                     onClick={() => setIsFeedbackSheetOpen(true)}
                                     className="rounded-2xl p-3 bg-white dark:bg-surface-dark border border-gray-100 dark:border-gray-800 flex items-start gap-2 text-left w-full hover:bg-gray-50 active:scale-95 transition"
@@ -1781,11 +1838,7 @@ const App: React.FC = () => {
                                     onViewAllDeals={() => setActiveTab('deals')}
                                     onVisualSearch={setVisualSearchProduct}
                                     onFilterClick={setActiveTab}
-                                    onPlatformReviewsClick={async () => {
-                                        const reviews = await fetchTopPlatformReviews(20);
-                                        setPlatformReviews(reviews);
-                                        setIsPlatformReviewsOpen(true);
-                                    }}
+                                    onPlatformReviewsClick={() => openInfoPage('support-center')}
                                     hasPlatformReviews={hasPlatformReviews}
                                     eventBanner={eventBanner}
                                 />
@@ -1868,12 +1921,7 @@ const App: React.FC = () => {
                             onProductClick={handleProductClick}
                             showPromotions={false}
                             onVisualSearch={setVisualSearchProduct}
-                            onPlatformReviewsClick={async () => {
-                                const reviews = await fetchTopPlatformReviews(20);
-                                setPlatformReviews(reviews);
-                                setIsPlatformReviewsOpen(true);
-                                window.history.pushState({ view: 'platform-reviews' }, '', '?view=platform-reviews');
-                            }}
+                            onPlatformReviewsClick={() => openInfoPage('support-center')}
                             hasPlatformReviews={hasPlatformReviews}
                         />
                     </div>
@@ -2152,6 +2200,26 @@ const App: React.FC = () => {
                 isOpen={isFeedbackSheetOpen}
                 onClose={() => setIsFeedbackSheetOpen(false)}
             />
+
+            {isInfoPageOpen && (
+                <div className="absolute inset-0 z-[120] bg-white">
+                    <InfoPageView
+                        slug={activeInfoPageSlug}
+                        onClose={() => {
+                            if ((window.history.state as any)?.view === 'info-page') {
+                                window.history.back();
+                            } else {
+                                setIsInfoPageOpen(false);
+                            }
+                        }}
+                        onNavigate={(slug) => {
+                            setActiveInfoPageSlug(slug);
+                            window.history.pushState({ view: 'info-page', slug }, '', `?view=info-page&slug=${encodeURIComponent(slug)}`);
+                        }}
+                    />
+                </div>
+            )}
+
             {isPlatformReviewsOpen && (
                 <PlatformReviewsView
                     onBack={() => {

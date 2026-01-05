@@ -17,7 +17,7 @@ interface HomeViewProps {
   eventBanner?: EventBannerData | null;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick, hasPlatformReviews = true, eventBanner }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, showPromotions = true, onViewAllDeals, onVisualSearch, onFilterClick, onPlatformReviewsClick, hasPlatformReviews = false, eventBanner }) => {
   const formatPrice = (price: number, currency?: string) => {
     try {
       return new Intl.NumberFormat('en', {
@@ -47,9 +47,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
           {/* Swaggy Premium Trust Bar */}
           <div className="px-4">
             <button
-              onClick={hasPlatformReviews ? onPlatformReviewsClick : undefined}
-              disabled={!hasPlatformReviews}
-              className={`w-full max-w-5xl mx-auto bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-black rounded-[2rem] p-4 md:p-6 lg:p-8 flex flex-col gap-3 md:gap-6 shadow-xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 transition-all group overflow-hidden relative ${hasPlatformReviews ? 'active:scale-[0.98]' : 'opacity-80 cursor-default'
+              onClick={onPlatformReviewsClick}
+              disabled={!onPlatformReviewsClick}
+              className={`w-full max-w-5xl mx-auto bg-gradient-to-br from-white to-gray-50 dark:from-zinc-900 dark:to-black rounded-[2rem] p-4 md:p-6 lg:p-8 flex flex-col gap-3 md:gap-6 shadow-xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-zinc-800 transition-all group overflow-hidden relative ${onPlatformReviewsClick ? 'active:scale-[0.98]' : 'opacity-80 cursor-default'
                 }`}
             >
               {/* Decorative background glow */}
@@ -63,24 +63,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
                   <div className="text-left">
                     <div className="text-[13px] md:text-xl font-black text-gray-900 dark:text-white tracking-tight">Elite Trust Quality</div>
                     <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <span key={i} className="material-icons text-[10px] md:text-sm text-orange-400">star</span>
-                        ))}
-                      </div>
-                      <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest">4.9/5 Rating</span>
+                      <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Policies & help center
+                      </span>
                     </div>
                   </div>
                 </div>
-                <div className="flex -space-x-2 md:-space-x-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="w-7 h-7 md:w-10 md:h-10 rounded-full border-2 border-white dark:border-zinc-900 bg-gray-200 overflow-hidden shadow-sm">
-                      <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="" className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                  <div className="w-7 h-7 md:w-10 md:h-10 rounded-full border-2 border-white dark:border-zinc-900 bg-primary flex items-center justify-center text-[8px] md:text-[10px] font-black text-white shadow-sm">
-                    +50K
-                  </div>
+                <div className={`flex items-center gap-2 text-primary ${onPlatformReviewsClick ? 'animate-pulse' : 'opacity-40 grayscale'}`}>
+                  <span className="text-[9px] md:text-xs font-black uppercase tracking-widest">Read Policies</span>
+                  {onPlatformReviewsClick && <span className="material-icons text-[14px] md:text-lg">chevron_right</span>}
                 </div>
               </div>
 
@@ -98,9 +89,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
                     <span className="text-[9px] md:text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Escrow Secure</span>
                   </div>
                 </div>
-                <div className={`flex items-center gap-1 text-primary ${hasPlatformReviews ? 'animate-pulse' : 'opacity-40 grayscale'}`}>
-                  <span className="text-[9px] md:text-xs font-black uppercase tracking-widest">Read Reviews</span>
-                  {hasPlatformReviews && <span className="material-icons text-[14px] md:text-lg">chevron_right</span>}
+                <div className="flex items-center gap-1 text-primary opacity-70">
+                  <span className="text-[9px] md:text-xs font-black uppercase tracking-widest">Trusted Experience</span>
                 </div>
               </div>
             </button>

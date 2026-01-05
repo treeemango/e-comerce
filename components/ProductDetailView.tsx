@@ -106,10 +106,8 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    const [isImageFocusView, setIsImageFocusView] = useState(false);
    const [dealTimeLeft, setDealTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
 
-   // Tab navigation state - default to Reviews if has reviews, else Specifications
-   const [activeTab, setActiveTab] = useState<'specifications' | 'reviews'>(
-      product.reviews && product.reviews > 0 ? 'reviews' : 'specifications'
-   );
+   // Tab navigation state - default to Specifications (reviews moved to dedicated section)
+   const [activeTab, setActiveTab] = useState<'specifications' | 'reviews'>('specifications');
 
    useEffect(() => {
       const loadCoupons = async () => {
@@ -636,19 +634,27 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    // Check if user is following this store
    useEffect(() => {
       const checkFollowStatus = async () => {
+         const baselineFollowerCount = Number(vendor?.follower_count ?? 0);
+         setFollowerCount(baselineFollowerCount);
+
          if (vendor?.vendor_id && user?.id) {
             const status = await getFollowStatus(user.id, vendor.vendor_id);
             if (status) {
-               setIsFollowing(status.is_following);
-               setFollowerCount(status.follower_count);
+               setIsFollowing(Boolean(status.is_following));
+               const rawCount = (status as any).follower_count;
+               const parsedCount = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+               if (rawCount !== null && rawCount !== undefined && Number.isFinite(parsedCount)) {
+                  setFollowerCount(Math.max(baselineFollowerCount, parsedCount));
+               }
+            } else {
+               setIsFollowing(false);
             }
          } else {
             setIsFollowing(false);
-            setFollowerCount(0);
          }
       };
       checkFollowStatus();
-   }, [vendor?.vendor_id, user?.id]);
+   }, [vendor?.vendor_id, vendor?.follower_count, user?.id]);
 
    // Check if product is in wishlist
    useEffect(() => {

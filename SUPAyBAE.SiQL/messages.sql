@@ -1,6 +1,11 @@
 -- Migration: Complete E-commerce Messaging System Implementation
 -- FINAL VERSION (Guaranteed Dependency Order Fix)
 
+-- DDL in a live Supabase project can deadlock with concurrent API traffic.
+-- These timeouts make failures fast/retryable instead of hanging or deadlocking.
+SET lock_timeout = '30s';
+SET statement_timeout = '10min';
+
 ---
 -- ---------------------------------------------------------------------------
 -- 1. EXTENSIONS (create in public schema)
@@ -9,24 +14,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS "moddatetime" WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA public;
-
----
----
--- ---------------------------------------------------------------------------
--- 6A. CRITICAL DEPENDENCY CLEANUP (Must execute before Section 5)
--- ---------------------------------------------------------------------------
-
--- 🔥 CRITICAL FIX: Use CASCADE to drop all policies that depend on is_admin_user
-DROP POLICY IF EXISTS conversation_members_select_policy ON public.conversations CASCADE;
-DROP POLICY IF EXISTS conversation_members_select_messages ON public.messages CASCADE;
-DROP POLICY IF EXISTS support_admins_manage_participants ON public.conversation_support_participants CASCADE;
-DROP POLICY IF EXISTS user_blocks_all_access ON public.user_blocks CASCADE;
-DROP POLICY IF EXISTS message_attachments_select_policy ON public.message_attachments CASCADE;
-DROP POLICY IF EXISTS message_attachments_insert_policy ON public.message_attachments CASCADE;
-DROP POLICY IF EXISTS message_attachments_delete_policy ON public.message_attachments CASCADE;
-
--- 🔥 Explicitly drop the policy named in the error detail, if it exists:
-DROP POLICY IF EXISTS admin_messages_select_policy ON public.messages;
 
 ---
 ---
@@ -230,9 +217,9 @@ AS $$
   )::uuid;
 $$;
 
--- FIX: Drop function explicitly (Dependencies cleared in Section 6A)
-DROP FUNCTION IF EXISTS public.is_admin_user(UUID);
-
+-- NOTE: Do NOT DROP this function in migrations.
+-- Storage/Object policies may depend on it and will block DROP without CASCADE.
+-- Use CREATE OR REPLACE so this migration stays rerunnable.
 -- Placeholder for is_admin_user (Crucial for RLS/Security, assume exists or create stub)
 CREATE OR REPLACE FUNCTION public.is_admin_user(p_user_id UUID)
 RETURNS BOOLEAN
@@ -350,7 +337,13 @@ BEGIN
 
     RETURN QUERY
     SELECT m.id, m.conversation_id, m.sender_id, m.receiver_id, m.content, m.message_type, m.metadata,
-        m.is_read, m.read_at, m.created_at, m.sender_deleted, m.receiver_deleted, m.is_internal,
+        m.is_read,
+        CASE
+            WHEN m.read_at IS NULL THEN NULL::timestamptz
+            ELSE (m.read_at AT TIME ZONE 'UTC')
+        END AS read_at,
+        (m.created_at AT TIME ZONE 'UTC') AS created_at,
+        m.sender_deleted, m.receiver_deleted, m.is_internal,
         COALESCE((
             SELECT jsonb_agg(jsonb_build_object( 'id', ma.id, 'file_name', ma.file_name, 'storage_path', ma.storage_path,
                                                 'file_type', ma.file_type, 'file_size', ma.file_size, 'created_at', ma.created_at)
@@ -427,6 +420,7 @@ BEGIN
 END $$;
 
 -- Conversations RLS (Re-creation)
+DROP POLICY IF EXISTS conversation_members_select_policy ON public.conversations;
 CREATE POLICY conversation_members_select_policy
     ON public.conversations FOR SELECT
     USING (
@@ -439,6 +433,7 @@ CREATE POLICY conversation_members_select_policy
     );
 
 -- Messages RLS (Re-creation)
+DROP POLICY IF EXISTS conversation_members_select_messages ON public.messages;
 CREATE POLICY conversation_members_select_messages
     ON public.messages FOR SELECT
     USING (
@@ -452,37 +447,83 @@ CREATE POLICY conversation_members_select_messages
     );
 
 -- Support Participants RLS (Re-creation)
+DROP POLICY IF EXISTS support_admins_manage_participants ON public.conversation_support_participants;
 CREATE POLICY support_admins_manage_participants
     ON public.conversation_support_participants FOR ALL
     USING (public.is_admin_user(public.get_auth_uid()))
     WITH CHECK (public.is_admin_user(public.get_auth_uid()));
 
 -- User Blocks RLS (Re-creation)
+DROP POLICY IF EXISTS user_blocks_all_access ON public.user_blocks;
 CREATE POLICY user_blocks_all_access
     ON public.user_blocks FOR ALL
     USING (blocker_id = public.get_auth_uid() OR public.is_admin_user(public.get_auth_uid()))
     WITH CHECK (blocker_id = public.get_auth_uid());
 
 -- Attachments RLS (Re-creation)
+DROP POLICY IF EXISTS message_attachments_select_policy ON public.message_attachments;
 CREATE POLICY message_attachments_select_policy
     ON public.message_attachments FOR SELECT
     USING (
-        public.is_admin_user(public.get_auth_uid())
+        public.is_admin_user(COALESCE(auth.uid(), public.get_auth_uid()))
         OR EXISTS (
-            SELECT 1 FROM public.messages m WHERE m.id = message_id
-              AND (m.sender_id = public.get_auth_uid() OR m.receiver_id = public.get_auth_uid())
-              OR EXISTS (
-                  SELECT 1 FROM public.conversations c JOIN public.conversation_support_participants csp ON csp.conversation_id = c.id
-                  WHERE c.id = m.conversation_id AND csp.admin_id = public.get_auth_uid()
-              )
+                        SELECT 1
+                        FROM public.messages m
+                        WHERE m.id = message_id
+                            AND (
+                                m.sender_id = COALESCE(auth.uid(), public.get_auth_uid())
+                                OR m.receiver_id = COALESCE(auth.uid(), public.get_auth_uid())
+                                OR EXISTS (
+                                        SELECT 1
+                                        FROM public.conversation_support_participants csp
+                                        WHERE csp.conversation_id = m.conversation_id
+                                            AND csp.admin_id = COALESCE(auth.uid(), public.get_auth_uid())
+                                )
+                            )
         )
     );
 
+DROP POLICY IF EXISTS message_attachments_insert_policy ON public.message_attachments;
 CREATE POLICY message_attachments_insert_policy ON public.message_attachments FOR INSERT
-    WITH CHECK (EXISTS (SELECT 1 FROM public.messages m WHERE m.id = message_id AND (m.sender_id = public.get_auth_uid() OR m.receiver_id = public.get_auth_uid())));
+    WITH CHECK (
+        public.is_admin_user(COALESCE(auth.uid(), public.get_auth_uid()))
+        OR EXISTS (
+            SELECT 1
+            FROM public.messages m
+            WHERE m.id = message_id
+                AND (
+                    m.sender_id = COALESCE(auth.uid(), public.get_auth_uid())
+                    OR m.receiver_id = COALESCE(auth.uid(), public.get_auth_uid())
+                    OR EXISTS (
+                        SELECT 1
+                        FROM public.conversation_support_participants csp
+                        WHERE csp.conversation_id = m.conversation_id
+                            AND csp.admin_id = COALESCE(auth.uid(), public.get_auth_uid())
+                    )
+                )
+        )
+    );
 
+DROP POLICY IF EXISTS message_attachments_delete_policy ON public.message_attachments;
 CREATE POLICY message_attachments_delete_policy ON public.message_attachments FOR DELETE
-    USING (EXISTS (SELECT 1 FROM public.messages m WHERE m.id = message_id AND (m.sender_id = public.get_auth_uid() OR m.receiver_id = public.get_auth_uid())));
+        USING (
+                public.is_admin_user(COALESCE(auth.uid(), public.get_auth_uid()))
+                OR EXISTS (
+                        SELECT 1
+                        FROM public.messages m
+                        WHERE m.id = message_id
+                            AND (
+                                m.sender_id = COALESCE(auth.uid(), public.get_auth_uid())
+                                OR m.receiver_id = COALESCE(auth.uid(), public.get_auth_uid())
+                                OR EXISTS (
+                                        SELECT 1
+                                        FROM public.conversation_support_participants csp
+                                        WHERE csp.conversation_id = m.conversation_id
+                                            AND csp.admin_id = COALESCE(auth.uid(), public.get_auth_uid())
+                                )
+                            )
+                )
+        );
 
 ---
 
@@ -491,13 +532,15 @@ CREATE POLICY message_attachments_delete_policy ON public.message_attachments FO
 -- ---------------------------------------------------------------------------
 
 -- Seller Conversation Overview View
+-- Drop dependent functions first (they return SETOF the view type)
+DROP FUNCTION IF EXISTS public.get_seller_conversations_overview(UUID);
 DROP VIEW IF EXISTS public.seller_conversation_overview;
 CREATE VIEW public.seller_conversation_overview AS
 SELECT
     c.id, c.seller_id, c.buyer_id, c.product_id, c.order_id, c.subject, c.last_message, c.last_message_sender, c.updated_at, c.created_at, c.is_active, c.seller_deleted, c.buyer_deleted,
     COALESCE(buyer_profile.business_name, buyer_profile.full_name, buyer_profile.email) AS buyer_display_name, buyer_profile.full_name AS buyer_full_name, buyer_profile.business_name AS buyer_business_name, buyer_profile.email AS buyer_email, buyer_profile.phone AS buyer_phone, buyer_profile.avatar_url AS buyer_avatar_url, buyer_profile.business_address AS buyer_business_address,
     COALESCE(vendor_data.shop_name, seller_profile.business_name, seller_profile.full_name, seller_profile.email) AS seller_display_name, seller_profile.full_name AS seller_full_name, seller_profile.business_name AS seller_business_name, seller_profile.avatar_url AS seller_avatar_url, seller_profile.phone AS seller_phone, seller_profile.business_address AS seller_business_address,
-    p.title AS product_title, p.price AS product_price,
+    p.title AS product_title, pv_default.price AS product_price,
     primary_image.storage_path AS product_primary_image,
     o.order_number, o.status AS order_status, o.total_price AS order_total,
     unread.unread_count, last_message_meta.last_message_at, last_message_meta.last_sender_id, last_message_meta.last_sender_name
@@ -506,6 +549,13 @@ LEFT JOIN public.users buyer_profile ON buyer_profile.id = c.buyer_id
 LEFT JOIN public.users seller_profile ON seller_profile.id = c.seller_id
 LEFT JOIN public.vendors vendor_data ON vendor_data.user_id = c.seller_id
 LEFT JOIN public.products p ON p.id = c.product_id
+LEFT JOIN LATERAL (
+    SELECT pv.price
+    FROM public.product_variants pv
+    WHERE pv.product_id = p.id
+    ORDER BY pv.is_default DESC, pv.created_at ASC
+    LIMIT 1
+) pv_default ON TRUE
 LEFT JOIN public.orders o ON o.id = c.order_id
 LEFT JOIN LATERAL (
     SELECT m.storage_path
@@ -520,13 +570,18 @@ LEFT JOIN LATERAL (SELECT m.created_at AS last_message_at, m.sender_id AS last_s
 
 
 -- Admin Conversation Overview View
+-- Drop dependent functions first (they return SETOF the view type)
+DROP FUNCTION IF EXISTS public.get_admin_conversations_overview(TEXT, INTEGER, INTEGER);
+-- Also drop any RPCs that return this view type before recreating it
+DROP FUNCTION IF EXISTS public.get_user_conversations(UUID, INTEGER, INTEGER, BOOLEAN);
+DROP FUNCTION IF EXISTS public.get_user_conversations(UUID);
 DROP VIEW IF EXISTS public.admin_conversation_overview;
 CREATE VIEW public.admin_conversation_overview AS
 SELECT
     c.id, c.seller_id, c.buyer_id, c.product_id, c.order_id, c.subject, c.last_message, c.last_message_sender, c.updated_at, c.created_at, c.is_active, c.seller_deleted, c.buyer_deleted,
     buyer_profile.full_name AS buyer_full_name, buyer_profile.business_name AS buyer_business_name, buyer_profile.email AS buyer_email, buyer_profile.phone AS buyer_phone, buyer_profile.avatar_url AS buyer_avatar_url, buyer_profile.business_address AS buyer_business_address,
     seller_profile.full_name AS seller_full_name, seller_profile.business_name AS seller_business_name, COALESCE(vendor_data.shop_name, seller_profile.business_name, seller_profile.full_name, seller_profile.email) AS seller_display_name, seller_profile.email AS seller_email, seller_profile.phone AS seller_phone, seller_profile.business_address AS seller_business_address,
-    p.title AS product_title, p.price AS product_price,
+    p.title AS product_title, pv_default.price AS product_price,
     primary_image.storage_path AS product_primary_image,
     o.order_number, o.status AS order_status, o.total_price AS order_total,
     unread_for_buyer.unread_count AS buyer_unread_count, unread_for_seller.unread_count AS seller_unread_count,
@@ -538,6 +593,13 @@ LEFT JOIN public.users buyer_profile ON buyer_profile.id = c.buyer_id
 LEFT JOIN public.users seller_profile ON seller_profile.id = c.seller_id
 LEFT JOIN public.vendors vendor_data ON vendor_data.user_id = c.seller_id
 LEFT JOIN public.products p ON p.id = c.product_id
+LEFT JOIN LATERAL (
+    SELECT pv.price
+    FROM public.product_variants pv
+    WHERE pv.product_id = p.id
+    ORDER BY pv.is_default DESC, pv.created_at ASC
+    LIMIT 1
+) pv_default ON TRUE
 LEFT JOIN public.orders o ON o.id = c.order_id
 LEFT JOIN LATERAL (
     SELECT m.storage_path
@@ -576,12 +638,30 @@ GRANT EXECUTE ON FUNCTION public.assign_admin_to_conversation(UUID, UUID, BOOLEA
 GRANT EXECUTE ON FUNCTION public.get_conversation_messages(UUID, UUID, INTEGER, INTEGER) TO authenticated;
 
 -- New generic function for both buyers and sellers
-CREATE OR REPLACE FUNCTION public.get_user_conversations(p_user_id UUID) RETURNS SETOF public.admin_conversation_overview AS $$
-    SELECT * FROM public.admin_conversation_overview 
-    WHERE seller_id = p_user_id OR buyer_id = p_user_id
-    ORDER BY COALESCE(last_message_at, updated_at) DESC, created_at DESC;
+-- IMPORTANT: Keep a single signature to avoid PostgREST RPC overload ambiguity.
+DROP FUNCTION IF EXISTS public.get_user_conversations(UUID);
+
+CREATE OR REPLACE FUNCTION public.get_user_conversations(
+        p_user_id UUID,
+        p_limit INTEGER DEFAULT 50,
+        p_offset INTEGER DEFAULT 0,
+        p_archived_only BOOLEAN DEFAULT FALSE
+) RETURNS SETOF public.admin_conversation_overview AS $$
+        SELECT *
+        FROM public.admin_conversation_overview
+        WHERE (seller_id = p_user_id OR buyer_id = p_user_id)
+            AND (
+                CASE
+                    WHEN COALESCE(p_archived_only, FALSE) THEN NOT COALESCE(is_active, TRUE)
+                    ELSE COALESCE(is_active, TRUE)
+                END
+            )
+        ORDER BY COALESCE(last_message_at, updated_at) DESC, created_at DESC
+        OFFSET GREATEST(COALESCE(p_offset, 0), 0)
+        LIMIT CASE WHEN p_limit IS NULL OR p_limit < 1 THEN 50 ELSE p_limit END;
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
-GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
+
+GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID, INTEGER, INTEGER, BOOLEAN) TO authenticated;
 
 
 -- 8.4 Re-create functions that depend on the views

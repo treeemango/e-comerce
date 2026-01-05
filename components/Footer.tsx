@@ -221,8 +221,8 @@ const Footer: React.FC<FooterProps> = ({ onAdminClick, onDriverClick, onSellerCl
                         © 2022 - 2025 JuaExpress
                     </button>
                     <div className="flex flex-wrap justify-center gap-6 mt-4 md:mt-0">
-                        <button onClick={() => onInfoPageClick?.('terms')} className="hover:text-white transition-colors">Terms of use</button>
-                        <button onClick={() => onInfoPageClick?.('privacy')} className="hover:text-white transition-colors">Privacy policy</button>
+                        <a href="/info/terms" onClick={(e) => { e.preventDefault(); onInfoPageClick?.('terms'); }} className="hover:text-white transition-colors">Terms of use</a>
+                        <a href="/info/privacy" onClick={(e) => { e.preventDefault(); onInfoPageClick?.('privacy'); }} className="hover:text-white transition-colors">Privacy policy</a>
                         <a href="#" className="hover:text-white transition-colors flex items-center gap-1.5">
                             Your privacy choices <span className="bg-emerald-500 text-white rounded-full px-1.5 py-0.5 text-[8px] font-black">✓</span>
                         </a>

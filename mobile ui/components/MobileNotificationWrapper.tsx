@@ -189,7 +189,8 @@ export const MobileNotificationWrapper: React.FC<MobileNotificationWrapperProps>
                             'info',
                             5000,
                             () => onDeepLink?.('chat', 'inbox'),
-                            { target: 'chat', id: 'inbox' }
+                            { target: 'chat', id: 'inbox' },
+                            user?.id ? `unread_messages_${user.id}` : undefined
                         );
                     }
                 }

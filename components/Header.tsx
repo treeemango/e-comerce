@@ -327,8 +327,8 @@ const Header: React.FC<HeaderProps> = ({
             {/* Mega Menu Dropdown */}
             <div
               className={`absolute top-full left-0 w-[840px] transition-all duration-200 z-50 ${isCategoriesDropdownOpen
-                  ? 'opacity-100 pointer-events-auto translate-y-0 mt-2'
-                  : 'opacity-0 pointer-events-none -translate-y-2 mt-2'
+                ? 'opacity-100 pointer-events-auto translate-y-0 mt-2'
+                : 'opacity-0 pointer-events-none -translate-y-2 mt-2'
                 }`}
             >
               <div className="bg-background-light dark:bg-gray-800 shadow-lg rounded-lg flex overflow-hidden border border-gray-200 dark:border-gray-700 min-h-[400px]">
@@ -608,8 +608,12 @@ const Header: React.FC<HeaderProps> = ({
         {user ? (
           <div className="hidden lg:flex items-center space-x-2 cursor-pointer relative group">
             <div className="flex items-center space-x-2 py-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center font-bold text-white shadow-inner">
-                {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center font-bold text-white shadow-inner overflow-hidden">
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.name || 'User'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()
+                )}
               </div>
               <div className="text-xs leading-tight">
                 <p className="text-gray-200 group-hover:text-white">Hello, {user.name?.split(' ')[0] || 'Buyer'}</p>
@@ -686,8 +690,12 @@ const Header: React.FC<HeaderProps> = ({
                 {/* Right Column: User Menu */}
                 <div className="w-7/12 p-4">
                   <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-700">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center text-white text-xl font-medium">
-                      {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center text-white text-xl font-medium overflow-hidden">
+                      {user.avatar_url ? (
+                        <img src={user.avatar_url} alt={user.name || 'User'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()
+                      )}
                     </div>
                     <div className="flex-1">
                       <span className="text-lg font-bold text-gray-800 dark:text-white block">{user.name || user.email}</span>
@@ -872,8 +880,12 @@ const Header: React.FC<HeaderProps> = ({
                     if (onAccountPageClick) onAccountPageClick('Your profile'); // Navigate to main profile
                   }}
                 >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center text-white text-base font-medium">
-                    {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center text-white text-base font-medium overflow-hidden">
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt={user.name || 'User'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()
+                    )}
                   </div>
                   <div className="flex-1">
                     <span className="text-sm font-normal text-gray-500 dark:text-gray-400 block">Hello, {user.name?.split(' ')[0] || 'User'}</span>

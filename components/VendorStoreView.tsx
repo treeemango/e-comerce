@@ -61,16 +61,21 @@ const VendorStoreView: React.FC<VendorStoreViewProps> = ({ vendorId, onBack, onP
         setVendor(profile);
         setProducts(storeProducts);
 
+        const profileFollowerCount = Number(profile?.follower_count ?? 0);
+        setFollowerCount(profileFollowerCount);
+
         const resolvedStoreId = profile?.vendor_id;
         if (authUser?.id && resolvedStoreId) {
           const followStatus = await getFollowStatus(authUser.id, resolvedStoreId);
           if (cancelled) return;
           if (followStatus) {
             setIsFollowing(Boolean(followStatus.is_following));
-            setFollowerCount(Number(followStatus.follower_count ?? 0));
+            const rawCount = (followStatus as any).follower_count;
+            const parsedCount = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+            if (rawCount !== null && rawCount !== undefined && Number.isFinite(parsedCount)) {
+              setFollowerCount(parsedCount);
+            }
           }
-        } else {
-          setFollowerCount(Number(profile?.follower_count ?? 0));
         }
       } catch (e) {
         console.error('Failed to load vendor store', e);

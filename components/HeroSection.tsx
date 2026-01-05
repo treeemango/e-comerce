@@ -444,13 +444,15 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
                       />
                     </div>
 
-                    {/* Floating Rating Badge */}
-                    <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 shadow-lg transition-all duration-300 px-3 py-1.5 rounded-full border border-black/5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-icons text-amber-500 text-base">star</span>
-                        <span className="text-sm font-bold text-black">{((deal.rating || 4.9) as number).toFixed(1)}</span>
+                    {/* Floating Rating Badge (only when rating exists) */}
+                    {Number.isFinite(Number(deal.rating)) && (
+                      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 shadow-lg transition-all duration-300 px-3 py-1.5 rounded-full border border-black/5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-icons text-amber-500 text-base">star</span>
+                          <span className="text-sm font-bold text-black">{Number(deal.rating).toFixed(1)}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 

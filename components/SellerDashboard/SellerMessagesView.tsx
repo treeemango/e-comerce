@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 import {
     fetchSellerConversations,
     fetchSellerConversationMessages,
-    sendSellerMessage,
+    sendMessage,
     markSellerMessagesAsRead,
-    getMessageAttachmentUrl
+    getUsersLastSeen,
+    touchUserLastSeen
 } from '@/lib/api';
+import { getAttachmentUrl, getMessageAttachments, uploadMessageAttachment, type MessageAttachment } from '@/lib/attachments-api';
 import { SellerConversation, SellerMessage } from '@/types';
 
 interface SellerMessagesViewProps {
@@ -22,11 +25,245 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [otherLastSeenAt, setOtherLastSeenAt] = useState<string | null>(null);
+    const [otherTyping, setOtherTyping] = useState(false);
+
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [messageAttachments, setMessageAttachments] = useState<Map<string, MessageAttachment[]>>(new Map());
+
+    const messageAttachmentsRef = useRef<Map<string, MessageAttachment[]>>(new Map());
+    const attachmentFetchInFlightRef = useRef<Set<string>>(new Set());
+
+    const typingChannelRef = useRef<any>(null);
+    const typingClearTimeoutRef = useRef<number | null>(null);
+    const lastTypingSentAtRef = useRef<number>(0);
+
+    useEffect(() => {
+        messageAttachmentsRef.current = messageAttachments;
+    }, [messageAttachments]);
+
+    useEffect(() => {
+        return () => {
+            if (typingClearTimeoutRef.current) {
+                window.clearTimeout(typingClearTimeoutRef.current);
+                typingClearTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
+    const openAttachment = async (storagePath: string) => {
+        const url = await getAttachmentUrl(storagePath);
+        if (!url) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    const filterConversationsForSellerRole = (data: SellerConversation[]) => {
+        const me = String(sellerId);
+        return (Array.isArray(data) ? data : []).filter((c: any) => {
+            const sid = c?.seller_id ?? c?.seller_uid ?? c?.seller;
+            return sid != null && String(sid) === me;
+        });
+    };
+
+    const isLikelyImage = (fileType: string | null | undefined, fileName: string | null | undefined, url: string | null | undefined) => {
+        if ((fileType || '').startsWith('image/')) return true;
+        const candidate = (fileName || url || '').toLowerCase();
+        return /\.(png|jpe?g|webp|gif|avif|bmp|svg)(\?|#|$)/.test(candidate);
+    };
+
+    const maybeBroadcastTyping = () => {
+        if (!selectedConversation?.id) return;
+        const now = Date.now();
+        if (now - lastTypingSentAtRef.current < 1200) return;
+        lastTypingSentAtRef.current = now;
+
+        try {
+            typingChannelRef.current?.send({
+                type: 'broadcast',
+                event: 'typing',
+                payload: {
+                    conversation_id: selectedConversation.id,
+                    sender_id: sellerId,
+                    ts: new Date().toISOString()
+                }
+            });
+        } catch {
+            // ignore
+        }
+    };
+
+    // Typing indicator (best-effort) for the active conversation
+    useEffect(() => {
+        setOtherTyping(false);
+        if (!selectedConversation?.id) return;
+
+        const channel = supabase
+            .channel(`typing:${selectedConversation.id}`)
+            .on(
+                'broadcast',
+                { event: 'typing' },
+                ({ payload }) => {
+                    const sender = String((payload as any)?.sender_id ?? '');
+                    if (!sender || sender === String(sellerId)) return;
+                    setOtherTyping(true);
+                    if (typingClearTimeoutRef.current) {
+                        window.clearTimeout(typingClearTimeoutRef.current);
+                    }
+                    typingClearTimeoutRef.current = window.setTimeout(() => {
+                        setOtherTyping(false);
+                        typingClearTimeoutRef.current = null;
+                    }, 2200);
+                }
+            )
+            .subscribe();
+
+        typingChannelRef.current = channel;
+
+        return () => {
+            try {
+                supabase.removeChannel(channel);
+            } catch {
+                // ignore
+            }
+            if (typingClearTimeoutRef.current) {
+                window.clearTimeout(typingClearTimeoutRef.current);
+                typingClearTimeoutRef.current = null;
+            }
+            typingChannelRef.current = null;
+            setOtherTyping(false);
+        };
+    }, [selectedConversation?.id, sellerId]);
+
+    const ensureAttachmentsLoaded = async (messageId: string, known?: any[]) => {
+        if (!messageId) return;
+        if (messageAttachmentsRef.current.has(messageId)) return;
+        if (attachmentFetchInFlightRef.current.has(messageId)) return;
+
+        attachmentFetchInFlightRef.current.add(messageId);
+        try {
+            let atts: MessageAttachment[] = [];
+
+            if (known && Array.isArray(known) && known.length > 0) {
+                atts = await Promise.all(
+                    known.map(async (a: any) => ({
+                        ...a,
+                        message_id: a.message_id ?? messageId,
+                        signedUrl: a.signedUrl || a.url || a.public_url || (a.storage_path ? await getAttachmentUrl(a.storage_path) : undefined)
+                    }))
+                );
+            } else {
+                atts = await getMessageAttachments(messageId);
+            }
+
+            if (atts.length > 0) {
+                setMessageAttachments(prev => {
+                    if (prev.has(messageId)) return prev;
+                    const next = new Map(prev);
+                    next.set(messageId, atts);
+                    return next;
+                });
+            }
+        } catch {
+            // ignore
+        } finally {
+            attachmentFetchInFlightRef.current.delete(messageId);
+        }
+    };
 
     // Load conversations on mount
     useEffect(() => {
         loadConversations();
     }, [sellerId]);
+
+    const isOnlineFromLastSeen = (ts: string | null): boolean => {
+        if (!ts) return false;
+        const t = new Date(ts).getTime();
+        if (!Number.isFinite(t)) return false;
+        return Date.now() - t <= 2 * 60 * 1000;
+    };
+
+    const formatLastSeen = (ts: string | null): string => {
+        if (!ts) return 'Offline';
+        const t = new Date(ts).getTime();
+        if (!Number.isFinite(t)) return 'Offline';
+        const diffMs = Date.now() - t;
+        const diffMin = Math.floor(diffMs / 60000);
+        if (diffMin < 1) return 'Last seen just now';
+        if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+        const diffHr = Math.floor(diffMin / 60);
+        if (diffHr < 24) return `Last seen ${diffHr}h ago`;
+        const diffDay = Math.floor(diffHr / 24);
+        if (diffDay === 1) return 'Last seen yesterday';
+        if (diffDay < 7) return `Last seen ${diffDay}d ago`;
+        return `Last seen ${new Date(ts).toLocaleDateString()}`;
+    };
+
+    const getOtherUserId = (conv: SellerConversation | null): string | null => {
+        if (!conv) return null;
+        if ((conv as any).subject === 'Support Request') return null;
+        const buyerId = (conv as any).buyer_id;
+        return buyerId ? String(buyerId) : null;
+    };
+
+    // Keep our last_seen updated while this view is mounted
+    useEffect(() => {
+        let cancelled = false;
+        const touch = async () => {
+            try {
+                await touchUserLastSeen();
+            } catch {
+                // ignore
+            }
+        };
+        void touch();
+        const interval = setInterval(() => {
+            if (!cancelled) void touch();
+        }, 30_000);
+
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') void touch();
+        };
+        window.addEventListener('focus', touch);
+        document.addEventListener('visibilitychange', onVisible);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            window.removeEventListener('focus', touch);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, []);
+
+    // Poll other user's last_seen while a conversation is open
+    useEffect(() => {
+        const otherUserId = getOtherUserId(selectedConversation);
+        if (!otherUserId) {
+            setOtherLastSeenAt(null);
+            return;
+        }
+
+        let cancelled = false;
+        const fetchLastSeen = async () => {
+            try {
+                const map = await getUsersLastSeen([otherUserId]);
+                const ts = map[otherUserId] ?? null;
+                if (!cancelled) setOtherLastSeenAt(ts);
+            } catch {
+                // ignore
+            }
+        };
+
+        void fetchLastSeen();
+        const interval = setInterval(() => {
+            if (!cancelled) void fetchLastSeen();
+        }, 20_000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [selectedConversation?.id]);
 
     // Handle initial conversation selection
     useEffect(() => {
@@ -38,11 +275,21 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
         }
     }, [loading, initialConversationId, conversations]);
 
-    // Load messages when conversation is selected
+    const handleSelectConversation = (conversation: SellerConversation) => {
+        // Cleanup old previews if any
+        selectedFiles.forEach(file => {
+            const url = (file as any).previewUrl;
+            if (url) URL.revokeObjectURL(url);
+        });
+        setSelectedFiles([]);
+        setSelectedConversation(conversation);
+        loadMessages(conversation.id);
+    };
+
+    // Mark messages as read when conversation is selected
     useEffect(() => {
         if (selectedConversation) {
-            loadMessages(selectedConversation.id);
-            markMessagesAsRead(selectedConversation.id);
+            markSellerMessagesAsRead(selectedConversation.id);
         }
     }, [selectedConversation]);
 
@@ -50,7 +297,7 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
         setLoading(true);
         try {
             const data = await fetchSellerConversations(sellerId);
-            setConversations(data);
+            setConversations(filterConversationsForSellerRole(data as any));
         } catch (error) {
             console.error('Error loading conversations:', error);
         } finally {
@@ -63,10 +310,75 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
         try {
             const data = await fetchSellerConversationMessages(conversationId, sellerId);
             setMessages(data);
+
+            // Process attachments returned by the RPC
+            const newAttachmentsMap = new Map(messageAttachments);
+            let hasNew = false;
+
+            for (const msg of data) {
+                if (msg.attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+                    const mappedAtts: MessageAttachment[] = await Promise.all(msg.attachments.map(async (a: any) => ({
+                        ...a,
+                        signedUrl: a.signedUrl || await getAttachmentUrl(a.storage_path)
+                    })));
+                    newAttachmentsMap.set(String(msg.id), mappedAtts);
+                    hasNew = true;
+                }
+            }
+
+            if (hasNew) {
+                setMessageAttachments(newAttachmentsMap);
+            }
+
+            // Fallback: fetch attachments for messages that don't have them in the result set but might have them in DB
+            const idsToFetch = (data || [])
+                .slice(-20)
+                .map((m: any) => m.id)
+                .filter((id: string) => id && !newAttachmentsMap.has(String(id)));
+
+            if (idsToFetch.length > 0) {
+                for (const id of idsToFetch) {
+                    try {
+                        const atts = await getMessageAttachments(String(id));
+                        if (atts.length > 0) {
+                            setMessageAttachments(prev => new Map(prev).set(String(id), atts));
+                        }
+                    } catch { /* ignore */ }
+                }
+            }
         } catch (error) {
             console.error('Error loading messages:', error);
         }
     };
+
+    // Best-effort: ensure attachments are hydrated for visible/recent messages (older threads too)
+    useEffect(() => {
+        if (!messages.length) return;
+
+        const recent = messages.slice(-60);
+        const BATCH_SIZE = 6;
+        let cancelled = false;
+
+        (async () => {
+            for (let i = 0; i < recent.length; i += BATCH_SIZE) {
+                if (cancelled) return;
+                const batch = recent.slice(i, i + BATCH_SIZE);
+                await Promise.all(
+                    batch.map(async (m: any) => {
+                        const id = String(m?.id ?? '');
+                        if (!id) return;
+                        if (messageAttachmentsRef.current.has(id)) return;
+                        const known = Array.isArray(m?.attachments) ? m.attachments : undefined;
+                        await ensureAttachmentsLoaded(id, known);
+                    })
+                );
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [messages]);
 
     const markMessagesAsRead = async (conversationId: string) => {
         try {
@@ -83,27 +395,80 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
     };
 
     const handleSendMessage = async () => {
-        if (!selectedConversation || !messageInput.trim()) return;
+        if (!selectedConversation) return;
+        const text = messageInput.trim();
+        const filesToUpload = [...selectedFiles];
+        if (!text && filesToUpload.length === 0) return;
+
+        const correlationId = `cid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const contentToSend = text || (filesToUpload.length > 0 ? 'Sent an attachment' : '');
+        if (!contentToSend) return;
+
+        const restoreText = messageInput;
+        const restoreFiles = filesToUpload;
+
+        const optimisticMsg: any = {
+            id: correlationId,
+            conversation_id: selectedConversation.id,
+            sender_id: sellerId,
+            receiver_id: selectedConversation.buyer_id,
+            content: contentToSend,
+            is_read: true,
+            created_at: new Date().toISOString(),
+            metadata: { correlationId, optimistic: true }
+        };
+
+        setMessages(prev => [...prev, optimisticMsg]);
+
+        // Clear input immediately for a modern feel
+        setMessageInput('');
+        selectedFiles.forEach(file => {
+            const url = (file as any).previewUrl;
+            if (url) URL.revokeObjectURL(url);
+        });
+        setSelectedFiles([]);
 
         setSending(true);
         try {
-            await sendSellerMessage(
-                selectedConversation.id,
-                sellerId,
-                selectedConversation.buyer_id,
-                messageInput.trim()
-            );
+            // Insert message directly to get the ID immediately
+            const { data: sentMsg, error: sendError } = await supabase
+                .from('messages')
+                .insert({
+                    conversation_id: selectedConversation.id,
+                    sender_id: sellerId,
+                    receiver_id: selectedConversation.buyer_id,
+                    content: contentToSend,
+                    metadata: { correlationId }
+                })
+                .select()
+                .single();
 
-            // Clear input
-            setMessageInput('');
+            if (sendError || !sentMsg) throw sendError || new Error('Failed to send message');
 
-            // Reload messages
-            await loadMessages(selectedConversation.id);
+            // Replace optimistic message with real one
+            setMessages(prev => prev.map((m: any) => (String(m?.id) === correlationId ? ({ ...sentMsg } as any) : m)));
 
-            // Refresh conversation list to update last message
+            // Handle attachments if any
+            if (filesToUpload.length > 0) {
+                const uploadResults = await Promise.allSettled(
+                    filesToUpload.map(file => uploadMessageAttachment(String(sentMsg.id), file))
+                );
+
+                // Fetch the newly created attachments to get their data properly
+                const atts = await getMessageAttachments(String(sentMsg.id));
+                if (atts.length > 0) {
+                    setMessageAttachments(prev => new Map(prev).set(String(sentMsg.id), atts));
+                }
+            }
+
+            // Reload conversations (preview + unread counts)
             await loadConversations();
         } catch (error) {
             console.error('Error sending message:', error);
+            // Remove optimistic message and restore draft
+            setMessages(prev => prev.filter((m: any) => String(m?.id) !== correlationId));
+            setMessageInput(restoreText);
+            setSelectedFiles(restoreFiles);
             alert('Failed to send message. Please try again.');
         } finally {
             setSending(false);
@@ -214,7 +579,7 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                 return (
                                     <button
                                         key={conv.id}
-                                        onClick={() => setSelectedConversation(conv)}
+                                        onClick={() => handleSelectConversation(conv)}
                                         className={`w-full text-left p-4 rounded-2xl border transition-all ${selected ? 'border-orange-200 bg-orange-50/40' : (unread ? 'border-orange-100 bg-orange-50/30' : 'border-gray-100 bg-white')}`}
                                     >
                                         <div className="flex items-start gap-4">
@@ -284,6 +649,14 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                     {selectedConversation.subject !== 'Support Request' && (
                                         <p className="text-sm text-gray-600">{(selectedConversation as any).buyer_email || ''}</p>
                                     )}
+                                    {selectedConversation.subject !== 'Support Request' && (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <div className={`w-2 h-2 rounded-full ${isOnlineFromLastSeen(otherLastSeenAt) ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                            <span className={`text-xs font-semibold ${isOnlineFromLastSeen(otherLastSeenAt) ? 'text-emerald-600' : 'text-gray-500'}`}>
+                                                {isOnlineFromLastSeen(otherLastSeenAt) ? 'Online' : formatLastSeen(otherLastSeenAt)}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -335,6 +708,8 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                             ) : (
                                 messages.map((message) => {
                                     const isSeller = message.sender_id === sellerId;
+                                    const isPending = !!(message as any)?.metadata?.optimistic;
+                                    const atts = messageAttachments.get(String(message.id)) || [];
                                     return (
                                         <div key={message.id} className={`flex ${isSeller ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[70%] ${isSeller ? 'order-2' : 'order-1'}`}>
@@ -344,31 +719,53 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                                     }`}>
                                                     <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
 
-                                                    {/* Attachments */}
-                                                    {message.attachments && message.attachments.length > 0 && (
-                                                        <div className="mt-2 space-y-1">
-                                                            {message.attachments.map((attachment) => (
-                                                                <a
-                                                                    key={attachment.id}
-                                                                    href={getMessageAttachmentUrl(attachment.storage_path)}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className={`flex items-center gap-2 p-2 rounded ${isSeller ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-200 hover:bg-gray-300'
-                                                                        }`}
-                                                                >
-                                                                    <span className="material-icons text-sm">attach_file</span>
-                                                                    <span className="text-xs truncate">{attachment.file_name}</span>
-                                                                </a>
-                                                            ))}
+                                                    {atts.length > 0 && (
+                                                        <div className={`mt-2 grid gap-2 ${atts.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                            {atts.map((att, idx) => {
+                                                                const isImage = isLikelyImage(att.file_type, att.file_name, att.signedUrl);
+                                                                return (
+                                                                    <a
+                                                                        key={att.id || `att-${idx}`}
+                                                                        href={att.signedUrl || '#'}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className={`block overflow-hidden rounded-lg border shadow-sm hover:shadow-md transition-shadow ${isSeller ? 'border-white/20' : 'border-gray-200'}`}
+                                                                    >
+                                                                        {isImage && att.signedUrl ? (
+                                                                            <img src={att.signedUrl} alt={att.file_name} className="w-full h-40 object-cover bg-gray-50" />
+                                                                        ) : (
+                                                                            <div className={`p-3 flex items-center gap-2 ${isSeller ? 'bg-white/10' : 'bg-white text-gray-800'}`}>
+                                                                                <span className="material-icons text-lg">description</span>
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="text-xs font-bold truncate">{att.file_name}</div>
+                                                                                    {att.file_size && (
+                                                                                        <div className={`text-[10px] ${isSeller ? 'text-white/60' : 'text-gray-400'}`}>
+                                                                                            {(att.file_size / 1024).toFixed(1)} KB
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="material-icons text-sm">download</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </a>
+                                                                );
+                                                            })}
                                                         </div>
                                                     )}
                                                 </div>
                                                 <div className={`flex items-center gap-1 mt-1 text-xs text-gray-500 ${isSeller ? 'justify-end' : 'justify-start'}`}>
                                                     <span>{formatMessageTime(message.created_at)}</span>
                                                     {isSeller && (
-                                                        <span className={`material-icons text-xs ${message.is_read ? 'text-blue-500' : 'text-gray-400'}`}>
-                                                            {message.is_read ? 'done_all' : 'done'}
-                                                        </span>
+                                                        isPending ? (
+                                                            <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                                                                <span className="material-icons text-xs">schedule</span>
+                                                                <span>Sending…</span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className={`material-icons text-xs ${message.is_read ? 'text-blue-500' : 'text-gray-400'}`}>
+                                                                {message.is_read ? 'done_all' : 'done'}
+                                                            </span>
+                                                        )
                                                     )}
                                                 </div>
                                             </div>
@@ -379,25 +776,120 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                         </div>
 
                         {/* Compose Area */}
-                        <div className="p-4 border-t border-gray-200 bg-white">
-                            <div className="flex items-end gap-2">
-                                <textarea
-                                    value={messageInput}
-                                    onChange={(e) => setMessageInput(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    placeholder="Type your message..."
-                                    rows={2}
-                                    className="flex-1 p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                    disabled={sending}
-                                />
-                                <button
-                                    onClick={handleSendMessage}
-                                    disabled={!messageInput.trim() || sending}
-                                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2 h-[70px]"
-                                >
-                                    <span className="material-icons">send</span>
-                                    <span>{sending ? 'Sending...' : 'Send'}</span>
-                                </button>
+                        <div className="p-4 bg-white border-t">
+                            {otherTyping && selectedConversation.subject !== 'Support Request' && (
+                                <div className="mb-2 px-2 text-xs font-semibold text-gray-500">
+                                    {getBuyerDisplayName(selectedConversation)} is typing…
+                                </div>
+                            )}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                                multiple
+                                onChange={(e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    if (files.length > 0) setSelectedFiles(prev => [...prev, ...files]);
+                                    e.target.value = '';
+                                }}
+                            />
+
+                            {selectedFiles.length > 0 && (
+                                <div className="mb-4 flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
+                                    {selectedFiles.map((file, idx) => {
+                                        const isImage = file.type.startsWith('image/');
+                                        const previewUrl = isImage ? URL.createObjectURL(file) : null;
+                                        return (
+                                            <div key={`${file.name}-${idx}`} className="relative flex-shrink-0 group">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
+                                                        if (previewUrl) URL.revokeObjectURL(previewUrl);
+                                                    }}
+                                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors z-10"
+                                                    aria-label="Remove attachment"
+                                                >
+                                                    <span className="material-icons text-[16px]">close</span>
+                                                </button>
+                                                {isImage && previewUrl ? (
+                                                    <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-orange-100 shadow-sm transition-transform group-hover:scale-105">
+                                                        <img
+                                                            src={previewUrl}
+                                                            alt={file.name}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-48 h-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center gap-2 px-3 transition-transform group-hover:scale-105">
+                                                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                                                            <span className="material-icons text-orange-500">description</span>
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="text-xs font-bold text-gray-800 truncate">{file.name}</div>
+                                                            <div className="text-[10px] font-medium text-gray-400">{(file.size / 1024).toFixed(1)} KB</div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-center gap-2 px-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="p-2 text-gray-500 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all flex items-center gap-2"
+                                        title="Attach Image or File"
+                                    >
+                                        <span className="material-icons">add_photo_alternate</span>
+                                        <span className="text-xs font-semibold">Add Media</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all flex items-center gap-2"
+                                        title="Attach Document"
+                                    >
+                                        <span className="material-icons">attach_file</span>
+                                        <span className="text-xs font-semibold">Attach File</span>
+                                    </button>
+                                    <div className="h-4 w-[1px] bg-gray-200 mx-1" />
+                                    <span className="text-[10px] text-gray-400 font-medium">Shift + Enter for new line</span>
+                                </div>
+
+                                <div className="flex items-end gap-3 bg-gray-50 p-2 rounded-2xl border border-gray-100 focus-within:border-orange-200 focus-within:ring-4 focus-within:ring-orange-500/5 transition-all">
+                                    <textarea
+                                        value={messageInput}
+                                        onChange={(e) => {
+                                            setMessageInput(e.target.value);
+                                            maybeBroadcastTyping();
+                                        }}
+                                        onKeyPress={handleKeyPress}
+                                        placeholder="Type your message to the customer..."
+                                        rows={Math.min(5, messageInput.split('\n').length || 1)}
+                                        className="flex-1 p-2 bg-transparent resize-none focus:outline-none text-sm leading-relaxed"
+                                        disabled={sending}
+                                    />
+                                    <button
+                                        onClick={handleSendMessage}
+                                        disabled={(!messageInput.trim() && selectedFiles.length === 0) || sending}
+                                        className={`p-3 rounded-xl shadow-lg flex items-center justify-center transition-all ${(!messageInput.trim() && selectedFiles.length === 0) || sending
+                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                                            : 'bg-gradient-to-tr from-orange-500 to-orange-400 text-white hover:shadow-orange-500/20 hover:scale-105 active:scale-95'
+                                            }`}
+                                    >
+                                        {sending ? (
+                                            <span className="material-icons animate-spin">sync</span>
+                                        ) : (
+                                            <span className="material-icons transform -rotate-45">send</span>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </>

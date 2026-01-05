@@ -55,7 +55,26 @@ interface PlatformReviewsPageProps {
 }
 
 export const PlatformReviewsPage: React.FC<PlatformReviewsPageProps> = ({ reviews: backendReviews, onBack }) => {
-    const displayReviews = (backendReviews || []).map(rev => ({
+    const allReviews = backendReviews || [];
+    const ratingValues = allReviews
+        .map((r) => Number(r.platform_rating ?? r.rating))
+        .filter((n) => Number.isFinite(n) && n > 0);
+    const averageRating = ratingValues.length
+        ? Math.round((ratingValues.reduce((acc, n) => acc + n, 0) / ratingValues.length) * 10) / 10
+        : null;
+    const totalReviews = allReviews.length;
+    const distributionBase = ratingValues.length;
+    const distribution = ratingValues.reduce((acc, value) => {
+        const star = Math.min(5, Math.max(1, Math.round(value)));
+        acc[star] = (acc[star] || 0) + 1;
+        return acc;
+    }, {} as Record<number, number>);
+    const getStarPercent = (star: number) => {
+        if (!distributionBase) return 0;
+        return Math.round(((distribution[star] || 0) / distributionBase) * 100);
+    };
+
+    const displayReviews = allReviews.map(rev => ({
         name: rev.user_name || 'Verified Buyer',
         rating: rev.platform_rating || rev.rating,
         date: rev.created_at ? new Date(rev.created_at).toLocaleDateString() : 'Recent',
@@ -104,7 +123,7 @@ export const PlatformReviewsPage: React.FC<PlatformReviewsPageProps> = ({ review
                                     <span className="text-xs font-black uppercase tracking-[0.2em] opacity-60">Global Rating</span>
                                 </div>
                                 <div className="space-y-1">
-                                    <div className="text-8xl font-black tracking-tighter">4.9</div>
+                                    <div className="text-8xl font-black tracking-tighter">{averageRating !== null ? averageRating.toFixed(1) : '—'}</div>
                                     <div className="flex items-center gap-2">
                                         <div className="flex text-orange-400">
                                             {[...Array(5)].map((_, i) => (
@@ -123,7 +142,7 @@ export const PlatformReviewsPage: React.FC<PlatformReviewsPageProps> = ({ review
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-zinc-800 text-center">
-                                <div className="text-4xl font-black text-gray-900 dark:text-white mb-2">50K+</div>
+                                <div className="text-4xl font-black text-gray-900 dark:text-white mb-2">{totalReviews.toLocaleString()}</div>
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Verified Reviews</p>
                             </div>
                             <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-zinc-800 text-center">
@@ -139,12 +158,12 @@ export const PlatformReviewsPage: React.FC<PlatformReviewsPageProps> = ({ review
                                 <div key={star} className="space-y-2">
                                     <div className="flex justify-between items-center text-[10px] font-black">
                                         <span className="text-gray-900 dark:text-white uppercase tracking-widest">{star} Stars</span>
-                                        <span className="text-gray-400">{star === 5 ? '85%' : star === 4 ? '10%' : '2%'}</span>
+                                        <span className="text-gray-400">{getStarPercent(star)}%</span>
                                     </div>
                                     <div className="h-2 bg-gray-50 dark:bg-zinc-800 rounded-full overflow-hidden">
                                         <div
                                             className="h-full bg-gradient-to-r from-orange-400 to-primary rounded-full transition-all duration-1000"
-                                            style={{ width: star === 5 ? '85%' : star === 4 ? '10%' : '2%' }}
+                                            style={{ width: `${getStarPercent(star)}%` }}
                                         />
                                     </div>
                                 </div>

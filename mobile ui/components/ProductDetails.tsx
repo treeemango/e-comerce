@@ -47,7 +47,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [isLoadingRelated, setIsLoadingRelated] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
     const [isFollowLoading, setIsFollowLoading] = useState(false);
-    const [followerCount, setFollowerCount] = useState(0);
+    const [followerCount, setFollowerCount] = useState(() => Number(product.vendor?.follower_count ?? 0));
     const [vendorInfo, setVendorInfo] = useState<VendorInfo | null>(null); // Live RPC vendor data
     const [useCaseItems, setUseCaseItems] = useState<Product[]>([]);
 
@@ -230,6 +230,9 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     // Check wishlist & follow status on mount, and fetch live vendor metrics
     useEffect(() => {
         const checkStatuses = async () => {
+            const baselineFollowerCount = Number(product.vendor?.follower_count ?? 0);
+            setFollowerCount(baselineFollowerCount);
+
             if (product.id && user?.id) {
                 const [inWishlist, followStatus] = await Promise.all([
                     isInWishlist(user.id, product.id.toString()),
@@ -238,7 +241,11 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 setIsWishlisted(inWishlist);
                 if (followStatus) {
                     setIsFollowing(followStatus.is_following);
-                    setFollowerCount(followStatus.follower_count);
+                    const rawCount = (followStatus as any).follower_count;
+                    const parsedCount = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+                    if (rawCount !== null && rawCount !== undefined && Number.isFinite(parsedCount)) {
+                        setFollowerCount(Math.max(baselineFollowerCount, parsedCount));
+                    }
                 }
             } else {
                 setIsWishlisted(false);
@@ -271,7 +278,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
         checkStatuses();
         fetchLiveVendorData();
-    }, [product.id, user?.id, product.vendor?.vendor_id, product.seller_id]);
+    }, [product.id, user?.id, product.vendor?.vendor_id, product.vendor?.follower_count, product.seller_id]);
 
     // Fetch product attributes
     useEffect(() => {

@@ -324,31 +324,49 @@ const LightningDealCard: React.FC<{
             <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">RRP {convertedValues?.[`deal-rrp-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.rrp, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.rrp.toFixed(2)}`)}</p>
           )}
         </div>
-        {(!deal.listing_type || deal.listing_type === 'direct_purchase') && (
-          <button
-            className={`relative h-10 rounded-lg px-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAdded
-              ? 'bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-600'
-              : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (loading || !onAddToCart) return;
+        <button
+          className={`relative h-10 rounded-lg px-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAdded
+              ? 'bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-600 focus:ring-emerald-500'
+              : deal.listing_type === 'reservation'
+                ? 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 focus:ring-blue-500'
+                : deal.listing_type === 'inquiry'
+                  ? 'bg-purple-500 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-700 focus:ring-purple-500'
+                  : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 focus:ring-orange-500'
+            }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (loading) return;
+            if (deal.listing_type === 'reservation' || deal.listing_type === 'inquiry') {
+              // For reservation/inquiry, open product detail
+              if (productPayload) onProductClick?.(productPayload);
+            } else if (onAddToCart) {
               onAddToCart(deal);
               setIsAdded(true);
               if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
               addedTimerRef.current = setTimeout(() => setIsAdded(false), 1800);
-            }}
-            disabled={loading || !onAddToCart}
-            type="button"
-          >
-            {loading ? '...' : isAdded ? (
-              <span className="inline-flex items-center gap-1">
-                <span className="material-icons text-[16px] leading-none">check_circle</span>
-                Added
-                <span className="absolute inset-0 rounded-lg ring-2 ring-emerald-400/60 animate-ping" aria-hidden />
-              </span>
-            ) : 'Add'}
-          </button>
-        )}
+            }
+          }}
+          disabled={loading}
+          type="button"
+        >
+          {loading ? '...' : isAdded ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="material-icons text-[16px] leading-none">check_circle</span>
+              Added
+              <span className="absolute inset-0 rounded-lg ring-2 ring-emerald-400/60 animate-ping" aria-hidden />
+            </span>
+          ) : deal.listing_type === 'reservation' ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="material-icons text-[16px] leading-none">event_available</span>
+              Reserve
+            </span>
+          ) : deal.listing_type === 'inquiry' ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="material-icons text-[16px] leading-none">chat</span>
+              Inquire
+            </span>
+          ) : 'Add'}
+        </button>
       </div>
     </article>
   );

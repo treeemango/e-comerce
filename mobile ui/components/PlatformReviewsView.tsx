@@ -49,7 +49,26 @@ interface PlatformReviewsViewProps {
 }
 
 export const PlatformReviewsView: React.FC<PlatformReviewsViewProps> = ({ onBack, reviews: backendReviews }) => {
-    const displayReviews = backendReviews || [];
+    const allReviews = backendReviews || [];
+    const ratingValues = allReviews
+        .map((r) => Number(r.platform_rating ?? r.rating))
+        .filter((n) => Number.isFinite(n) && n > 0);
+    const averageRating = ratingValues.length
+        ? Math.round((ratingValues.reduce((acc, n) => acc + n, 0) / ratingValues.length) * 10) / 10
+        : null;
+    const totalReviews = allReviews.length;
+    const distributionBase = ratingValues.length;
+    const distribution = ratingValues.reduce((acc, value) => {
+        const star = Math.min(5, Math.max(1, Math.round(value)));
+        acc[star] = (acc[star] || 0) + 1;
+        return acc;
+    }, {} as Record<number, number>);
+    const getStarPercent = (star: number) => {
+        if (!distributionBase) return 0;
+        return Math.round(((distribution[star] || 0) / distributionBase) * 100);
+    };
+
+    const displayReviews = allReviews;
 
     return (
         <div className="fixed inset-0 z-50 bg-[#F8F9FB] dark:bg-black/95 flex flex-col h-full overflow-hidden safe-top">
@@ -87,7 +106,7 @@ export const PlatformReviewsView: React.FC<PlatformReviewsViewProps> = ({ onBack
                                     <span className="material-icons text-white/80">auto_awesome</span>
                                     <span className="text-xs font-bold uppercase tracking-widest opacity-80">Our Pride</span>
                                 </div>
-                                <div className="text-5xl font-black tracking-tight mb-2">4.9/5</div>
+                                <div className="text-5xl font-black tracking-tight mb-2">{averageRating !== null ? `${averageRating.toFixed(1)}/5` : '—/5'}</div>
                                 <p className="text-sm font-medium text-white/80 max-w-[200px]">Most trusted Pan-African shopping destination.</p>
                             </div>
                             {/* Background Decorations */}
@@ -96,7 +115,7 @@ export const PlatformReviewsView: React.FC<PlatformReviewsViewProps> = ({ onBack
                         </div>
 
                         <div className="bg-white dark:bg-zinc-900 rounded-[32px] p-5 shadow-sm border border-gray-100 dark:border-zinc-800 flex flex-col justify-center text-center">
-                            <div className="text-2xl font-black text-gray-900 dark:text-white mb-1 tracking-tight">50K+</div>
+                            <div className="text-2xl font-black text-gray-900 dark:text-white mb-1 tracking-tight">{totalReviews.toLocaleString()}</div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Verified Reviews</p>
                         </div>
 
@@ -116,11 +135,11 @@ export const PlatformReviewsView: React.FC<PlatformReviewsViewProps> = ({ onBack
                                     <div className="flex-1 h-2 bg-gray-50 dark:bg-zinc-800 rounded-full overflow-hidden">
                                         <div
                                             className="h-full bg-gradient-to-r from-orange-400 to-primary rounded-full"
-                                            style={{ width: star === 5 ? '85%' : star === 4 ? '10%' : '2%' }}
+                                            style={{ width: `${getStarPercent(star)}%` }}
                                         />
                                     </div>
                                     <span className="text-[10px] font-bold text-gray-400 w-8 text-right">
-                                        {star === 5 ? '85%' : star === 4 ? '10%' : '2%'}
+                                        {getStarPercent(star)}%
                                     </span>
                                 </div>
                             ))}

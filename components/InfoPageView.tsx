@@ -68,13 +68,41 @@ const InfoPageView: React.FC<InfoPageViewProps> = ({ slug, onClose, onNavigate }
                         className="flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
                     >
                         <span className="material-icons">arrow_back</span>
-                        <span className="font-medium">Back to Shopping</span>
+                        <span className="font-medium">
+                            <span className="sm:hidden">Back</span>
+                            <span className="hidden sm:inline">Back to Shopping</span>
+                        </span>
                     </button>
                     <div className="flex items-center gap-2">
                         <span className="material-icons text-orange-500">shopping_bag</span>
                         <span className="font-bold text-lg tracking-tight">JuaExpress <span className="text-gray-400 font-normal text-sm ml-2">Help Center</span></span>
                     </div>
-                    <div className="w-24"></div> {/* Spacer */}
+                    <div className="w-12 sm:w-24"></div> {/* Spacer */}
+                </div>
+            </div>
+
+            {/* Mobile Navigation */}
+            <div className="lg:hidden sticky top-16 z-10 bg-white/90 backdrop-blur-md border-b border-gray-100">
+                <div className="max-w-screen-2xl mx-auto px-4 py-3">
+                    <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Navigate</span>
+                        <div className="flex-1 overflow-x-auto">
+                            <div className="flex gap-2 flex-nowrap pr-2">
+                                {navItems.map((item) => (
+                                    <button
+                                        key={item.slug}
+                                        onClick={() => onNavigate(item.slug)}
+                                        className={`whitespace-nowrap px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-widest transition-colors ${slug === item.slug
+                                            ? 'bg-orange-50 text-orange-600'
+                                            : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-black'
+                                            }`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -103,11 +131,11 @@ const InfoPageView: React.FC<InfoPageViewProps> = ({ slug, onClose, onNavigate }
                     <div className="lg:col-span-3 max-w-4xl">
                         {/* Page Header */}
                         <div className="mb-12">
-                            <h1 className="text-4xl lg:text-5xl font-extrabold text-[#222] mb-4 tracking-tight">
+                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#222] mb-4 tracking-tight">
                                 {page.title}
                             </h1>
                             {page.subtitle && (
-                                <p className="text-xl text-gray-500 font-medium">
+                                <p className="text-lg sm:text-xl text-gray-500 font-medium">
                                     {page.subtitle}
                                 </p>
                             )}
@@ -137,10 +165,10 @@ const InfoPageView: React.FC<InfoPageViewProps> = ({ slug, onClose, onNavigate }
                                             </div>
                                         )}
                                         <div className="flex-1">
-                                            <h2 className="text-2xl font-bold text-[#222] mb-3">
+                                            <h2 className="text-xl sm:text-2xl font-bold text-[#222] mb-3">
                                                 {section.title}
                                             </h2>
-                                            <div className="text-gray-600 leading-relaxed text-lg space-y-4">
+                                            <div className="text-gray-600 leading-relaxed text-base sm:text-lg space-y-4">
                                                 {section.content.split('\n').map((para, pIdx) => (
                                                     <p key={pIdx}>{para}</p>
                                                 ))}
@@ -157,7 +185,7 @@ const InfoPageView: React.FC<InfoPageViewProps> = ({ slug, onClose, onNavigate }
                         {/* CTA for Trust */}
                         <div className="mt-20 p-8 rounded-3xl bg-gradient-to-br from-[#222] to-black text-white relative overflow-hidden">
                             <div className="relative z-10">
-                                <h3 className="text-2xl font-bold mb-4">Still have questions?</h3>
+                                <h3 className="text-xl sm:text-2xl font-bold mb-4">Still have questions?</h3>
                                 <p className="text-gray-400 mb-6 max-w-lg">
                                     Our support team is available 24/7 to help you with any inquiries regarding our platform, shipping, or security.
                                 </p>

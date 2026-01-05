@@ -29,7 +29,6 @@ export interface EventBannerData {
 
 // Trust badges for hero section
 export const TRUST_BADGES = [
-    { icon: 'star', text: '4.9 Rating', color: '#fbbf24' },
     { icon: 'local_shipping', text: 'Free Delivery Over KSh 5K', color: '#22c55e' },
     { icon: 'lock', text: 'Secure Checkout', color: '#3b82f6' }
 ];

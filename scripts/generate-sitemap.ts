@@ -64,13 +64,14 @@ function xmlEscape(value: string): string {
 }
 
 function slugifyCategoryName(name: string): string {
-  // Preserve existing slugs like "mobile-&-smart-phones" if present in DB.
-  // When slug missing, fall back to a conservative slugification.
+  // Convert category name to URL-safe slug
+  // Replace '&' with 'and' for better URL structure
   return name
     .trim()
     .toLowerCase()
+    .replace(/&/g, 'and')
     .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9\-_.~&]+/g, '-')
+    .replace(/[^a-z0-9\-_.~]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 }

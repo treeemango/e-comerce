@@ -358,8 +358,9 @@ export const fetchDealsProducts = async (
                 : (item as any).product_review_summary;
             const ratingFromSummary = (item as any).average_rating ?? summary?.average_rating;
             const reviewsFromSummary = (item as any).total_reviews ?? summary?.total_reviews;
-            const originalPrice = item.original_price ?? item.current_price ?? item.price ?? 0;
+            const originalPrice = item.originalPrice ?? item.original_price ?? item.current_price ?? item.price ?? 0;
             const price = item.current_price ?? item.price ?? originalPrice;
+            const discountPercent = item.discount_percent ?? (originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
             const galleryMedia: GalleryMediaItem[] = Array.isArray(item.gallery)
                 ? item.gallery.map((media: any, idx: number) => ({
                     id: media.id ?? `${item.id}-media-${idx}`,
@@ -390,7 +391,7 @@ export const fetchDealsProducts = async (
                 originalPrice,
                 promoText: undefined,
                 promoCode: undefined,
-                discountPercent: item.discount_percent,
+                discountPercent,
                 currency: item.currency,
                 seller_id: item.seller_id || item.vendor_id || undefined,
                 rating: item.rating || 0,
@@ -4578,8 +4579,8 @@ export interface FollowToggleResponse {
 
 export interface FollowStatusResponse {
     is_following: boolean;
-    follower_count: number;
-    followed_at: string | null;
+    follower_count?: number | null;
+    followed_at?: string | null;
 }
 
 export interface PaginatedFollowedStores {
@@ -5129,7 +5130,7 @@ export const findConversationId = async (params: {
     }
 };
 
-export const getConversations = async (userId: string, includeSupport: boolean = false): Promise<Conversation[]> => {
+export const getConversations = async (userId: string, includeSupport: boolean = false, role?: 'buyer' | 'seller'): Promise<Conversation[]> => {
     try {
         const { data, error } = await supabase.rpc('get_user_conversations', {
             p_user_id: userId
@@ -5141,13 +5142,24 @@ export const getConversations = async (userId: string, includeSupport: boolean =
             console.log('getConversations raw first item:', data[0]);
         }
 
-        const filteredData = (data || []).filter((c: any) => {
+        let filteredData = (data || []).filter((c: any) => {
             if (!includeSupport && c.subject === 'Support Request') return false;
             return true;
         });
 
+        // Apply role-based filtering if specified
+        if (role === 'buyer') {
+            filteredData = filteredData.filter((c: any) => c.buyer_id === userId || c.buyer_uid === userId || c.buyer === userId);
+        } else if (role === 'seller') {
+            filteredData = filteredData.filter((c: any) => c.seller_id === userId || c.seller_uid === userId || c.seller === userId);
+        }
+
         return filteredData.map((c: any) => {
-            const isSeller = c.seller_id === userId;
+            const isSeller = role === 'seller'
+                ? true
+                : role === 'buyer'
+                    ? false
+                    : (c.seller_id === userId || c.seller_uid === userId || c.seller === userId);
             // Handle field mismatches from different backend versions
             const id = c.id || c.conversation_id;
             const lastMessage = c.last_message || c.latest_message_content;
@@ -5224,6 +5236,40 @@ export const markMessagesRead = async (
     return true;
 };
 
+// ------------------------------------------------------------------
+// Presence (Online/Last Seen)
+// ------------------------------------------------------------------
+
+export const touchUserLastSeen = async (): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('touch_user_last_seen');
+    if (error) {
+        console.error('Error updating last seen:', error);
+        return false;
+    }
+    return Boolean(data);
+};
+
+export const getUsersLastSeen = async (userIds: string[]): Promise<Record<string, string | null>> => {
+    const result: Record<string, string | null> = {};
+    const ids = Array.from(new Set(userIds.filter(Boolean)));
+    if (ids.length === 0) return result;
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('id,last_seen_at')
+        .in('id', ids);
+
+    if (error) {
+        console.error('Error fetching users last seen:', error);
+        return result;
+    }
+
+    for (const row of (data || []) as any[]) {
+        result[String(row.id)] = row.last_seen_at ?? null;
+    }
+    return result;
+};
+
 /**
  * Ensures a support conversation exists between a seller and an admin.
  * If one doesn't exist, it creates it.
@@ -5275,13 +5321,14 @@ export const getConversationParticipants = async (conversationId: string): Promi
         .from('conversations')
         .select('seller_id, buyer_id')
         .eq('id', conversationId)
-        .single();
+        .limit(1);
 
     if (error) {
         console.error('Error fetching conversation participants:', error);
         return null;
     }
-    return data;
+
+    return (data && data.length > 0) ? (data[0] as any) : null;
 };
 
 // ------------------------------------------------------------------
@@ -7086,7 +7133,7 @@ export const fetchSellerOrders = async (sellerId: string) => {
 export const fetchSellerConversations = async (sellerId: string) => {
     // This overlaps with getConversations but specifically for seller dashboard view
     // We include support conversations here so sellers can see their admin chats
-    return getConversations(sellerId, true);
+    return getConversations(sellerId, true, 'seller');
 };
 
 export const fetchSellerConversationMessages = async (conversationId: string, sellerId?: string) => {
@@ -7104,11 +7151,21 @@ export const markSellerMessagesAsRead = async (conversationId: string, sellerId?
     return markMessagesRead(conversationId, userId);
 };
 
-export const getMessageAttachmentUrl = (path: string) => {
-    const { data } = supabase.storage
-        .from('message-attachments')
-        .getPublicUrl(path);
-    return data.publicUrl;
+export const getMessageAttachmentUrl = async (path: string): Promise<string> => {
+    const p = (path || '').trim().replace(/^\/+/, '');
+    const stripped = p.startsWith('message-attachments/') ? p.slice('message-attachments/'.length) : p;
+    const candidates = Array.from(new Set([p, stripped].filter(Boolean)));
+
+    for (const candidate of candidates) {
+        const { data, error } = await supabase.storage
+            .from('message-attachments')
+            .createSignedUrl(candidate, 3600);
+
+        if (!error && data?.signedUrl) return data.signedUrl;
+    }
+
+    console.error('Error creating signed URL for attachment:', { path, candidates });
+    return '';
 };
 
 export const updateProductDetails = async (productId: string | number, updates: {
@@ -8315,7 +8372,3 @@ export const applyReferralCode = async (code: string): Promise<boolean> => {
         return false;
     }
 };
-
-
-
-

@@ -482,6 +482,7 @@ export interface User {
     created_at?: string;
     account_status?: string;
     banned_until?: string;
+    last_seen_at?: string;
 }
 
 export interface AuthError {
@@ -541,8 +542,10 @@ export interface Message {
     sender_id: string;
     receiver_id: string;
     content: string;
+    metadata?: any;
     is_read: boolean;
     created_at: string;
+    attachments?: MessageAttachment[];
 }
 
 export interface Conversation {

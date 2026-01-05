@@ -260,7 +260,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                   <span className="text-[16px]">🔥</span>
                   <span className="text-xs font-bold">HOT DEAL</span>
                 </div>
-                {computedDiscountPercent && (
+                {(computedDiscountPercent || 0) > 0 && (
                   <div className="text-xl font-black text-center leading-none mt-0.5">
                     -{computedDiscountPercent}%
                   </div>
@@ -341,22 +341,32 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
                 </div>
               )}
             </div>
-            {(!product.listing_type || product.listing_type === 'direct_purchase') && (
-              <button
-                className={`h-8 w-8 flex items-center justify-center rounded-full border transition-all shadow-sm ${product.deal_type === 'coupon'
-                  ? 'border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white dark:border-orange-400 dark:text-orange-400'
-                  : product.deal_type === 'hot_discount'
-                    ? 'border-red-500 text-red-600 hover:bg-red-500 hover:text-white dark:border-red-400 dark:text-red-400'
-                    : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-shop-red hover:text-white hover:border-shop-red dark:hover:bg-shop-red'
-                  }`}
-                onClick={(e) => {
-                  e.stopPropagation();
+            <button
+              className={`h-8 w-8 flex items-center justify-center rounded-full border transition-all shadow-sm ${product.listing_type === 'reservation'
+                ? 'border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white dark:border-blue-400 dark:text-blue-400'
+                : product.listing_type === 'inquiry'
+                  ? 'border-purple-500 text-purple-600 hover:bg-purple-500 hover:text-white dark:border-purple-400 dark:text-purple-400'
+                  : product.deal_type === 'coupon'
+                    ? 'border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white dark:border-orange-400 dark:text-orange-400'
+                    : product.deal_type === 'hot_discount'
+                      ? 'border-red-500 text-red-600 hover:bg-red-500 hover:text-white dark:border-red-400 dark:text-red-400'
+                      : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-shop-red hover:text-white hover:border-shop-red dark:hover:bg-shop-red'
+                }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (product.listing_type === 'reservation' || product.listing_type === 'inquiry') {
+                  // For reservation/inquiry, clicking opens the product detail
+                  if (onProductClick) onProductClick(product);
+                } else {
                   if (onAddToCart) onAddToCart(product, e);
-                }}
-              >
-                <span className="material-symbols-outlined !text-xl">add_shopping_cart</span>
-              </button>
-            )}
+                }
+              }}
+              title={product.listing_type === 'reservation' ? 'Reserve' : product.listing_type === 'inquiry' ? 'Inquire' : 'Add to Cart'}
+            >
+              <span className="material-symbols-outlined !text-xl">
+                {product.listing_type === 'reservation' ? 'event_available' : product.listing_type === 'inquiry' ? 'chat' : 'add_shopping_cart'}
+              </span>
+            </button>
           </div>
 
           {/* Strike price and discount info - only show activeCoupon when NOT already displayed as deal_type badge */}
