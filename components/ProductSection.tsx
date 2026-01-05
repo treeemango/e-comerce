@@ -305,7 +305,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   const sortedNavbarCategories = useMemo<NavbarCategory[]>(() => {
-    const deduped = navbarCategoriesData.reduce<Map<string, NavbarCategory>>((map, cat) => {
+    const deduped = (navbarCategoriesData || []).reduce<Map<string, NavbarCategory>>((map, cat: NavbarCategory) => {
       const existing = map.get(cat.category_id);
       if (!existing) {
         map.set(cat.category_id, cat);

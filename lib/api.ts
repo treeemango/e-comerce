@@ -1,5 +1,18 @@
 import { supabase } from './supabase';
-import { Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile, TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload, SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress, PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand, ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem, GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent, OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest, DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences, SellerStats, SellerOrderSummary, SellerAnalyticsSummary, RelatedProduct } from '@/types';
+import {
+    Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile,
+    TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload,
+    SellerOrder, BuyerOrder, PromoCoupon, UserCoupon, ReturnRequest, SellerTransaction, ShippingTemplate, SellerAddress,
+    PromotionalCampaign, OrderReport, OrderFileUpload, SellerProfileExtended, ShopifyVertical, ShopifyCategory, ShopifyBrand,
+    ShopifyAttribute, AttributeOption, AdminPermissions, AdminGranularPermissions, User, Conversation, Message, MediaItem,
+    GalleryMediaItem, ProductStatus, AutomaticDiscount, QuantityDiscountTier, SellerPayout, AffiliateCommission, OrderTrackingEvent,
+    OrderIssue, OrderDeliverySchedule, NavbarCategory, PersonalizedNavbarCategory, SellerBalanceSummary, PayoutRequest,
+    DeliveryAssignment, DeliveryZone, PlatformRevenueAnalytics, VerificationQueueItem, BuyerNotificationPreferences,
+    SellerStats, SellerOrderSummary, SellerAnalyticsSummary, RelatedProduct,
+    AdminDashboardStats, PendingProduct, SellerVerificationRequest, AdminActivityLog,
+    Review, ReviewFilters, ProductReviewSummary, SubmitReviewData,
+    FollowedStore, HeroSlide
+} from '@/types';
 
 export type { NavbarCategory, PersonalizedNavbarCategory };
 
@@ -2849,7 +2862,6 @@ export const fetchCategoryBySlug = async (slug: string): Promise<{ id: string | 
 };
 
 // Review System API Functions
-import { Review, ReviewFilters, ProductReviewSummary, SubmitReviewData } from '@/types';
 
 export const fetchProductReviews = async (
     productId: string,
@@ -4566,7 +4578,6 @@ export const submitReviewResponse = async (
 };
 
 // Followed Stores API Functions
-import { FollowedStore } from '@/types';
 
 export interface FollowToggleResponse {
     success: boolean;
@@ -5334,13 +5345,6 @@ export const getConversationParticipants = async (conversationId: string): Promi
 // ------------------------------------------------------------------
 // Admin Dashboard API Functions
 // ------------------------------------------------------------------
-
-import type {
-    AdminDashboardStats,
-    PendingProduct,
-    SellerVerificationRequest,
-    AdminActivityLog
-} from '@/types';
 
 // Admin Dashboard Stats
 // Admin Dashboard Stats
@@ -6134,8 +6138,6 @@ export async function exportAdminJson(): Promise<any[]> {
 // ------------------------------------------------------------------
 // Hero Slides API Functions
 // ------------------------------------------------------------------
-
-import type { HeroSlide } from '@/types';
 
 /**
  * Fetch active hero slides for public display (ordered by display_order)
