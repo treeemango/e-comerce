@@ -397,13 +397,15 @@ BEGIN
       FROM base_products bp
       LEFT JOIN trending_products tp ON bp.id = tp.product_id
       LEFT JOIN product_preferences pp ON bp.id = pp.product_id
-      WHERE p_user_param IS NULL OR bp.id NOT IN (
+      WHERE (p_user_param IS NULL OR bp.id NOT IN (
           SELECT DISTINCT oi.product_id
           FROM orders o 
           JOIN order_items oi ON o.id = oi.order_id
           WHERE o.user_id = p_user_param::UUID 
               AND o.status IN ('completed', 'shipped')
-      )
+      ))
+      -- Only include products with ACTUAL discounts (not standard products without deals)
+      AND bp.deal_type != 'standard'
       ORDER BY bp.id
   ),
   

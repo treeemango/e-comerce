@@ -2747,7 +2747,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
 
                     {currentStep === 4 && (
                         <div className="space-y-8 animate-fade-in">
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center flex-wrap gap-4 mb-2">
                                 <div>
                                     <h2 className="text-xl font-bold text-gray-900">SEO & Discovery</h2>
                                     <p className="text-sm text-gray-500">How buyers find your product through search and browsing.</p>
@@ -2762,6 +2762,7 @@ const AddProductView: React.FC<AddProductViewProps> = ({ sellerId, onCancel, onS
                                     {isGeneratingSEO ? 'Generating...' : 'Auto-Generate SEO'}
                                 </button>
                             </div>
+
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-6">

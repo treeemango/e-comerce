@@ -57,6 +57,80 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
 
+    const [resolvedProductImages, setResolvedProductImages] = useState<Map<string, string>>(new Map());
+
+    useEffect(() => {
+        const pid = selectedConversation?.product_id ? String(selectedConversation.product_id) : '';
+        const existing = selectedConversation?.product_image;
+        if (!pid) return;
+        if (existing) return;
+        if (resolvedProductImages.has(pid)) return;
+
+        let cancelled = false;
+        void (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('media')
+                    .select('image_url, is_main, position, created_at')
+                    .eq('product_id', pid)
+                    .order('is_main', { ascending: false })
+                    .order('position', { ascending: true, nullsFirst: false })
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (cancelled) return;
+                if (error) return;
+
+                const url = (data as any)?.[0]?.image_url || null;
+                if (!url) return;
+
+                setResolvedProductImages(prev => {
+                    const next = new Map(prev);
+                    next.set(pid, String(url));
+                    return next;
+                });
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedConversation?.product_id, selectedConversation?.product_image, resolvedProductImages]);
+
+    const selectedConversationProductImage = selectedConversation?.product_id
+        ? (selectedConversation.product_image || resolvedProductImages.get(String(selectedConversation.product_id)) || undefined)
+        : (selectedConversation?.product_image || undefined);
+
+    const openProduct = (productId?: string | null) => {
+        if (!productId) return;
+        window.dispatchEvent(
+            new CustomEvent('juax:notification-action', {
+                detail: { target: 'product', id: String(productId) }
+            })
+        );
+    };
+
+    const getMessageProductRef = (metadata: any): { id: string; title?: string; image?: string } | null => {
+        const m = metadata ?? {};
+        const id =
+            m.product_id ??
+            m.productId ??
+            m.productID ??
+            m.product?.id ??
+            m.product?.product_id ??
+            null;
+        if (!id) return null;
+
+        const fallbackImage = resolvedProductImages.get(String(id));
+        return {
+            id: String(id),
+            title: m.product_title ?? m.productTitle ?? m.product?.title ?? m.product?.name ?? undefined,
+            image: m.product_image ?? m.productImage ?? m.product?.image ?? m.product?.primary_image ?? fallbackImage ?? undefined
+        };
+    };
+
     // Auto-select conversation based on prop
     useEffect(() => {
         if (activeConversationId && conversations.length > 0) {
@@ -630,13 +704,26 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
         const contentToSend = text || 'Attachment';
         const receiverId = selectedConversation.seller_id === userId ? selectedConversation.buyer_id : selectedConversation.seller_id;
 
+        const productContext = selectedConversation?.product_id
+            ? {
+                product_id: String(selectedConversation.product_id),
+                product_title: selectedConversation.product_title || undefined,
+                product_image: selectedConversationProductImage
+            }
+            : null;
+
+        const messageMetadata = {
+            correlationId,
+            ...(productContext ? productContext : {})
+        };
+
         const optimisticMsg: Message = {
             id: correlationId,
             conversation_id: selectedConversation.id,
             sender_id: userId,
             receiver_id: receiverId,
             content: contentToSend,
-            metadata: { correlationId, optimistic: true },
+            metadata: { ...messageMetadata, optimistic: true },
             is_read: true,
             created_at: new Date().toISOString()
         };
@@ -661,7 +748,7 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
                     sender_id: userId,
                     receiver_id: receiverId || null,
                     content: contentToSend,
-                    metadata: { correlationId }
+                    metadata: messageMetadata
                 })
                 .select()
                 .single();
@@ -886,8 +973,8 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
             {selectedConversation.product_title && (
                 <div className="bg-white px-4 py-2 border-b border-gray-50 shadow-sm flex items-center gap-3">
                     <div className="w-10 h-10 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden border">
-                        {selectedConversation.product_image ? (
-                            <img src={selectedConversation.product_image} className="w-full h-full object-cover" />
+                        {selectedConversationProductImage ? (
+                            <img src={selectedConversationProductImage} className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <span className="material-icons text-xl">image</span>
@@ -900,7 +987,10 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
                             {selectedConversation.product_title}
                         </div>
                     </div>
-                    <button className="text-[10px] font-black text-white bg-black px-3 py-1.5 rounded-full uppercase tracking-tighter active:scale-95 transition-all">
+                    <button
+                        onClick={() => openProduct(selectedConversation.product_id)}
+                        className="text-[10px] font-black text-white bg-black px-3 py-1.5 rounded-full uppercase tracking-tighter active:scale-95 transition-all"
+                    >
                         View Product
                     </button>
                 </div>
@@ -917,6 +1007,7 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
                         {messages.map((msg, idx) => {
                             const isMe = msg.sender_id === userId;
                             const isPending = !!(msg as any)?.metadata?.optimistic;
+                            const productRef = getMessageProductRef((msg as any)?.metadata);
                             const showTime = idx === 0 || (new Date(msg.created_at).getTime() - new Date(messages[idx - 1].created_at).getTime() > 600000);
 
                             return (
@@ -967,6 +1058,49 @@ export const BuyerMessagesView: React.FC<BuyerMessagesViewProps> = ({ userId, on
                                                     })}
                                                 </div>
                                             ) : null}
+
+                                            {productRef && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openProduct(productRef.id)}
+                                                    className={cn(
+                                                        "w-full mb-2 text-left rounded-2xl border overflow-hidden",
+                                                        isMe ? "border-orange-300/30 bg-orange-500/10" : "border-gray-100 bg-white"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-3 p-3">
+                                                        <div className={cn(
+                                                            "w-12 h-12 rounded-xl overflow-hidden flex-shrink-0",
+                                                            isMe ? "bg-white/15" : "bg-gray-100"
+                                                        )}>
+                                                            {productRef.image ? (
+                                                                <img src={productRef.image} alt={productRef.title || 'Product'} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <div className={cn(
+                                                                    "w-full h-full flex items-center justify-center",
+                                                                    isMe ? "text-white/80" : "text-gray-300"
+                                                                )}>
+                                                                    <span className="material-icons text-xl">shopping_bag</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className={cn(
+                                                                "text-[10px] font-black uppercase tracking-widest",
+                                                                isMe ? "text-white/90" : "text-orange-500"
+                                                            )}>Product</div>
+                                                            <div className={cn(
+                                                                "text-sm font-black truncate",
+                                                                isMe ? "text-white" : "text-gray-900"
+                                                            )}>{productRef.title || 'View product'}</div>
+                                                        </div>
+                                                        <span className={cn(
+                                                            "material-icons text-lg",
+                                                            isMe ? "text-white/90" : "text-gray-400"
+                                                        )}>chevron_right</span>
+                                                    </div>
+                                                </button>
+                                            )}
 
                                             <div className={cn(
                                                 "px-4 py-3 rounded-[1.25rem] text-sm leading-relaxed shadow-sm",

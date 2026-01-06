@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { fetchSellerInventory, fetchSellerStats, fetchSellerAnalytics, fetchVendorFullProfile } from '../../lib/api';
-import { SellerInventoryItem, SellerStats, SellerAnalyticsSummary, VendorBadge } from '../../types';
+import { Product, SellerStats, SellerAnalyticsSummary, VendorBadge } from '../../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { useCurrencyConverter, formatPrice, getCurrencySymbol } from '@/lib/currency';
 import SellerPlatformFeedback from './SellerPlatformFeedback';
@@ -30,7 +30,7 @@ const BADGE_CONFIG: Record<string, { icon: string; label: string; bg: string; te
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
     const [stats, setStats] = useState<SellerStats | null>(null);
     const [analytics, setAnalytics] = useState<SellerAnalyticsSummary | null>(null);
-    const [recentInventory, setRecentInventory] = useState<SellerInventoryItem[]>([]);
+    const [recentInventory, setRecentInventory] = useState<Product[]>([]);
     const [badges, setBadges] = useState<VendorBadge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -68,9 +68,9 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
             vals.push({ id: `day-${idx}-sales`, amount: day.total_sales, currency: 'USD' });
         });
 
-        // Inventory prices
+        // Inventory prices - use each product's currency or default to the seller's preferred currency
         recentInventory.forEach((item, idx) => {
-            vals.push({ id: `inventory-${idx}`, amount: item.current_price, currency: 'GBP' });
+            vals.push({ id: `inventory-${idx}`, amount: item.price ?? 0, currency: item.currency || 'KES' });
         });
 
         return vals;
@@ -320,19 +320,34 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sellerId }) => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {recentInventory.slice(0, 5).map((item) => (
-                                    <tr key={item.variant_id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-3 font-medium text-gray-900">{item.product_title}</td>
-                                        <td className="px-6 py-3">{getConvertedPrice(`inventory-${recentInventory.indexOf(item)}`, item.current_price, 'GBP')}</td>
-                                        <td className="px-6 py-3">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.current_stock < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                                {item.current_stock}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-3">{item.total_sales_to_date}</td>
-                                        <td className="px-6 py-3 text-gray-500">Active</td>
-                                    </tr>
-                                ))}
+                                {recentInventory.slice(0, 5).map((item, idx) => {
+                                    const stockCount = item.stock ?? 0;
+                                    const soldCount = (item as any).sold_count ?? 0;
+                                    return (
+                                        <tr key={String(item.id)} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    {item.image && (
+                                                        <img src={item.image} alt={item.title} className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
+                                                    )}
+                                                    <span className="font-medium text-gray-900 line-clamp-1">{item.title || 'Untitled Product'}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-3">{getConvertedPrice(`inventory-${idx}`, item.price ?? 0, item.currency || 'KES')}</td>
+                                            <td className="px-6 py-3">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${stockCount < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                                    {stockCount}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-3 text-gray-700">{soldCount}</td>
+                                            <td className="px-6 py-3">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.status === 'approved' || item.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                    {item.status === 'approved' || item.status === 'active' ? 'Active' : (item.status || 'Pending')}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

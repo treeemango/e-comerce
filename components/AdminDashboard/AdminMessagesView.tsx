@@ -44,6 +44,8 @@ const AdminMessagesView: React.FC<AdminMessagesViewProps> = ({ adminId, permissi
     const [searchQuery, setSearchQuery] = useState('');
     const [otherLastSeenAt, setOtherLastSeenAt] = useState<string | null>(null);
 
+    const [resolvedProductImages, setResolvedProductImages] = useState<Map<string, string>>(new Map());
+
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [messageAttachments, setMessageAttachments] = useState<Map<string, MessageAttachment[]>>(new Map());
@@ -55,6 +57,96 @@ const AdminMessagesView: React.FC<AdminMessagesViewProps> = ({ adminId, permissi
     useEffect(() => {
         messageAttachmentsRef.current = messageAttachments;
     }, [messageAttachments]);
+
+    const openProduct = (productId?: string | null) => {
+        if (!productId) return;
+        window.dispatchEvent(
+            new CustomEvent('juax:notification-action', {
+                detail: { target: 'product', id: String(productId) }
+            })
+        );
+    };
+
+    const getMessageProductRef = (metadata: any): { id: string; title?: string; image?: string } | null => {
+        const m = metadata ?? {};
+        const id =
+            m.product_id ??
+            m.productId ??
+            m.productID ??
+            m.product?.id ??
+            m.product?.product_id ??
+            null;
+        if (!id) return null;
+
+        const fallbackImage = resolvedProductImages.get(String(id));
+        return {
+            id: String(id),
+            title: m.product_title ?? m.productTitle ?? m.product?.title ?? m.product?.name ?? undefined,
+            image: m.product_image ?? m.productImage ?? m.product?.image ?? m.product?.primary_image ?? fallbackImage ?? undefined
+        };
+    };
+
+    // Best-effort: resolve product images for cards when metadata lacks a thumbnail.
+    useEffect(() => {
+        const missingIds: string[] = [];
+
+        for (const msg of messages) {
+            const md = (msg as any)?.metadata ?? {};
+            const id =
+                md.product_id ??
+                md.productId ??
+                md.productID ??
+                md.product?.id ??
+                md.product?.product_id ??
+                null;
+            if (!id) continue;
+            const pid = String(id);
+
+            const hasImage = Boolean(md.product_image ?? md.productImage ?? md.product?.image ?? md.product?.primary_image);
+            if (hasImage) continue;
+            if (resolvedProductImages.has(pid)) continue;
+
+            missingIds.push(pid);
+        }
+
+        const unique = Array.from(new Set(missingIds)).slice(0, 6);
+        if (unique.length === 0) return;
+
+        let cancelled = false;
+        void (async () => {
+            for (const pid of unique) {
+                try {
+                    const { data, error } = await supabase
+                        .from('media')
+                        .select('image_url, is_main, position, created_at')
+                        .eq('product_id', pid)
+                        .order('is_main', { ascending: false })
+                        .order('position', { ascending: true, nullsFirst: false })
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+
+                    if (cancelled) return;
+                    if (error) continue;
+
+                    const url = (data as any)?.[0]?.image_url || null;
+                    if (!url) continue;
+
+                    setResolvedProductImages(prev => {
+                        if (prev.has(pid)) return prev;
+                        const next = new Map(prev);
+                        next.set(pid, String(url));
+                        return next;
+                    });
+                } catch {
+                    // ignore
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [messages, resolvedProductImages]);
 
     const fetchAttachmentsWithRetry = (messageId: string) => {
         if (!messageId) return;
@@ -380,7 +472,24 @@ const AdminMessagesView: React.FC<AdminMessagesViewProps> = ({ adminId, permissi
             // Use the existing sendMessage API function
             const correlationId = `cid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const contentToSend = text || 'Attachment';
-            const success = await sendMessage(selectedConversation.id, adminId, selectedConversation.user_id, contentToSend, { correlationId });
+
+            // If this thread already has product context in any prior message metadata,
+            // carry it forward so the product card stays visible in admin replies.
+            const lastProduct = [...messages]
+                .reverse()
+                .map(m => getMessageProductRef((m as any)?.metadata))
+                .find(Boolean) as { id: string; title?: string; image?: string } | undefined;
+
+            const lastProductImage = lastProduct?.id
+                ? (lastProduct.image || resolvedProductImages.get(String(lastProduct.id)) || undefined)
+                : (lastProduct?.image || undefined);
+
+            const messageMetadata = {
+                correlationId,
+                ...(lastProduct ? { product_id: lastProduct.id, product_title: lastProduct.title, product_image: lastProductImage } : {})
+            };
+
+            const success = await sendMessage(selectedConversation.id, adminId, selectedConversation.user_id, contentToSend, messageMetadata);
 
             if (!success) throw new Error('Failed to send message');
 
@@ -590,6 +699,7 @@ const AdminMessagesView: React.FC<AdminMessagesViewProps> = ({ adminId, permissi
                                 messages.map((message) => {
                                     const isAdmin = message.sender_id === adminId;
                                     const atts = messageAttachments.get(String(message.id)) || [];
+                                    const productRef = getMessageProductRef((message as any)?.metadata);
                                     return (
                                         <div key={message.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[70%] ${isAdmin ? 'order-2' : 'order-1'}`}>
@@ -597,6 +707,30 @@ const AdminMessagesView: React.FC<AdminMessagesViewProps> = ({ adminId, permissi
                                                     ? 'bg-blue-500 text-white'
                                                     : 'bg-gray-100 text-gray-900'
                                                     }`}>
+                                                    {productRef && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openProduct(productRef.id)}
+                                                            className={`w-full mb-2 text-left rounded-lg border overflow-hidden ${isAdmin ? 'border-white/30 bg-white/10 hover:bg-white/15' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                                                        >
+                                                            <div className="flex items-center gap-3 p-3">
+                                                                <div className={`w-12 h-12 rounded-md overflow-hidden flex-shrink-0 ${isAdmin ? 'bg-white/15' : 'bg-gray-100'}`}>
+                                                                    {productRef.image ? (
+                                                                        <img src={productRef.image} alt={productRef.title || 'Product'} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <div className={`w-full h-full flex items-center justify-center ${isAdmin ? 'text-white/80' : 'text-gray-300'}`}>
+                                                                            <span className="material-icons text-xl">shopping_bag</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${isAdmin ? 'text-white/80' : 'text-blue-600'}`}>Product</div>
+                                                                    <div className={`text-sm font-semibold truncate ${isAdmin ? 'text-white' : 'text-gray-900'}`}>{productRef.title || 'View product'}</div>
+                                                                </div>
+                                                                <span className={`material-icons text-lg ${isAdmin ? 'text-white/90' : 'text-gray-400'}`}>chevron_right</span>
+                                                            </div>
+                                                        </button>
+                                                    )}
                                                     <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
 
                                                     {atts.length > 0 && (

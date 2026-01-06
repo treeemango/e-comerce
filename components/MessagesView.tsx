@@ -45,6 +45,80 @@ interface MessagesViewProps {
 const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId, compactMode = false }) => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+
+    const [resolvedProductImages, setResolvedProductImages] = useState<Map<string, string>>(new Map());
+
+    useEffect(() => {
+        const pid = selectedConversation?.product_id ? String(selectedConversation.product_id) : '';
+        const existing = selectedConversation?.product_image;
+        if (!pid) return;
+        if (existing) return;
+        if (resolvedProductImages.has(pid)) return;
+
+        let cancelled = false;
+        void (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('media')
+                    .select('image_url, is_main, position, created_at')
+                    .eq('product_id', pid)
+                    .order('is_main', { ascending: false })
+                    .order('position', { ascending: true, nullsFirst: false })
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (cancelled) return;
+                if (error) return;
+
+                const url = (data as any)?.[0]?.image_url || null;
+                if (!url) return;
+
+                setResolvedProductImages(prev => {
+                    const next = new Map(prev);
+                    next.set(pid, String(url));
+                    return next;
+                });
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedConversation?.product_id, selectedConversation?.product_image, resolvedProductImages]);
+
+    const selectedConversationProductImage = selectedConversation?.product_id
+        ? (selectedConversation.product_image || resolvedProductImages.get(String(selectedConversation.product_id)) || undefined)
+        : (selectedConversation?.product_image || undefined);
+
+    const openProduct = (productId?: string | null) => {
+        if (!productId) return;
+        window.dispatchEvent(
+            new CustomEvent('juax:notification-action', {
+                detail: { target: 'product', id: String(productId) }
+            })
+        );
+    };
+
+    const getMessageProductRef = (metadata: any): { id: string; title?: string; image?: string } | null => {
+        const m = metadata ?? {};
+        const id =
+            m.product_id ??
+            m.productId ??
+            m.productID ??
+            m.product?.id ??
+            m.product?.product_id ??
+            null;
+
+        if (!id) return null;
+        const fallbackImage = resolvedProductImages.get(String(id));
+        return {
+            id: String(id),
+            title: m.product_title ?? m.productTitle ?? m.product?.title ?? m.product?.name ?? undefined,
+            image: m.product_image ?? m.productImage ?? m.product?.image ?? m.product?.primary_image ?? fallbackImage ?? undefined
+        };
+    };
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -513,6 +587,19 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
         const tempId = `temp-${correlationId}`;
         const contentToSend = messageContent || 'Attachment';
 
+        const productContext = selectedConversation?.product_id
+            ? {
+                product_id: String(selectedConversation.product_id),
+                product_title: selectedConversation.product_title || undefined,
+                product_image: selectedConversationProductImage || undefined
+            }
+            : null;
+
+        const messageMetadata = {
+            correlationId,
+            ...(productContext ? productContext : {})
+        };
+
         // Optimistic update
         const optimisticMessage: Message = {
             id: tempId,
@@ -525,7 +612,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
         };
 
         // Attach correlation id in optimistic message metadata so realtime insertion can match it
-        (optimisticMessage as any).metadata = { correlationId };
+        (optimisticMessage as any).metadata = messageMetadata;
 
         if (filesToUpload.length > 0) {
             const localAttachments: MessageAttachment[] = filesToUpload.map((file, idx) => {
@@ -616,7 +703,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
                     sender_id: user.id,
                     receiver_id: receiverId || null,
                     content: contentToSend,
-                    metadata: { correlationId }
+                    metadata: messageMetadata
                 })
                 .select()
                 .single();
@@ -843,6 +930,32 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
                                 <span className="material-icons">settings</span>
                             </button>
                         </div>
+                        {selectedConversation.product_title && (
+                            <div className="px-6 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-900 overflow-hidden border border-gray-200 dark:border-gray-700 flex-shrink-0">
+                                    {selectedConversationProductImage ? (
+                                        <img src={selectedConversationProductImage} alt={selectedConversation.product_title} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600">
+                                            <span className="material-icons text-xl">image</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest">Inquiry About</div>
+                                    <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{selectedConversation.product_title}</div>
+                                </div>
+                                {selectedConversation.product_id && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openProduct(selectedConversation.product_id)}
+                                        className="text-xs font-bold text-white bg-black px-4 py-2 rounded-full hover:opacity-90"
+                                    >
+                                        View Product
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
                         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
                             {isLoadingMessages ? (
@@ -861,6 +974,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
                                     const isMe = msg.sender_id === user.id;
                                     const attachments = messageAttachments.get(msg.id) || [];
                                     const isPending = isMe && String(msg.id || '').startsWith('temp-');
+                                    const productRef = getMessageProductRef((msg as any)?.metadata);
 
                                     return (
                                         <div key={msg.id || `msg-${idx}`} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -869,6 +983,30 @@ const MessagesView: React.FC<MessagesViewProps> = ({ user, activeConversationId,
                                                     ? 'bg-orange-500 text-white rounded-br-none'
                                                     : 'bg-white dark:bg-gray-800 text-slate-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-bl-none'
                                                     }`}>
+                                                    {productRef && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openProduct(productRef.id)}
+                                                            className={`w-full mb-3 text-left rounded-xl border overflow-hidden ${isMe ? 'border-white/30 bg-white/10 hover:bg-white/15' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 hover:bg-gray-100 dark:hover:bg-gray-900/60'}`}
+                                                        >
+                                                            <div className="flex items-center gap-3 p-3">
+                                                                <div className={`w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 ${isMe ? 'bg-white/15' : 'bg-white dark:bg-gray-800'}`}>
+                                                                    {productRef.image ? (
+                                                                        <img src={productRef.image} alt={productRef.title || 'Product'} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <div className={`w-full h-full flex items-center justify-center ${isMe ? 'text-white/70' : 'text-gray-300 dark:text-gray-600'}`}>
+                                                                            <span className="material-icons text-xl">shopping_bag</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${isMe ? 'text-white/80' : 'text-orange-600 dark:text-orange-400'}`}>Product</div>
+                                                                    <div className={`text-sm font-semibold truncate ${isMe ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{productRef.title || 'View product'}</div>
+                                                                </div>
+                                                                <span className={`material-icons text-lg ${isMe ? 'text-white/90' : 'text-gray-400 dark:text-gray-500'}`}>chevron_right</span>
+                                                            </div>
+                                                        </button>
+                                                    )}
                                                     {msg.content && <p className="leading-relaxed">{msg.content}</p>}
 
                                                     {/* Display attachments */}

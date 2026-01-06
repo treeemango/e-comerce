@@ -6815,18 +6815,42 @@ export const fetchSellerAddresses = async (sellerId: string): Promise<any[]> => 
 
 // Inventory & Products
 export const fetchSellerInventory = async (sellerId: string): Promise<Product[]> => {
-    // Reuse fetchFilteredProducts or similar, filtering by seller
-    // Or direct query
+    // Join with product_variants to get accurate pricing and stock from the default variant
     const { data, error } = await supabase
         .from('products')
-        .select('*') // Should select columns matching Product type or use a view
-        .eq('seller_id', sellerId);
+        .select(`
+            *,
+            product_variants!inner (
+                id,
+                price,
+                compare_at_price,
+                stock,
+                is_default
+            )
+        `)
+        .eq('seller_id', sellerId)
+        .eq('product_variants.is_default', true)
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-    if (error) return [];
+    if (error) {
+        console.error('fetchSellerInventory error:', error);
+        return [];
+    }
 
-    // Map to Product type if needed, strict mapping omitted for brevity but recommended
-    return (data || []) as unknown as Product[];
+    // Map to Product type with variant data
+    return (data || []).map((item: any) => {
+        const defaultVariant = item.product_variants?.[0] || {};
+        return {
+            ...item,
+            price: defaultVariant.price ?? item.price ?? 0,
+            originalPrice: defaultVariant.compare_at_price ?? item.original_price,
+            stock: defaultVariant.stock ?? item.stock ?? 0,
+            currency: item.currency || 'KES',
+        };
+    }) as Product[];
 };
+
 
 // Compliance
 export interface ProductComplianceItem {

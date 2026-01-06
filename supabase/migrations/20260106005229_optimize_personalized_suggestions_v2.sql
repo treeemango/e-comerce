@@ -467,14 +467,16 @@ BEGIN
       CROSS JOIN max_pref_score mps
       LEFT JOIN trending_products tp ON bp.id = tp.product_id
       LEFT JOIN product_preferences pp ON bp.id = pp.product_id
-      WHERE v_user_uuid IS NULL OR bp.id NOT IN (
+      WHERE (v_user_uuid IS NULL OR bp.id NOT IN (
           SELECT DISTINCT oi.product_id
           FROM orders o 
           JOIN order_items oi ON o.id = oi.order_id
           WHERE o.user_id = v_user_uuid 
               AND o.status IN ('completed', 'shipped')
           LIMIT 500
-      )
+      ))
+      -- FIX: Only include products with ACTUAL discounts (not standard products without deals)
+      AND bp.deal_type != 'standard'
       ORDER BY bp.id
   ),
   

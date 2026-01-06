@@ -20,6 +20,80 @@ interface SellerMessagesViewProps {
 const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNavigate, initialConversationId }) => {
     const [conversations, setConversations] = useState<SellerConversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<SellerConversation | null>(null);
+
+    const [resolvedProductImages, setResolvedProductImages] = useState<Map<string, string>>(new Map());
+
+    useEffect(() => {
+        const pid = selectedConversation?.product_id ? String(selectedConversation.product_id) : '';
+        const existing = (selectedConversation as any)?.product_primary_image || (selectedConversation as any)?.product_image;
+        if (!pid) return;
+        if (existing) return;
+        if (resolvedProductImages.has(pid)) return;
+
+        let cancelled = false;
+        void (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('media')
+                    .select('image_url, is_main, position, created_at')
+                    .eq('product_id', pid)
+                    .order('is_main', { ascending: false })
+                    .order('position', { ascending: true, nullsFirst: false })
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (cancelled) return;
+                if (error) return;
+
+                const url = (data as any)?.[0]?.image_url || null;
+                if (!url) return;
+
+                setResolvedProductImages(prev => {
+                    const next = new Map(prev);
+                    next.set(pid, String(url));
+                    return next;
+                });
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedConversation?.product_id, (selectedConversation as any)?.product_primary_image, (selectedConversation as any)?.product_image, resolvedProductImages]);
+
+    const selectedConversationProductImage = selectedConversation?.product_id
+        ? (((selectedConversation as any).product_primary_image || (selectedConversation as any).product_image || resolvedProductImages.get(String(selectedConversation.product_id)) || undefined) as string | undefined)
+        : (((selectedConversation as any)?.product_primary_image || (selectedConversation as any)?.product_image || undefined) as string | undefined);
+
+    const openProduct = (productId?: string | null) => {
+        if (!productId) return;
+        window.dispatchEvent(
+            new CustomEvent('juax:notification-action', {
+                detail: { target: 'product', id: String(productId) }
+            })
+        );
+    };
+
+    const getMessageProductRef = (metadata: any): { id: string; title?: string; image?: string } | null => {
+        const m = metadata ?? {};
+        const id =
+            m.product_id ??
+            m.productId ??
+            m.productID ??
+            m.product?.id ??
+            m.product?.product_id ??
+            null;
+        if (!id) return null;
+
+        const fallbackImage = resolvedProductImages.get(String(id));
+        return {
+            id: String(id),
+            title: m.product_title ?? m.productTitle ?? m.product?.title ?? m.product?.name ?? undefined,
+            image: m.product_image ?? m.productImage ?? m.product?.image ?? m.product?.primary_image ?? fallbackImage ?? undefined
+        };
+    };
     const [messages, setMessages] = useState<SellerMessage[]>([]);
     const [messageInput, setMessageInput] = useState('');
     const [loading, setLoading] = useState(true);
@@ -404,6 +478,19 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
         const contentToSend = text || (filesToUpload.length > 0 ? 'Sent an attachment' : '');
         if (!contentToSend) return;
 
+        const productContext = selectedConversation?.product_id
+            ? {
+                product_id: String(selectedConversation.product_id),
+                product_title: selectedConversation.product_title || undefined,
+                product_image: selectedConversationProductImage
+            }
+            : null;
+
+        const messageMetadata = {
+            correlationId,
+            ...(productContext ? productContext : {})
+        };
+
         const restoreText = messageInput;
         const restoreFiles = filesToUpload;
 
@@ -415,7 +502,7 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
             content: contentToSend,
             is_read: true,
             created_at: new Date().toISOString(),
-            metadata: { correlationId, optimistic: true }
+            metadata: { ...messageMetadata, optimistic: true }
         };
 
         setMessages(prev => [...prev, optimisticMsg]);
@@ -438,7 +525,7 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                     sender_id: sellerId,
                     receiver_id: selectedConversation.buyer_id,
                     content: contentToSend,
-                    metadata: { correlationId }
+                    metadata: messageMetadata
                 })
                 .select()
                 .single();
@@ -663,9 +750,9 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                             {/* Product/Order Context */}
                             {(selectedConversation.product_title || selectedConversation.order_number) && (
                                 <div className="flex items-center gap-4 mt-3 p-3 bg-white rounded-lg border border-gray-200">
-                                    {selectedConversation.product_primary_image && (
+                                    {selectedConversationProductImage && (
                                         <img
-                                            src={selectedConversation.product_primary_image}
+                                            src={selectedConversationProductImage}
                                             alt={selectedConversation.product_title}
                                             className="w-12 h-12 object-cover rounded"
                                         />
@@ -685,6 +772,16 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                             </p>
                                         )}
                                     </div>
+
+                                    {selectedConversation.product_id && (
+                                        <button
+                                            type="button"
+                                            onClick={() => openProduct(selectedConversation.product_id)}
+                                            className="ml-2 px-3 py-2 text-sm font-medium rounded-lg bg-black text-white hover:opacity-90"
+                                        >
+                                            View Product
+                                        </button>
+                                    )}
 
                                     {selectedConversation.order_id && (
                                         <button
@@ -710,6 +807,7 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                     const isSeller = message.sender_id === sellerId;
                                     const isPending = !!(message as any)?.metadata?.optimistic;
                                     const atts = messageAttachments.get(String(message.id)) || [];
+                                    const productRef = getMessageProductRef((message as any)?.metadata);
                                     return (
                                         <div key={message.id} className={`flex ${isSeller ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[70%] ${isSeller ? 'order-2' : 'order-1'}`}>
@@ -717,6 +815,30 @@ const SellerMessagesView: React.FC<SellerMessagesViewProps> = ({ sellerId, onNav
                                                     ? 'bg-orange-500 text-white'
                                                     : 'bg-gray-100 text-gray-900'
                                                     }`}>
+                                                    {productRef && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openProduct(productRef.id)}
+                                                            className={`w-full mb-2 text-left rounded-lg border overflow-hidden ${isSeller ? 'border-white/30 bg-white/10 hover:bg-white/15' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                                                        >
+                                                            <div className="flex items-center gap-3 p-3">
+                                                                <div className={`w-12 h-12 rounded-md overflow-hidden flex-shrink-0 ${isSeller ? 'bg-white/15' : 'bg-gray-100'}`}>
+                                                                    {productRef.image ? (
+                                                                        <img src={productRef.image} alt={productRef.title || 'Product'} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <div className={`w-full h-full flex items-center justify-center ${isSeller ? 'text-white/80' : 'text-gray-300'}`}>
+                                                                            <span className="material-icons text-xl">shopping_bag</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${isSeller ? 'text-white/80' : 'text-orange-600'}`}>Product</div>
+                                                                    <div className={`text-sm font-semibold truncate ${isSeller ? 'text-white' : 'text-gray-900'}`}>{productRef.title || 'View product'}</div>
+                                                                </div>
+                                                                <span className={`material-icons text-lg ${isSeller ? 'text-white/90' : 'text-gray-400'}`}>chevron_right</span>
+                                                            </div>
+                                                        </button>
+                                                    )}
                                                     <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
 
                                                     {atts.length > 0 && (
