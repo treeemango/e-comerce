@@ -21,7 +21,7 @@ DECLARE
 BEGIN
     -- 1) Validate product
     SELECT p.status,
-           COALESCE(p.title, p.name, 'Product'),
+        COALESCE(p.title, 'Product'),
            p.seller_id
     INTO v_product_status, v_product_title, v_seller_id
     FROM public.products p

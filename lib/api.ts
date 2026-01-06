@@ -2717,7 +2717,9 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
             featured_image_url,
             gallery_media,
             status,
-            listing_type
+            listing_type,
+            description,
+            meta_description
         `)
         .in('id', productIds);
 
@@ -2829,7 +2831,8 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
                 if (richData?.is_new || item.is_new) b.push('NEW');
                 return b;
             })(),
-            description: '',
+            description: richData?.description || richData?.meta_description || '',
+            meta_description: richData?.meta_description || '',
             relation_type: item.image_similarity > 0.85 ? 'same' : 'similar',
             similarity_score: item.combined_similarity,
             vendor: vendor,

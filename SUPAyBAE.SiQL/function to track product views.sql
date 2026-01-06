@@ -12,12 +12,12 @@ AS $$
 DECLARE
     v_product_exists BOOLEAN;
     v_product_status TEXT;
-    v_product_name TEXT;
+    v_product_title TEXT;
     v_view_id UUID;
 BEGIN
     -- 1. Check if product exists and is active/approved
-    SELECT EXISTS(SELECT 1 FROM products WHERE id = p_product_id), status, name
-    INTO v_product_exists, v_product_status, v_product_name
+    SELECT EXISTS(SELECT 1 FROM products WHERE id = p_product_id), status, COALESCE(title, 'Product')
+    INTO v_product_exists, v_product_status, v_product_title
     FROM products WHERE id = p_product_id;
     
     IF NOT v_product_exists OR v_product_status NOT IN ('active', 'approved') THEN
@@ -40,7 +40,7 @@ BEGIN
     -- 4. Return success
     RETURN jsonb_build_object(
         'success', true,
-        'message', 'View tracked successfully for: ' || v_product_name,
+        'message', 'View tracked successfully for: ' || v_product_title,
         'view_id', v_view_id,
         'user_id', p_user_id,
         'session_id', p_session_id,
