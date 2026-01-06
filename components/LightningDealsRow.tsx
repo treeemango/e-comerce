@@ -276,97 +276,99 @@ const LightningDealCard: React.FC<{
         )}
       </div>
 
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-gray-900 line-clamp-2 dark:text-white">
-            {loading ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" /> : deal.title}
-          </p>
-          <div className="flex items-center gap-2 text-sm">
-            {loading ? (
-              <span className="inline-block h-4 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-            ) : (
-              <span className={`text-lg font-bold ${deal.deal_type === 'coupon'
-                ? 'text-orange-600 dark:text-orange-300'
-                : deal.deal_type === 'hot_discount'
-                  ? 'text-red-600 dark:text-red-300'
-                  : 'text-orange-600 dark:text-orange-300'
-                }`}>{convertedValues?.[`deal-price-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.price, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.price.toFixed(2)}`)}</span>
-            )}
-            {loading ? (
-              <span className="inline-block h-4 w-14 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-            ) : (
-              <span className="text-xs text-gray-500 line-through dark:text-gray-400">{convertedValues?.[`deal-orig-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.originalPrice, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.originalPrice.toFixed(2)}`)}</span>
-            )}
-          </div>
-          {!loading && (deal.is_express_delivery || deliveryEstimate || deal.vendor_country || scopeLabel) && (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-700 dark:text-gray-200">
-              {deal.is_express_delivery && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500/12 via-emerald-400/10 to-emerald-500/12 px-2.5 py-1 font-semibold text-emerald-700 shadow-sm shadow-emerald-200/40 ring-1 ring-emerald-300/60 backdrop-blur-sm dark:from-emerald-900/30 dark:via-emerald-800/30 dark:to-emerald-900/30 dark:text-emerald-100 dark:ring-emerald-700/50">
-                  <span className="material-icons text-[13px] leading-none">bolt</span>
-                  <span className="leading-none">Express</span>
-                </span>
+      <div className="mt-3 flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1 flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 line-clamp-2 dark:text-white">
+              {loading ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" /> : deal.title}
+            </p>
+            <div className="flex items-center gap-2 text-sm">
+              {loading ? (
+                <span className="inline-block h-4 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+              ) : (
+                <span className={`text-lg font-bold ${deal.deal_type === 'coupon'
+                  ? 'text-orange-600 dark:text-orange-300'
+                  : deal.deal_type === 'hot_discount'
+                    ? 'text-red-600 dark:text-red-300'
+                    : 'text-orange-600 dark:text-orange-300'
+                  }`}>{convertedValues?.[`deal-price-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.price, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.price.toFixed(2)}`)}</span>
               )}
-              {deliveryEstimate && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gray-100 via-white to-gray-100 px-2.75 py-1 font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200/80 backdrop-blur-sm dark:from-gray-800/60 dark:via-gray-900/60 dark:to-gray-800/60 dark:text-gray-100 dark:ring-gray-700/70">
-                  <span className="material-icons text-[13px] leading-none">local_shipping</span>
-                  <span className="leading-none">{deliveryEstimate}</span>
-                </span>
-              )}
-              {(deal.vendor_country || scopeLabel) && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/40 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
-                  <span className="material-icons text-[13px] leading-none">public</span>
-                  <span className="leading-none">{scopeLabel || deal.vendor_country}</span>
-                </span>
+              {loading ? (
+                <span className="inline-block h-4 w-14 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+              ) : (
+                <span className="text-xs text-gray-500 line-through dark:text-gray-400">{convertedValues?.[`deal-orig-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.originalPrice, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.originalPrice.toFixed(2)}`)}</span>
               )}
             </div>
-          )}
-          {(!loading && deal.rrp) && (
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">RRP {convertedValues?.[`deal-rrp-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.rrp, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.rrp.toFixed(2)}`)}</p>
-          )}
-        </div>
-        <button
-          className={`relative h-10 rounded-lg px-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAdded
+          </div>
+          <button
+            className={`shrink-0 h-10 rounded-lg px-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAdded
               ? 'bg-emerald-600 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-600 focus:ring-emerald-500'
               : deal.listing_type === 'reservation'
                 ? 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 focus:ring-blue-500'
                 : deal.listing_type === 'inquiry'
                   ? 'bg-purple-500 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-700 focus:ring-purple-500'
                   : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 focus:ring-orange-500'
-            }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (loading) return;
-            if (deal.listing_type === 'reservation' || deal.listing_type === 'inquiry') {
-              // For reservation/inquiry, open product detail
-              if (productPayload) onProductClick?.(productPayload);
-            } else if (onAddToCart) {
-              onAddToCart(deal);
-              setIsAdded(true);
-              if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
-              addedTimerRef.current = setTimeout(() => setIsAdded(false), 1800);
-            }
-          }}
-          disabled={loading}
-          type="button"
-        >
-          {loading ? '...' : isAdded ? (
-            <span className="inline-flex items-center gap-1">
-              <span className="material-icons text-[16px] leading-none">check_circle</span>
-              Added
-              <span className="absolute inset-0 rounded-lg ring-2 ring-emerald-400/60 animate-ping" aria-hidden />
-            </span>
-          ) : deal.listing_type === 'reservation' ? (
-            <span className="inline-flex items-center gap-1">
-              <span className="material-icons text-[16px] leading-none">event_available</span>
-              Reserve
-            </span>
-          ) : deal.listing_type === 'inquiry' ? (
-            <span className="inline-flex items-center gap-1">
-              <span className="material-icons text-[16px] leading-none">chat</span>
-              Inquire
-            </span>
-          ) : 'Add'}
-        </button>
+              }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (loading) return;
+              if (deal.listing_type === 'reservation' || deal.listing_type === 'inquiry') {
+                // For reservation/inquiry, open product detail
+                if (productPayload) onProductClick?.(productPayload);
+              } else if (onAddToCart) {
+                onAddToCart(deal);
+                setIsAdded(true);
+                if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+                addedTimerRef.current = setTimeout(() => setIsAdded(false), 1800);
+              }
+            }}
+            disabled={loading}
+            type="button"
+          >
+            {loading ? '...' : isAdded ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="material-icons text-[16px] leading-none">check_circle</span>
+                Added
+                <span className="absolute inset-0 rounded-lg ring-2 ring-emerald-400/60 animate-ping" aria-hidden />
+              </span>
+            ) : deal.listing_type === 'reservation' ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="material-icons text-[16px] leading-none">event_available</span>
+                Reserve
+              </span>
+            ) : deal.listing_type === 'inquiry' ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="material-icons text-[16px] leading-none">chat</span>
+                Inquire
+              </span>
+            ) : 'Add'}
+          </button>
+        </div>
+        {!loading && (deal.is_express_delivery || deliveryEstimate || deal.vendor_country || scopeLabel) && (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-700 dark:text-gray-200">
+            {deal.is_express_delivery && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500/12 via-emerald-400/10 to-emerald-500/12 px-2.5 py-1 font-semibold text-emerald-700 shadow-sm shadow-emerald-200/40 ring-1 ring-emerald-300/60 backdrop-blur-sm dark:from-emerald-900/30 dark:via-emerald-800/30 dark:to-emerald-900/30 dark:text-emerald-100 dark:ring-emerald-700/50">
+                <span className="material-icons text-[13px] leading-none">bolt</span>
+                <span className="leading-none">Express</span>
+              </span>
+            )}
+            {deliveryEstimate && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gray-100 via-white to-gray-100 px-2.75 py-1 font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200/80 backdrop-blur-sm dark:from-gray-800/60 dark:via-gray-900/60 dark:to-gray-800/60 dark:text-gray-100 dark:ring-gray-700/70">
+                <span className="material-icons text-[13px] leading-none">local_shipping</span>
+                <span className="leading-none">{deliveryEstimate}</span>
+              </span>
+            )}
+            {(deal.vendor_country || scopeLabel) && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-500/12 via-sky-400/10 to-sky-500/12 px-2.75 py-1 font-semibold text-sky-700 shadow-sm shadow-sky-200/40 ring-1 ring-sky-300/60 backdrop-blur-sm dark:from-sky-900/30 dark:via-sky-800/30 dark:to-sky-900/30 dark:text-sky-100 dark:ring-sky-700/50">
+                <span className="material-icons text-[13px] leading-none">public</span>
+                <span className="leading-none">{scopeLabel || deal.vendor_country}</span>
+              </span>
+            )}
+          </div>
+        )}
+        {(!loading && deal.rrp) && (
+          <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">RRP {convertedValues?.[`deal-rrp-${deal.id}`]?.converted || (typeof formatPrice === 'function' ? formatPrice(deal.rrp, deal.currency) : `${getCurrencySymbol(deal.currency)}${deal.rrp.toFixed(2)}`)}</p>
+        )}
       </div>
     </article>
   );
