@@ -9,6 +9,7 @@ import { FlagIcon } from '@/lib/FlagIcon';
 import { useNotifications } from './NotificationContext';
 import NotificationInbox from './NotificationInbox';
 import CountrySelector from './CountrySelector';
+import { getCountryConfigByCurrency } from '../lib/country-seo';
 
 interface HeaderProps {
   onHomeClick?: () => void;
@@ -68,6 +69,13 @@ const Header: React.FC<HeaderProps> = ({
   const [selectedOverlayDepartmentId, setSelectedOverlayDepartmentId] = useState<string | null>(null);
   const [isCategoriesDropdownOpen, setIsCategoriesDropdownOpen] = useState(false);
   const categoriesDropdownTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Derive country config for localized SEO
+  const countryConfig = useMemo(() => getCountryConfigByCurrency(currentCurrency), [currentCurrency]);
+  const h1Keywords = useMemo(() => {
+    if (!countryConfig) return " - Online Marketplace for UK & Africa | Shop Electronics, Fashion & More";
+    return ` - ${countryConfig.name}'s Premier Online Marketplace | Shop Electronics, Fashion & More`;
+  }, [countryConfig]);
 
   // Handle categories dropdown hover with delay
   const handleCategoriesMouseEnter = () => {
@@ -285,7 +293,7 @@ const Header: React.FC<HeaderProps> = ({
             }}
           >
             JuaExpress
-            <span className="sr-only"> - Online Marketplace for UK & Africa | Shop Electronics, Fashion & More</span>
+            <span className="sr-only">{h1Keywords}</span>
           </span>
         </h1>
 

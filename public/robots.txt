@@ -12,6 +12,8 @@ Sitemap: https://juaexpress.com/sitemap-za.xml
 Sitemap: https://juaexpress.com/sitemap-gh.xml
 Sitemap: https://juaexpress.com/sitemap-ug.xml
 Sitemap: https://juaexpress.com/sitemap-tz.xml
+Sitemap: https://juaexpress.com/sitemap-rw.xml
+Sitemap: https://juaexpress.com/sitemap-et.xml
 
 # Crawl delay for large sitemaps
 Crawl-delay: 1

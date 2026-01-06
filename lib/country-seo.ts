@@ -70,8 +70,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         flag: '🇬🇧',
 
         metaTitle: 'JuaExpress UK | Shop, Sell & Deliver across UK & Africa',
-        metaDescription: 'Discover premium electronics, fashion, and home goods on JuaExpress UK. Fast delivery across England, Scotland, Wales & Northern Ireland with secure payments.',
-        keywords: ['online shopping UK', 'electronics UK', 'fashion UK', 'home delivery UK', 'secure payments', 'fast delivery'],
+        metaDescription: 'Discover premium electronics, fashion, and home goods on JuaExpress UK. Fast delivery across London, Birmingham, Manchester, Glasgow, Liverpool & all regions. Secure payments in GBP.',
+        keywords: ['online shopping UK', 'electronics UK', 'fashion UK', 'London shopping', 'Manchester online store', 'secure payments', 'fast delivery'],
         geoRegion: 'GB',
         geoPlacename: 'London, United Kingdom',
         searchTerms: ['shop online UK', 'buy electronics UK', 'fashion shopping UK', 'UK marketplace', 'British online store'],
@@ -140,8 +140,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         flag: '🇳🇬',
 
         metaTitle: 'JuaExpress Nigeria | Shop, Sell & Deliver across UK & Africa',
-        metaDescription: 'Nigeria\'s premier online marketplace. Shop electronics, fashion, home goods with fast delivery across Lagos, Abuja, Port Harcourt & all states. Pay with card or bank transfer.',
-        keywords: ['online shopping Nigeria', 'electronics Nigeria', 'fashion Nigeria', 'Lagos shopping', 'Abuja online store', 'secure payments Nigeria', 'fast delivery Nigeria'],
+        metaDescription: 'Nigeria\'s premier online marketplace. Shop electronics, fashion, home goods with fast delivery across Lagos, Abuja, Port Harcourt, Ibadan, Kano & all states. Pay with card or bank transfer.',
+        keywords: ['online shopping Nigeria', 'electronics Nigeria', 'fashion Nigeria', 'Lagos shopping', 'Ibadan online store', 'secure payments Nigeria', 'fast delivery Nigeria'],
         geoRegion: 'NG',
         geoPlacename: 'Lagos, Nigeria',
         searchTerms: ['shop online Nigeria', 'buy electronics Nigeria', 'fashion shopping Nigeria', 'Lagos marketplace', 'Nigerian online store'],
@@ -175,8 +175,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         flag: '🇿🇦',
 
         metaTitle: 'JuaExpress South Africa | Shop, Sell & Deliver across UK & Africa',
-        metaDescription: 'South Africa\'s modern online marketplace. Shop electronics, fashion, home goods with fast delivery across Johannesburg, Cape Town, Durban & major cities.',
-        keywords: ['online shopping South Africa', 'electronics South Africa', 'fashion South Africa', 'Johannesburg shopping', 'Cape Town online store', 'secure payments South Africa'],
+        metaDescription: 'South Africa\'s modern online marketplace. Shop electronics, fashion, home goods with fast delivery across Johannesburg, Cape Town, Durban, Pretoria, Soweto & major cities.',
+        keywords: ['online shopping South Africa', 'electronics South Africa', 'fashion South Africa', 'Johannesburg shopping', 'Pretoria online store', 'secure payments South Africa'],
         geoRegion: 'ZA',
         geoPlacename: 'Johannesburg, South Africa',
         searchTerms: ['shop online South Africa', 'buy electronics South Africa', 'fashion shopping South Africa', 'Johannesburg marketplace', 'South African online store'],
@@ -210,8 +210,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         flag: '🇬🇭',
 
         metaTitle: 'JuaExpress Ghana | Shop, Sell & Deliver across UK & Africa',
-        metaDescription: 'Ghana\'s trusted online marketplace. Shop electronics, fashion, home goods with fast delivery across Accra, Tema, Kumasi & all regions. Secure mobile money payments.',
-        keywords: ['online shopping Ghana', 'electronics Ghana', 'fashion Ghana', 'Accra shopping', 'Tema online store', 'secure payments Ghana', 'mobile money Ghana'],
+        metaDescription: 'Ghana\'s trusted online marketplace. Shop electronics, fashion, home goods with fast delivery across Accra, Tema, Kumasi, Tamale, Takoradi & all regions. Secure mobile money payments.',
+        keywords: ['online shopping Ghana', 'electronics Ghana', 'fashion Ghana', 'Accra shopping', 'Kumasi online store', 'secure payments Ghana', 'mobile money Ghana'],
         geoRegion: 'GH',
         geoPlacename: 'Accra, Ghana',
         searchTerms: ['shop online Ghana', 'buy electronics Ghana', 'fashion shopping Ghana', 'Accra marketplace', 'Ghanaian online store'],
@@ -245,8 +245,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         flag: '🇺🇬',
 
         metaTitle: 'JuaExpress Uganda | Shop, Sell & Deliver across UK & Africa',
-        metaDescription: 'Uganda\'s leading online marketplace. Shop electronics, fashion, home goods with fast delivery across Kampala, Entebbe, Jinja & major towns. Mobile money payments.',
-        keywords: ['online shopping Uganda', 'electronics Uganda', 'fashion Uganda', 'Kampala shopping', 'Entebbe online store', 'secure payments Uganda', 'mobile money Uganda'],
+        metaDescription: 'Uganda\'s leading online marketplace. Shop electronics, fashion, home goods with fast delivery across Kampala, Entebbe, Jinja, Mbarara, Gulu & major towns. Mobile money payments.',
+        keywords: ['online shopping Uganda', 'electronics Uganda', 'fashion Uganda', 'Kampala shopping', 'Mbarara online store', 'secure payments Uganda', 'mobile money Uganda'],
         geoRegion: 'UG',
         geoPlacename: 'Kampala, Uganda',
         searchTerms: ['shop online Uganda', 'buy electronics Uganda', 'fashion shopping Uganda', 'Kampala marketplace', 'Ugandan online store'],
@@ -280,8 +280,8 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         flag: '🇹🇿',
 
         metaTitle: 'JuaExpress Tanzania | Shop, Sell & Deliver across UK & Africa',
-        metaDescription: 'Tanzania\'s modern online marketplace. Shop electronics, fashion, home goods with fast delivery across Dar es Salaam, Mwanza, Arusha & major cities.',
-        keywords: ['online shopping Tanzania', 'electronics Tanzania', 'fashion Tanzania', 'Dar es Salaam shopping', 'Mwanza online store', 'secure payments Tanzania'],
+        metaDescription: 'Tanzania\'s modern online marketplace. Shop electronics, fashion, home goods with fast delivery across Dar es Salaam, Mwanza, Arusha, Dodoma, Zanzibar & major cities.',
+        keywords: ['online shopping Tanzania', 'electronics Tanzania', 'fashion Tanzania', 'Dar es Salaam shopping', 'Zanzibar online store', 'secure payments Tanzania'],
         geoRegion: 'TZ',
         geoPlacename: 'Dar es Salaam, Tanzania',
         searchTerms: ['shop online Tanzania', 'buy electronics Tanzania', 'fashion shopping Tanzania', 'Dar es Salaam marketplace', 'Tanzanian online store'],
@@ -302,6 +302,76 @@ export const COUNTRY_SEO_CONFIGS: Record<string, CountrySEOConfig> = {
         shippingTime: '2-5 business days',
         paymentMethods: ['Card', 'Mobile Money', 'Bank Transfer', 'Cash on Delivery'],
         trustSignals: ['Tanzania Consumer Protection', 'Secure Payments', 'Nationwide Delivery', 'Quality Products']
+    },
+
+    // Rwanda
+    'RW': {
+        countryCode: 'RW',
+        currencyCode: 'RWF',
+        locale: 'en-RW',
+        name: 'Rwanda',
+        capital: 'Kigali',
+        region: 'Africa',
+        flag: '🇷🇼',
+
+        metaTitle: 'JuaExpress Rwanda | Shop, Sell & Deliver across UK & Africa',
+        metaDescription: 'Rwanda\'s premier online marketplace. Shop electronics, fashion, home goods with fast delivery across Kigali, Gisenyi, Butare, Musanze & major towns. Secure mobile money payments.',
+        keywords: ['online shopping Rwanda', 'electronics Rwanda', 'fashion Rwanda', 'Kigali shopping', 'Gisenyi online store', 'secure payments Rwanda', 'mobile money Rwanda'],
+        geoRegion: 'RW',
+        geoPlacename: 'Kigali, Rwanda',
+        searchTerms: ['shop online Rwanda', 'buy electronics Rwanda', 'fashion shopping Rwanda', 'Kigali marketplace', 'Rwandan online store'],
+
+        businessName: 'JuaExpress Rwanda',
+        businessDescription: 'Rwanda\'s trusted e-commerce platform offering quality products with fast delivery nationwide. Pay securely with Mobile Money or Card.',
+        contactInfo: {
+            phone: '',
+            email: '',
+            address: {
+                addressLocality: 'Kigali',
+                addressRegion: 'Kigali City',
+                addressCountry: 'RW',
+            }
+        },
+
+        popularCategories: ['electronics', 'fashion', 'phones-tablets', 'home-garden'],
+        shippingTime: '1-3 business days',
+        paymentMethods: ['Mobile Money', 'Card', 'Bank Transfer', 'Cash on Delivery'],
+        trustSignals: ['Rwanda Consumer Protection', 'MTN Mobile Money Secure', 'Fast Delivery', 'Local Support']
+    },
+
+    // Ethiopia
+    'ET': {
+        countryCode: 'ET',
+        currencyCode: 'ETB',
+        locale: 'en-ET',
+        name: 'Ethiopia',
+        capital: 'Addis Ababa',
+        region: 'Africa',
+        flag: '🇪🇹',
+
+        metaTitle: 'JuaExpress Ethiopia | Shop, Sell & Deliver across UK & Africa',
+        metaDescription: 'Ethiopia\'s trusted online marketplace. Shop electronics, fashion, home goods with fast delivery across Addis Ababa, Dire Dawa, Mekelle, Bahir Dar & major cities. Secure payments.',
+        keywords: ['online shopping Ethiopia', 'electronics Ethiopia', 'fashion Ethiopia', 'Addis Ababa shopping', 'Dire Dawa online store', 'secure payments Ethiopia'],
+        geoRegion: 'ET',
+        geoPlacename: 'Addis Ababa, Ethiopia',
+        searchTerms: ['shop online Ethiopia', 'buy electronics Ethiopia', 'fashion shopping Ethiopia', 'Addis Ababa marketplace', 'Ethiopian online store'],
+
+        businessName: 'JuaExpress Ethiopia',
+        businessDescription: 'Ethiopia\'s leading e-commerce platform connecting buyers with quality products. Reliable delivery across all major regions and cities.',
+        contactInfo: {
+            phone: '',
+            email: '',
+            address: {
+                addressLocality: 'Addis Ababa',
+                addressRegion: 'Addis Ababa',
+                addressCountry: 'ET',
+            }
+        },
+
+        popularCategories: ['electronics', 'fashion', 'home-garden', 'textiles'],
+        shippingTime: '3-7 business days',
+        paymentMethods: ['Bank Transfer', 'Card', 'Telebirr', 'Cash on Delivery'],
+        trustSignals: ['Ethiopia Consumer Protection', 'Secure Payments', 'Regional Delivery', 'Quality Products']
     }
 };
 
@@ -335,6 +405,8 @@ export function getCountryConfigByCurrency(currencyCode: string): CountrySEOConf
         'GHS': 'GH',
         'UGX': 'UG',
         'TZS': 'TZ',
+        'RWF': 'RW',
+        'ETB': 'ET',
         // Add more mappings as needed
     };
 

@@ -62,6 +62,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export const SUPPORTED_CURRENCIES = [
     { code: 'USD', flag: '🇺🇸', name: 'US Dollar' },
+    { code: 'GBP', flag: '🇬🇧', name: 'British Pound' },
     { code: 'DZD', flag: '🇩🇿', name: 'Algerian Dinar' },
     { code: 'EGP', flag: '🇪🇬', name: 'Egyptian Pound' },
     { code: 'LYD', flag: '🇱🇾', name: 'Libyan Dinar' },
