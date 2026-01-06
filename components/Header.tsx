@@ -285,6 +285,7 @@ const Header: React.FC<HeaderProps> = ({
             }}
           >
             JuaExpress
+            <span className="sr-only"> - Online Marketplace for UK & Africa | Shop Electronics, Fashion & More</span>
           </span>
         </h1>
 
