@@ -9,6 +9,17 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      proxy: env.VITE_SUPABASE_URL
+        ? {
+            '/supabase': {
+              target: env.VITE_SUPABASE_URL,
+              changeOrigin: true,
+              secure: true,
+              ws: true,
+              rewrite: (p) => p.replace(/^\/supabase/, ''),
+            },
+          }
+        : undefined,
     },
     plugins: [
       react(),

@@ -73,7 +73,6 @@ const SellerLoginView: React.FC<SellerLoginViewProps> = ({ onSignUpClick, onSign
                               }`}
                         >
                            <FlagIcon emoji={country.flag} label={country.name} fallbackText={country.code} className="w-4 h-4" />
-                           <span className="hidden sm:inline">{country.code}</span>
                         </button>
                      ))}
                   </div>
