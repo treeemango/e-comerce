@@ -40,6 +40,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [touchStart, setTouchStart] = useState<TouchPosition | null>(null);
     const [touchEnd, setTouchEnd] = useState<TouchPosition | null>(null);
     const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
+    const [isLoadingQuantityDiscounts, setIsLoadingQuantityDiscounts] = useState(true);
     const [isWishlisted, setIsWishlisted] = useState(false);
     const [isWishlistLoading, setIsWishlistLoading] = useState(false);
     const [sameItems, setSameItems] = useState<RelatedProduct[]>([]);
@@ -56,7 +57,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
     const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
     const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
     const [currentVariant, setCurrentVariant] = useState<ProductVariant | null>(null);
-    const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+    const [isLoadingVariants, setIsLoadingVariants] = useState(true);
     const [isVariationSheetOpen, setIsVariationSheetOpen] = useState(false);
     const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
     const [sheetPreviewVariant, setSheetPreviewVariant] = useState<ProductVariant | null>(null);
@@ -223,7 +224,12 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
 
     React.useEffect(() => {
         if (product.has_quantity_discount) {
-            fetchQuantityDiscounts(product.id.toString()).then(setQuantityDiscounts);
+            setIsLoadingQuantityDiscounts(true);
+            fetchQuantityDiscounts(product.id.toString())
+                .then(setQuantityDiscounts)
+                .finally(() => setIsLoadingQuantityDiscounts(false));
+        } else {
+            setIsLoadingQuantityDiscounts(false);
         }
     }, [product.id, product.has_quantity_discount]);
 
@@ -337,6 +343,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                 } finally {
                     setIsLoadingVariants(false);
                 }
+            } else {
+                setIsLoadingVariants(false);
             }
         };
         loadVariants();
@@ -859,111 +867,139 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             </div>
                         )}
 
-                        {quantityDiscounts.length > 0 && (
-                            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <span className="material-icons-round text-emerald-600">groups</span>
-                                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Bulk Wholesale</span>
+                        {/* Quantity Discounts - Skeleton or Content */}
+                        {(product.has_quantity_discount || isLoadingQuantityDiscounts || quantityDiscounts.length > 0) && (
+                            isLoadingQuantityDiscounts ? (
+                                <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100/50 dark:border-emerald-800/30 animate-pulse">
+                                    <div className="flex gap-2 overflow-x-auto">
+                                        {[1, 2, 3].map(i => (
+                                            <div key={i} className="bg-emerald-200/50 dark:bg-emerald-800/30 px-4 py-6 rounded-xl min-w-[110px] flex-shrink-0" />
+                                        ))}
                                     </div>
-                                    <span className="text-[9px] font-black text-gray-400 uppercase">Save up to 40%</span>
                                 </div>
-                                <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-                                    {quantityDiscounts.map((tier, idx) => (
-                                        <div key={idx} className="bg-white dark:bg-white/5 px-4 py-3 rounded-xl shadow-sm border border-emerald-100 dark:border-white/5 min-w-[110px] flex-shrink-0">
-                                            <div className="text-[9px] font-black text-gray-400 uppercase mb-1">MOQ: {tier.min_quantity}</div>
-                                            <div className="text-base font-black text-gray-900 dark:text-white">
-                                                {getPrice(`tier-${idx}`, tier.unit_price)}
-                                            </div>
+                            ) : quantityDiscounts.length > 0 && (
+                                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="material-icons-round text-emerald-600">groups</span>
+                                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Bulk Wholesale</span>
                                         </div>
-                                    ))}
+                                        <span className="text-[9px] font-black text-gray-400 uppercase">Save up to 40%</span>
+                                    </div>
+                                    <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                                        {quantityDiscounts.map((tier, idx) => (
+                                            <div key={idx} className="bg-white dark:bg-white/5 px-4 py-3 rounded-xl shadow-sm border border-emerald-100 dark:border-white/5 min-w-[110px] flex-shrink-0">
+                                                <div className="text-[9px] font-black text-gray-400 uppercase mb-1">MOQ: {tier.min_quantity}</div>
+                                                <div className="text-base font-black text-gray-900 dark:text-white">
+                                                    {getPrice(`tier-${idx}`, tier.unit_price)}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )
                         )}
                     </div>
                 )}
             </div>
 
-            {/* Refined Variations Section */}
-            {productOptions.length > 0 && (
+            {/* Refined Variations Section - Skeleton or Content */}
+            {(isLoadingVariants || productOptions.length > 0) && (
                 <div className="px-4 pb-4">
-                    <div
-                        onClick={() => setIsVariationSheetOpen(true)}
-                        className="bg-white dark:bg-surface-dark p-5 rounded-[28px] space-y-4 border border-gray-100 dark:border-white/5 shadow-premium active:scale-[0.98] transition-all"
-                    >
-                        <div className="flex justify-between items-center">
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">Personalize</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">
-                                        {Object.values(selectedOptions).join(' / ') || 'Select Options'}
-                                    </span>
+                    {isLoadingVariants ? (
+                        <div className="bg-gray-50/50 dark:bg-white/5 p-5 rounded-[28px] animate-pulse border border-gray-100/50 dark:border-white/5">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="space-y-2">
+                                    <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+                                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                                </div>
+                                <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                            </div>
+                            <div className="flex gap-3">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="w-14 h-14 bg-gray-200 dark:bg-gray-700 rounded-2xl flex-shrink-0" />
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div
+                            onClick={() => setIsVariationSheetOpen(true)}
+                            className="bg-white dark:bg-surface-dark p-5 rounded-[28px] space-y-4 border border-gray-100 dark:border-white/5 shadow-premium active:scale-[0.98] transition-all"
+                        >
+                            <div className="flex justify-between items-center">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">Personalize</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                            {Object.values(selectedOptions).join(' / ') || 'Select Options'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center">
+                                    <span className="material-icons-round text-gray-400">tune</span>
                                 </div>
                             </div>
-                            <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center">
-                                <span className="material-icons-round text-gray-400">tune</span>
+
+                            <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+                                {productVariants.filter(v => v.image).slice(0, 6).map((v, i) => {
+                                    // Find image index for this variant to allow switching
+                                    const variantImageIdx = images.indexOf(v.image!);
+                                    const isActive = currentImage === variantImageIdx;
+                                    const originalIndex = productVariants.indexOf(v);
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (variantImageIdx !== -1) {
+                                                    setIsTransitioning(true);
+                                                    setCurrentImage(variantImageIdx);
+                                                    setTimeout(() => setIsTransitioning(false), 300);
+                                                }
+                                                // Also update selected options to match this variant
+                                                if (v.options) setSelectedOptions(v.options);
+                                            }}
+                                        >
+                                            <div className={`w-14 h-14 rounded-2xl border-2 overflow-hidden flex-shrink-0 shadow-sm transition-all ${isActive
+                                                ? 'border-primary ring-2 ring-primary/20 scale-105'
+                                                : 'border-gray-50 dark:border-white/5 opacity-80 group-hover:opacity-100'
+                                                }`}>
+                                                {(() => {
+                                                    const rawImg = v.image || '';
+                                                    const thumbImg = rawImg ? getOptimizedImageUrl(rawImg, 'thumb') : '';
+                                                    return (
+                                                        <img
+                                                            src={thumbImg}
+                                                            onError={(e) => {
+                                                                const el = e.currentTarget;
+                                                                if (!rawImg) return;
+                                                                if (el.getAttribute('src') === rawImg || el.src === rawImg) return;
+                                                                el.src = rawImg;
+                                                            }}
+                                                            className="w-full h-full object-cover"
+                                                            alt=""
+                                                        />
+                                                    );
+                                                })()}
+                                            </div>
+                                            <div className="flex flex-col items-center">
+                                                <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
+                                                    {getPriceFormatted(`variant-${originalIndex}`, v.price).whole}
+                                                </div>
+                                                {(v.originalPrice || v.compare_at_price) && (v.originalPrice || v.compare_at_price || 0) > v.price && (
+                                                    <div className="text-[8px] text-gray-400 line-through">
+                                                        {getPrice(`variant-orig-${originalIndex}`, v.originalPrice || v.compare_at_price || 0)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
-
-                        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-                            {productVariants.filter(v => v.image).slice(0, 6).map((v, i) => {
-                                // Find image index for this variant to allow switching
-                                const variantImageIdx = images.indexOf(v.image!);
-                                const isActive = currentImage === variantImageIdx;
-                                const originalIndex = productVariants.indexOf(v);
-
-                                return (
-                                    <div
-                                        key={i}
-                                        className="flex flex-col items-center gap-1.5 cursor-pointer group"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (variantImageIdx !== -1) {
-                                                setIsTransitioning(true);
-                                                setCurrentImage(variantImageIdx);
-                                                setTimeout(() => setIsTransitioning(false), 300);
-                                            }
-                                            // Also update selected options to match this variant
-                                            if (v.options) setSelectedOptions(v.options);
-                                        }}
-                                    >
-                                        <div className={`w-14 h-14 rounded-2xl border-2 overflow-hidden flex-shrink-0 shadow-sm transition-all ${isActive
-                                            ? 'border-primary ring-2 ring-primary/20 scale-105'
-                                            : 'border-gray-50 dark:border-white/5 opacity-80 group-hover:opacity-100'
-                                            }`}>
-                                            {(() => {
-                                                const rawImg = v.image || '';
-                                                const thumbImg = rawImg ? getOptimizedImageUrl(rawImg, 'thumb') : '';
-                                                return (
-                                                    <img
-                                                        src={thumbImg}
-                                                        onError={(e) => {
-                                                            const el = e.currentTarget;
-                                                            if (!rawImg) return;
-                                                            if (el.getAttribute('src') === rawImg || el.src === rawImg) return;
-                                                            el.src = rawImg;
-                                                        }}
-                                                        className="w-full h-full object-cover"
-                                                        alt=""
-                                                    />
-                                                );
-                                            })()}
-                                        </div>
-                                        <div className="flex flex-col items-center">
-                                            <div className={`text-[10px] font-black ${isActive ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
-                                                {getPriceFormatted(`variant-${originalIndex}`, v.price).whole}
-                                            </div>
-                                            {(v.originalPrice || v.compare_at_price) && (v.originalPrice || v.compare_at_price || 0) > v.price && (
-                                                <div className="text-[8px] text-gray-400 line-through">
-                                                    {getPrice(`variant-orig-${originalIndex}`, v.originalPrice || v.compare_at_price || 0)}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
+                    )}
                 </div>
             )}
 

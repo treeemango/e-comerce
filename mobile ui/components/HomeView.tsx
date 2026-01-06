@@ -75,24 +75,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ products, onProductClick, sh
                 </div>
               </div>
 
-              <div className="h-px w-full bg-gradient-to-r from-transparent via-gray-100 dark:via-zinc-800 to-transparent" />
 
-              <div className="flex justify-between items-center relative z-10 w-full">
-                <div className="flex items-center gap-4 md:gap-8">
-                  <div className="flex items-center gap-1.5 md:gap-2">
-                    <span className="material-icons text-[14px] md:text-lg text-emerald-500">local_shipping</span>
-                    <span className="text-[9px] md:text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Free Shipping</span>
-                  </div>
-                  <div className="w-1 h-1 rounded-full bg-gray-300 md:bg-gray-400" />
-                  <div className="flex items-center gap-1.5 md:gap-2">
-                    <span className="material-icons text-[14px] md:text-lg text-blue-500">shield</span>
-                    <span className="text-[9px] md:text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Escrow Secure</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-primary opacity-70">
-                  <span className="text-[9px] md:text-xs font-black uppercase tracking-widest">Trusted Experience</span>
-                </div>
-              </div>
             </button>
           </div>
 

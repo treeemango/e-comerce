@@ -194,14 +194,16 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
   if (isLoading || isBannerLoading) {
     return (
       <section className="mb-8 lg:mb-12 relative">
-        {/* Banner skeleton */}
-        <div className="hidden md:flex w-screen relative left-1/2 -translate-x-1/2 h-12 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 animate-pulse items-center">
+        {/* Desktop event banner slot (reserved space to avoid CLS) */}
+        <div className="hidden md:flex w-screen relative left-1/2 -translate-x-1/2 h-12 items-center bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 animate-pulse">
           <div className="mx-auto flex items-center gap-4">
             <div className="h-8 w-8 bg-slate-600 rounded-xl" />
             <div className="h-4 w-48 bg-slate-600 rounded" />
           </div>
         </div>
-        <div className="relative h-[450px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl bg-slate-900 mt-2">
+
+        {/* Match final hero height exactly to avoid CLS */}
+        <div className="relative h-[580px] sm:h-[520px] md:h-[550px] rounded-3xl overflow-hidden shadow-2xl bg-slate-900">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 animate-shimmer"
             style={{ backgroundSize: '200% 100%' }} />
           <div className="absolute inset-0 flex flex-col md:flex-row items-center px-8 md:px-20 gap-12">
@@ -224,66 +226,68 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onProductClick }) => {
 
   return (
     <section className="mb-8 lg:mb-12 relative group">
-      {/* Desktop full-width event banner (outside the rounded hero) */}
-      {eventBanner && eventBanner.eventName !== 'default' && (
-        <div
-          className="hidden md:flex relative left-1/2 -translate-x-1/2 w-screen h-12 items-center justify-between z-20 text-white overflow-hidden group/event cursor-pointer"
-          style={{ background: getEventBannerGradient(eventBanner) }}
-          onClick={() => {
-            const url = new URL(window.location.href);
-            url.search = '';
-            url.searchParams.set('view', 'event-deals');
-            url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
-            // Ensure the banner's event + related banner text participate in filtering (supports OR via '|').
-            const rawParts = [
-              eventBanner.eventName || 'Event Deals',
-              eventBanner.searchQuery || '',
-              eventBanner.headline || '',
-              eventBanner.subheadline || '',
-              eventBanner.lightningDealsTitle || '',
-              eventBanner.trendingTitle || ''
-            ];
-            const parts = Array.from(
-              new Set(
-                rawParts
-                  .map(p => String(p || '').trim())
-                  .filter(Boolean)
-                  .map(p => p.slice(0, 60))
-              )
-            ).slice(0, 6);
-            const search = parts.join('|').slice(0, 240);
-            url.searchParams.set('search', search);
-            window.open(url.toString(), '_blank');
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/event:animate-shimmer" />
+      {/* Desktop event banner slot (reserved space to avoid CLS) */}
+      <div className="hidden md:flex relative left-1/2 -translate-x-1/2 w-screen h-12 items-center justify-between z-20 overflow-hidden">
+        {eventBanner && eventBanner.eventName !== 'default' && (
+          <div
+            className="w-full h-full flex items-center justify-between text-white group/event cursor-pointer"
+            style={{ background: getEventBannerGradient(eventBanner) }}
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.search = '';
+              url.searchParams.set('view', 'event-deals');
+              url.searchParams.set('event', eventBanner.eventName || 'Event Deals');
+              // Ensure the banner's event + related banner text participate in filtering (supports OR via '|').
+              const rawParts = [
+                eventBanner.eventName || 'Event Deals',
+                eventBanner.searchQuery || '',
+                eventBanner.headline || '',
+                eventBanner.subheadline || '',
+                eventBanner.lightningDealsTitle || '',
+                eventBanner.trendingTitle || ''
+              ];
+              const parts = Array.from(
+                new Set(
+                  rawParts
+                    .map(p => String(p || '').trim())
+                    .filter(Boolean)
+                    .map(p => p.slice(0, 60))
+                )
+              ).slice(0, 6);
+              const search = parts.join('|').slice(0, 240);
+              url.searchParams.set('search', search);
+              window.open(url.toString(), '_blank');
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/event:animate-shimmer" />
 
-          <div className="w-full flex items-center justify-between px-8 md:px-20 relative z-10">
-            <div className={`flex items-center gap-6 ${eventBanner.layout === 'center' ? 'mx-auto' : ''}`}>
-              <div className="flex items-center gap-2">
-                {(eventBanner.iconKeys || [eventBanner.iconKey]).filter(Boolean).map((key, idx) => (
-                  <div key={idx} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg animate-float-slow" style={{ animationDelay: `${idx * 0.5}s` }}>
-                    <img src={getEventIconSrc(key as string)} alt="" className="h-5 w-5 object-contain" />
+            <div className="w-full flex items-center justify-between px-8 md:px-20 relative z-10">
+              <div className={`flex items-center gap-6 ${eventBanner.layout === 'center' ? 'mx-auto' : ''}`}>
+                <div className="flex items-center gap-2">
+                  {(eventBanner.iconKeys || [eventBanner.iconKey]).filter(Boolean).map((key, idx) => (
+                    <div key={idx} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg animate-float-slow" style={{ animationDelay: `${idx * 0.5}s` }}>
+                      <img src={getEventIconSrc(key as string)} alt="" className="h-5 w-5 object-contain" />
+                    </div>
+                  ))}
+                </div>
+                <div className={`flex flex-col ${eventBanner.layout === 'center' ? 'items-center' : ''}`}>
+                  <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
+                  <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex items-baseline gap-2">
+                    <span className="line-clamp-1">{eventBanner.headline}</span>
+                    <span className="opacity-60 font-bold text-xs lowercase italic hidden lg:inline">— {eventBanner.subheadline}</span>
                   </div>
-                ))}
-              </div>
-              <div className={`flex flex-col ${eventBanner.layout === 'center' ? 'items-center' : ''}`}>
-                <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70 leading-none">{eventBanner.eventName}</span>
-                <div className="text-sm font-black tracking-tight uppercase mt-0.5 flex items-baseline gap-2">
-                  <span className="line-clamp-1">{eventBanner.headline}</span>
-                  <span className="opacity-60 font-bold text-xs lowercase italic hidden lg:inline">— {eventBanner.subheadline}</span>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-4">
-              <button className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap">
-                {eventBanner.cta}
-              </button>
+              <div className="flex items-center gap-4">
+                <button className="px-6 py-2 bg-white text-black text-xs font-black rounded-full shadow-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap">
+                  {eventBanner.cta}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="relative h-[580px] sm:h-[520px] md:h-[550px] rounded-3xl overflow-hidden shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] bg-black">
         {/* Banner Overlay */}

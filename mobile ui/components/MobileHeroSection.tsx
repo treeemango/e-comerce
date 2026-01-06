@@ -114,14 +114,19 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
     // Wait for both deals and banner to load
     if (loading || isBannerLoading) {
         return (
-            <div className="w-full h-56 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 animate-pulse flex flex-col items-center justify-center gap-3 rounded-xl mx-2">
-                <div className="flex items-center gap-2">
-                    <div className="h-6 w-6 bg-slate-700 rounded-lg" />
-                    <div className="h-3 w-32 bg-slate-700 rounded" />
+            <div className="relative w-full overflow-hidden">
+                {/* Reserve banner slot (prevents CLS when banner loads) */}
+                <div className="absolute top-0 inset-x-0 h-10" />
+
+                <div className="w-full h-[300px] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 animate-pulse flex flex-col items-center justify-center gap-3 rounded-xl mx-2">
+                    <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 bg-slate-700 rounded-lg" />
+                        <div className="h-3 w-32 bg-slate-700 rounded" />
+                    </div>
+                    <div className="h-24 w-24 bg-slate-700 rounded-xl" />
+                    <div className="h-4 w-48 bg-slate-700 rounded" />
+                    <div className="text-white/20 text-[10px] font-bold tracking-widest uppercase mt-2">Loading Banner...</div>
                 </div>
-                <div className="h-24 w-24 bg-slate-700 rounded-xl" />
-                <div className="h-4 w-48 bg-slate-700 rounded" />
-                <div className="text-white/20 text-[10px] font-bold tracking-widest uppercase mt-2">Loading Banner...</div>
             </div>
         );
     }
@@ -130,7 +135,7 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
 
     return (
         <div className="relative w-full overflow-hidden">
-            {/* Banner Overlay */}
+            {/* Banner Overlay (slot is always reserved via fixed hero height) */}
             {eventBanner && eventBanner.eventName !== 'default' && (
                 <div
                     className="absolute top-0 inset-x-0 h-10 flex items-center justify-between px-6 z-20 text-white overflow-hidden group/event cursor-pointer"
@@ -192,7 +197,8 @@ export const MobileHeroSection: React.FC<MobileHeroSectionProps> = ({ onProductC
                 </div>
             )}
 
-            <div className={`relative w-full ${eventBanner && eventBanner.eventName !== 'default' ? 'h-[300px]' : 'h-[260px]'}`}>
+            {/* Keep height constant to prevent CLS when banner loads */}
+            <div className="relative w-full h-[300px]">
                 {deals.map((deal, idx) => {
                     const isActive = idx === currentSlide;
                     const theme = getTheme(deal.category_id || deal.category_name, idx);

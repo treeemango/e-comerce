@@ -50,7 +50,7 @@ const ProductCardSkeleton: React.FC<ProductCardSkeletonProps> = ({ count = 8 }) 
                     className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-800/70 bg-white dark:bg-slate-900 pb-3 flex flex-col h-full"
                 >
                     {/* Image Placeholder */}
-                    <div className="relative overflow-hidden bg-slate-100 dark:bg-slate-800 aspect-[4/5] shimmer-wrapper">
+                    <div className="relative overflow-hidden bg-slate-100 dark:bg-slate-800 aspect-square shimmer-wrapper">
                         <div className="absolute top-2 left-2 h-5 w-12 rounded-full bg-slate-200 dark:bg-slate-700" />
                         <div className="absolute top-2 right-2 h-6 w-14 rounded-lg bg-slate-200 dark:bg-slate-700" />
                     </div>

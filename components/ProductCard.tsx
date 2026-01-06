@@ -182,7 +182,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, ranking, onProductCl
           }
         }}
       >
-        <div className="relative overflow-hidden bg-gray-50 dark:bg-gray-700 aspect-square">
+        <div className="relative overflow-hidden bg-gray-50 dark:bg-gray-700 aspect-square w-full">
           {/* Deal Type Gradient Overlay */}
           {product.deal_type === 'coupon' && (
             <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-amber-500/10 pointer-events-none z-10" />

@@ -423,7 +423,8 @@ export const fetchDealsProducts = async (
                 vendorCountry: item.vendor_country || undefined,
                 badge: item.deal_type === 'flash_sale' ? 'FLASH SALE' : undefined,
                 deliveryDate: undefined,
-                description: undefined,
+                description: item.description ?? item.product_description ?? undefined,
+                meta_description: item.meta_description ?? item.metaDescription ?? undefined,
                 categoryId: item.category_id,
                 categoryName: undefined,
                 category: undefined,
@@ -1004,8 +1005,13 @@ export const fetchVendorFullProfile = async (vendorIdOrUserId: string): Promise<
             .or(`id.eq.${vendorIdOrUserId},user_id.eq.${vendorIdOrUserId}`)
             .maybeSingle();
 
-        if (error || !vendor) {
+        if (error) {
             console.error('Error fetching vendor profile:', error);
+            return null;
+        }
+
+        if (!vendor) {
+            // Not an error - vendor simply not found for this ID
             return null;
         }
 

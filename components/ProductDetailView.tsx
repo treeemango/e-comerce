@@ -7,13 +7,20 @@ import ProductCard from './ProductCard';
 import { fetchRelatedProducts, fetchCategoryName, toggleFollowStore, getFollowStatus, fetchProductVariants, getProductCoupons, claimCoupon, fetchVendorInfo, fetchQuantityDiscounts, isInWishlist, toggleWishlist, fetchProductReviewSummary, fetchRecentViews, fetchProductAttributes } from '../lib/api';
 import ProductCardSkeleton from './ProductCardSkeleton';
 import { trackProductViewAuto } from '../lib/tracking';
-import { ReviewSection } from './ReviewSection';
+// import { ReviewSection } from './ReviewSection'; // Replaced by lazy load
 import { playFollowSound, playUnfollowSound, playWishlistAddSound, playWishlistRemoveSound } from '../lib/sounds';
 import { useSEO } from '../lib/useSEO';
 import { generateProductSchema, generateBreadcrumbSchema, getProductPageSEO, SITE_CONFIG } from '../lib/seo-utils';
 import { formatPrice, getCurrencySymbol, useCurrencyConverter } from '../lib/currency';
 import ImageMagnifier from './ImageMagnifier';
-import ProductQuestions from './ProductDetails/ProductQuestions';
+// Lazy load heavy components to improve LCP
+const ProductQuestions = React.lazy(() => import('./ProductDetails/ProductQuestions'));
+// const ReviewSection = React.lazy(() => import('./ReviewSection').then(m => ({ default: m.ReviewSection })));
+// ProductQuestions and ReviewSection lazy loading
+const ReviewSection = React.lazy(() => import('./ReviewSection').then(m => ({ default: m.ReviewSection })));
+
+
+
 import { SimpleMarkdown } from './SimpleMarkdown';
 import { getOptimizedImageUrl } from '../lib/image-utils';
 import ResponsiveImage from './ResponsiveImage';
@@ -89,13 +96,15 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    // Variants State
    const [productOptions, setProductOptions] = useState<ProductOption[]>(product.options || []);
    const [productVariants, setProductVariants] = useState<ProductVariant[]>(product.variants || []);
-   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+   const [isLoadingVariants, setIsLoadingVariants] = useState(true);
 
    const [resolvedVendor, setResolvedVendor] = useState(product.vendor);
 
    const [productCoupons, setProductCoupons] = useState<PromoCoupon[]>([]);
+   const [isLoadingCoupons, setIsLoadingCoupons] = useState(true);
    const [claimedCoupons, setClaimedCoupons] = useState<Set<string>>(new Set());
    const [quantityDiscounts, setQuantityDiscounts] = useState<QuantityDiscountTier[]>([]);
+   const [isLoadingQuantityDiscounts, setIsLoadingQuantityDiscounts] = useState(true);
    const [productAttributes, setProductAttributes] = useState<{ name: string; value: string }[]>([]);
 
    // Variant Overlay State
@@ -112,14 +121,19 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    useEffect(() => {
       const loadCoupons = async () => {
          if (product.id) {
-            const coupons = await getProductCoupons(product.id.toString());
-
-            // Deduplicate coupons
-            const uniqueCoupons = Array.from(new Map(coupons.map((c: PromoCoupon) => [c.id, c])).values()) as PromoCoupon[];
-
-            // Filter for valid ongoing coupons
-            const validCoupons = uniqueCoupons.filter((c: PromoCoupon) => c.status === 'Ongoing');
-            setProductCoupons(validCoupons);
+            setIsLoadingCoupons(true);
+            try {
+               const coupons = await getProductCoupons(product.id.toString());
+               // Deduplicate coupons
+               const uniqueCoupons = Array.from(new Map(coupons.map((c: PromoCoupon) => [c.id, c])).values()) as PromoCoupon[];
+               // Filter for valid ongoing coupons
+               const validCoupons = uniqueCoupons.filter((c: PromoCoupon) => c.status === 'Ongoing');
+               setProductCoupons(validCoupons);
+            } finally {
+               setIsLoadingCoupons(false);
+            }
+         } else {
+            setIsLoadingCoupons(false);
          }
       };
       loadCoupons();
@@ -128,8 +142,15 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
    useEffect(() => {
       const loadQuantityDiscounts = async () => {
          if (product.id && product.has_quantity_discount) {
-            const tiers = await fetchQuantityDiscounts(product.id.toString());
-            setQuantityDiscounts(tiers);
+            setIsLoadingQuantityDiscounts(true);
+            try {
+               const tiers = await fetchQuantityDiscounts(product.id.toString());
+               setQuantityDiscounts(tiers);
+            } finally {
+               setIsLoadingQuantityDiscounts(false);
+            }
+         } else {
+            setIsLoadingQuantityDiscounts(false);
          }
       };
       loadQuantityDiscounts();
@@ -195,6 +216,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   });
                   setSelectedOptions(defaults);
                }
+               setIsLoadingVariants(false);
             }
          }
       };
@@ -1066,7 +1088,7 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   ))}
                </div>
 
-               <div className="flex-1 relative aspect-[3/4] rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 shadow-sm">
+               <div className="flex-1 relative aspect-square rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 shadow-sm">
                   {effectiveActiveMedia.type === 'youtube' ? (
                      <div className="w-full h-full bg-black flex items-center justify-center">
                         <iframe
@@ -1232,37 +1254,50 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   </div>
 
                   {/* Coupons Section */}
-                  {(product.activeCoupon || productCoupons.length > 0) && (
+                  {/* Coupons Section - Skeleton or Content */}
+                  {((product.deal_type === 'coupon' && !product.activeCoupon) || isLoadingCoupons || (product.activeCoupon || productCoupons.length > 0)) && (
                      <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
-                        <div className="flex items-center gap-2 mb-3">
-                           <span className="material-icons text-orange-500 text-sm">local_offer</span>
-                           <span className="text-sm font-bold text-slate-900 dark:text-white">Available Coupons</span>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                           {/* Active Coupon from View */}
-                           {product.activeCoupon && (
-                              <div className="relative overflow-hidden bg-orange-50 dark:bg-orange-900/20 border-l-4 border-l-orange-500 border-y border-r border-orange-200 dark:border-orange-800 rounded-r-lg p-3 flex items-center justify-between gap-4 transition-all hover:shadow-md group">
-                                 <div className="pl-2">
-                                    <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
-                                       {product.activeCoupon.amount ? `${getPrice('activeCoupon', product.activeCoupon.amount, currencyCode)} OFF` : `${product.activeCoupon.percent}% OFF`}
-                                    </div>
-                                    <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                                       Code: {product.activeCoupon.code}
-                                    </div>
-                                    {product.activeCoupon.endsAt && (
-                                       <div className="text-[10px] text-slate-400 mt-0.5">
-                                          Expires: {new Date(product.activeCoupon.endsAt).toLocaleDateString()}
-                                       </div>
-                                    )}
-                                 </div>
-                                 <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded text-xs font-bold">
-                                    Auto-applied
-                                 </span>
+                        {isLoadingCoupons || (!product.activeCoupon && productCoupons.length === 0) ? (
+                           // Skeleton
+                           <div className="h-20 bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-xl p-3 animate-pulse flex items-center gap-4">
+                              <div className="h-10 w-10 bg-orange-200 dark:bg-orange-800 rounded-full" />
+                              <div className="space-y-2 flex-1">
+                                 <div className="h-4 w-3/4 bg-orange-200 dark:bg-orange-800 rounded" />
+                                 <div className="h-3 w-1/2 bg-orange-200 dark:bg-orange-800 rounded" />
                               </div>
-                           )}
-
-
-                        </div>
+                           </div>
+                        ) : (
+                           // Content
+                           <>
+                              <div className="flex items-center gap-2 mb-3">
+                                 <span className="material-icons text-orange-500 text-sm">local_offer</span>
+                                 <span className="text-sm font-bold text-slate-900 dark:text-white">Available Coupons</span>
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                 {/* Active Coupon from View */}
+                                 {product.activeCoupon && (
+                                    <div className="relative overflow-hidden bg-orange-50 dark:bg-orange-900/20 border-l-4 border-l-orange-500 border-y border-r border-orange-200 dark:border-orange-800 rounded-r-lg p-3 flex items-center justify-between gap-4 transition-all hover:shadow-md group">
+                                       <div className="pl-2">
+                                          <div className="font-bold text-orange-600 dark:text-orange-400 text-lg">
+                                             {product.activeCoupon.amount ? `${getPrice('activeCoupon', product.activeCoupon.amount, currencyCode)} OFF` : `${product.activeCoupon.percent}% OFF`}
+                                          </div>
+                                          <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                                             Code: {product.activeCoupon.code}
+                                          </div>
+                                          {product.activeCoupon.endsAt && (
+                                             <div className="text-[10px] text-slate-400 mt-0.5">
+                                                Expires: {new Date(product.activeCoupon.endsAt).toLocaleDateString()}
+                                             </div>
+                                          )}
+                                       </div>
+                                       <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded text-xs font-bold">
+                                          Auto-applied
+                                       </span>
+                                    </div>
+                                 )}
+                              </div>
+                           </>
+                        )}
                      </div>
                   )}
 
@@ -1296,29 +1331,42 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   )}
 
                   {/* Quantity Discounts Section */}
-                  {quantityDiscounts.length > 0 && (
+                  {/* Quantity Discounts Section - Skeleton or Content */}
+                  {(product.has_quantity_discount || isLoadingQuantityDiscounts || quantityDiscounts.length > 0) && (
                      <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
-                        <div className="flex items-center gap-2 mb-3">
-                           <span className="material-icons text-emerald-500 text-sm">inventory_2</span>
-                           <span className="text-sm font-bold text-slate-900 dark:text-white">Bulk Pricing Discounts</span>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                           {quantityDiscounts.sort((a, b) => a.min_quantity - b.min_quantity).map((tier) => (
-                              <div key={tier.id} className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center transition-all hover:shadow-md">
-                                 <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Buy {tier.min_quantity}+</div>
-                                 <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">
-                                    {getPrice(`tier-${tier.id}`, tier.unit_price, currencyCode)}
-                                 </div>
-                                 <div className="text-[10px] text-slate-500 font-medium">Per item</div>
-                                 {displayPrice > tier.unit_price && (
-                                    <div className="text-[9px] text-white bg-emerald-500 rounded-full px-1.5 py-0.5 mt-2 inline-block">
-                                       Save {Math.round((1 - tier.unit_price / displayPrice) * 100)}%
-                                    </div>
-                                 )}
+                        {isLoadingQuantityDiscounts || quantityDiscounts.length === 0 ? (
+                           // Skeleton
+                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 animate-pulse">
+                              {[1, 2, 3].map(i => (
+                                 <div key={i} className="h-24 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl" />
+                              ))}
+                           </div>
+                        ) : (
+                           // Content
+                           <>
+                              <div className="flex items-center gap-2 mb-3">
+                                 <span className="material-icons text-emerald-500 text-sm">inventory_2</span>
+                                 <span className="text-sm font-bold text-slate-900 dark:text-white">Bulk Pricing Discounts</span>
                               </div>
-                           ))}
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-2 italic">*Discount will be automatically applied in your cart based on quantity.</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                 {quantityDiscounts.sort((a, b) => a.min_quantity - b.min_quantity).map((tier) => (
+                                    <div key={tier.id} className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center transition-all hover:shadow-md">
+                                       <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Buy {tier.min_quantity}+</div>
+                                       <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">
+                                          {getPrice(`tier-${tier.id}`, tier.unit_price, currencyCode)}
+                                       </div>
+                                       <div className="text-[10px] text-slate-500 font-medium">Per item</div>
+                                       {displayPrice > tier.unit_price && (
+                                          <div className="text-[9px] text-white bg-emerald-500 rounded-full px-1.5 py-0.5 mt-2 inline-block">
+                                             Save {Math.round((1 - tier.unit_price / displayPrice) * 100)}%
+                                          </div>
+                                       )}
+                                    </div>
+                                 ))}
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-2 italic">*Discount will be automatically applied in your cart based on quantity.</p>
+                           </>
+                        )}
                      </div>
                   )}
 
@@ -1418,6 +1466,15 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                         </div>
                      )}
 
+                     {/* Variant Skeleton Grid when loading or empty */}
+                     {(isLoadingVariants || (!colorOptionName && !displayedOptions.length)) && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 animate-pulse mb-6">
+                           {[1, 2, 3].map(i => (
+                              <div key={i} className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-2 h-20 border border-slate-100 dark:border-slate-800" />
+                           ))}
+                        </div>
+                     )}
+
                      {displayedOptions.map((option) => (
                         <div key={option.id}>
                            <div className="flex justify-between items-center mb-2">
@@ -1507,23 +1564,27 @@ const ProductDetailView: React.FC<ProductDetailViewProps> = ({
          <div className="mt-16 mb-12">
 
             {/* AI Insights & Q/A - High Prominence */}
-            <div className="mb-12">
-               <ProductQuestions
-                  product={product}
-                  attributes={productAttributes}
-                  vendorContext={vendorContextForAI}
-               />
+            <div className="mb-12 min-h-[400px]">
+               <React.Suspense fallback={<div className="h-96 bg-slate-50 dark:bg-slate-800/50 rounded-2xl animate-pulse" />}>
+                  <ProductQuestions
+                     product={product}
+                     attributes={productAttributes}
+                     vendorContext={vendorContextForAI}
+                  />
+               </React.Suspense>
             </div>
 
             {/* Ratings & Reviews - Immediately after AI Insights */}
-            <div className="mb-12">
-               <ReviewSection
-                  productId={product.id.toString()}
-                  userId={user?.id}
-                  hasPurchased={false}
-                  sellerId={vendor?.vendor_id}
-                  sellerName={vendor?.business_name}
-               />
+            <div className="mb-12 min-h-[500px]">
+               <React.Suspense fallback={<div className="h-96 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 animate-pulse" />}>
+                  <ReviewSection
+                     productId={product.id.toString()}
+                     userId={user?.id}
+                     hasPurchased={false}
+                     sellerId={vendor?.vendor_id}
+                     sellerName={vendor?.business_name}
+                  />
+               </React.Suspense>
             </div>
 
             {/* Product Overview - Clean Style (No Card, Just Text) */}

@@ -2320,7 +2320,7 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            setActiveCategoryId('all');
+
             {/* Auth Toast Notification */}
             {authToast && (
                 <div className="fixed bottom-24 left-4 right-4 z-[100] animate-in slide-in-from-bottom-full duration-300">

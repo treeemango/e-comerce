@@ -194,7 +194,7 @@ export async function fetchEventBanner(countryCode?: string): Promise<EventBanne
         // Check client-side cache first
         const cached = getLocalCachedBanner(country);
         if (cached) {
-            console.log('[EventBanner] Using client-cached banner');
+            console.log('[EventBanner] Using client-cached banner:', cached.eventName, cached.vibe);
             return cached;
         }
 
