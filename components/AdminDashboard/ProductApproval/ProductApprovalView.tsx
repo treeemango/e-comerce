@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createConversation, fetchPendingProducts, approveProduct, rejectProduct, hasResourcePermission, saveProductImageEmbedding, ensureSupportConversation, sendMessage, findConversationId } from '@/lib/api';
+import { createConversation, fetchPendingProducts, approveProduct, rejectProduct, hasResourcePermission, saveProductImageEmbedding, ensureSupportConversation, sendMessage, findConversationId, notifySellerProductApproved } from '@/lib/api';
 import { EmbeddingService } from '@/lib/embedding';
 import { getCurrencySymbol } from '@/lib/currency';
 import type { PendingProduct, AdminPermissions } from '@/types';
@@ -762,9 +762,18 @@ const ProductApprovalView: React.FC<ProductApprovalViewProps> = ({ permissions }
                 setError('Admin ID not found');
                 return;
             }
+
+            const product = products.find(p => p.id === productId);
             const success = await approveProduct(productId, adminId);
 
             if (success) {
+                if (product?.seller_id) {
+                    await notifySellerProductApproved({
+                        sellerId: product.seller_id,
+                        productId,
+                        productTitle: product.title
+                    });
+                }
                 setProducts(products.filter(p => p.id !== productId));
                 // Show success notification
             } else {

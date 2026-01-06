@@ -62,6 +62,13 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     // Display text - hide AI keywords for visual search
     const displayQuery = isVisualSearch ? 'Visual Search' : (headerTitleOverride || query);
 
+    // UI label: avoid showing AI pipe-separated keywords (e.g. "event|headline|...")
+    const resultsQueryLabel = React.useMemo(() => {
+        if (isVisualSearch) return 'Visual Search';
+        if (isEventDealsView) return headerTitleOverride || eventBanner?.eventName || 'Event Deals';
+        return displayQuery || query;
+    }, [displayQuery, eventBanner?.eventName, headerTitleOverride, isEventDealsView, isVisualSearch, query]);
+
     const sortLabel = React.useMemo(() => {
         switch (sortBy) {
             case 'best_match':
@@ -311,9 +318,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     {/* Meta Info */}
                     <div className="px-5 py-4 flex items-center justify-between">
                         <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">
-                            {loading ? 'Searching...' : isVisualSearch
-                                ? `${searchResults.length} Similar Products Found`
-                                : `${searchResults.length} Results for "${query}"`
+                            {loading
+                                ? 'Searching...'
+                                : isVisualSearch
+                                    ? `${searchResults.length} Similar Products Found`
+                                    : `${searchResults.length} Results for "${resultsQueryLabel}"`
                             }
                         </div>
                         <div className="flex items-center gap-1 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
@@ -350,7 +359,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                                 <p className="text-sm text-gray-500 mb-8 max-w-[240px]">
                                     {isVisualSearch
                                         ? "We couldn't find similar products. Try taking a clearer photo or cropping to focus on the product."
-                                        : `We couldn't find anything for "${query}". Try adjusting your filters or search keywords.`
+                                        : `We couldn't find anything for "${resultsQueryLabel}". Try adjusting your filters or search keywords.`
                                     }
                                 </p>
                                 <button

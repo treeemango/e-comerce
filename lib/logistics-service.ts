@@ -33,8 +33,6 @@ export class LogisticsService {
         if (apiKey && apiUsername) {
             console.log('[Logistics] Registering real Sendy adapter');
             this.registerAdapter('sendy', new SendyAdapter(apiKey, apiUsername, true));
-        } else {
-            console.warn('[Logistics] Sendy credentials missing. Sendy rates will be unavailable.');
         }
     }
 

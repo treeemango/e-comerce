@@ -941,7 +941,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({ product, onBack,
                             </div>
 
                             <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-                                {productVariants.filter(v => v.image).slice(0, 6).map((v, i) => {
+                                {productVariants.filter(v => v.image).map((v, i) => {
                                     // Find image index for this variant to allow switching
                                     const variantImageIdx = images.indexOf(v.image!);
                                     const isActive = currentImage === variantImageIdx;

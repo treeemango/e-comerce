@@ -24,14 +24,23 @@ if (!rawSupabaseUrl || !supabaseAnonKey) {
 
 const isBrowser = typeof window !== 'undefined';
 const isViteDev = typeof import.meta.env !== 'undefined' ? Boolean(import.meta.env.DEV) : false;
-const useDevProxy = isBrowser && isViteDev;
 
-// In dev (browser), route Supabase traffic via Vite proxy (/supabase) to avoid CORS.
-// In prod and non-browser environments, use the configured Supabase URL directly.
+// Determine if we should use the local dev proxy (/supabase)
+// We only do this in a browser in local dev mode.
+const useDevProxy = isBrowser && isViteDev && rawSupabaseUrl === '/supabase';
+
 const supabaseUrl = (useDevProxy ? `${window.location.origin}/supabase` : rawSupabaseUrl).trim();
 
+if (isBrowser) {
+    console.log(`[Supabase] Initializing client with URL: ${supabaseUrl} (Dev mode: ${isViteDev}, Proxy: ${useDevProxy})`);
+
+    // Safety check for production users hitting relative proxies
+    if (!isViteDev && supabaseUrl.startsWith('/') && !supabaseUrl.startsWith('//')) {
+        console.error('[Supabase] CRITICAL: Relative URL detected in production environment. This will likely fail to reach Supabase. Ensure VITE_SUPABASE_URL is an absolute URL in production.');
+    }
+}
+
 // Create client only if we have keys, otherwise export a dummy/null client
-// Note: This matches the previous behavior but avoids throwing in Node environments during import
 export const supabase = (supabaseUrl && supabaseAnonKey)
     ? createClient(supabaseUrl, supabaseAnonKey)
     : createClient('https://placeholder.supabase.co', 'placeholder');

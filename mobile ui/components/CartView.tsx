@@ -176,25 +176,30 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                         <span className="material-icons-round text-gray-800 dark:text-white text-lg">more_horiz</span>
                     </button>
                 </div>
+            </div>
 
-                {/* Integrated Shipping Progress */}
-                {totalItems > 0 && (
-                    <div className="px-5 pb-4">
-                        <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border border-emerald-500/10 dark:border-emerald-500/20 flex flex-col gap-2.5">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <span className="material-icons-round text-emerald-500 text-lg">local_shipping</span>
-                                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Elite Delivery Status</span>
-                                </div>
-                                <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest animate-pulse">Unlocked</span>
+            {/* Total Savings (scrolls with content, not sticky) */}
+            {totalItems > 0 && totalSavings > 0 && (
+                <div className="px-5 pt-4">
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border border-emerald-500/10 dark:border-emerald-500/20 flex flex-col gap-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span className="material-icons-round text-emerald-500 text-lg">savings</span>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 truncate">Total Savings</span>
                             </div>
-                            <div className="h-1.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full overflow-hidden">
-                                <div className="h-full w-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full" />
+                            <div className="flex-shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[11px] font-black px-3 py-1 rounded-xl border border-emerald-500/10">
+                                -{getPrice('totalSavings', totalSavings)}
                             </div>
                         </div>
+                        <div className="h-1.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full overflow-hidden">
+                            <div className="h-full w-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full" />
+                        </div>
+                        <div className="text-[10px] font-black text-emerald-700/70 dark:text-emerald-400/80 uppercase tracking-widest">
+                            Smart discount applied to your bag
+                        </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Cart Items Feed */}
             <div className="p-4 space-y-4">
@@ -251,7 +256,7 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                 <div className="flex-grow min-w-0 flex flex-col justify-between">
                                     <div className="space-y-1">
                                         <div className="flex justify-between items-start gap-2">
-                                            <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-tight truncate">
+                                            <p className="min-w-0 flex-1 text-[14px] font-bold text-gray-900 dark:text-white leading-tight truncate">
                                                 {item.product.title}
                                             </p>
                                             <button
@@ -279,9 +284,9 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                         </div>
                                     </div>
 
-                                    <div className="flex items-end justify-between mt-4">
-                                        <div className="flex flex-col">
-                                            <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-end justify-between gap-3 mt-4">
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 flex-wrap min-w-0">
                                                 <span className="text-[17px] font-black text-gray-900 dark:text-white">
                                                     {resultInfo ? getPrice(`item-${idx}-discounted`, resultInfo.discountedPrice) : getPrice(`item-${idx}`, item.product.price || 0)}
                                                 </span>
@@ -299,7 +304,7 @@ export const CartView: React.FC<CartViewProps> = ({ cartItems, recommendations, 
                                         </div>
 
                                         {/* Tactile Quantity Control */}
-                                        <div className="flex items-center bg-gray-100 dark:bg-black p-1 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner">
+                                        <div className="flex-shrink-0 flex items-center bg-gray-100 dark:bg-black p-1 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner">
                                             <button
                                                 className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white transition-colors active:scale-75"
                                                 onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1, item.variant_id)}

@@ -5894,6 +5894,32 @@ export async function approveProduct(productId: string, adminId: string): Promis
     }
 }
 
+export async function notifySellerProductApproved(params: {
+    sellerId: string;
+    productId: string;
+    productTitle?: string | null;
+}): Promise<void> {
+    try {
+        const title = params.productTitle?.trim() ? params.productTitle.trim() : 'Your product';
+        const message = `✅ ${title} has been approved and is now live.`;
+
+        const { error } = await supabase.from('notifications').insert({
+            user_id: params.sellerId,
+            type: 'success',
+            title: 'Product approved',
+            message,
+            is_read: false,
+            action_payload: { target: 'product', id: params.productId }
+        });
+
+        if (error) {
+            console.warn('[notifySellerProductApproved] Failed to insert notification:', error);
+        }
+    } catch (err) {
+        console.warn('[notifySellerProductApproved] Error:', err);
+    }
+}
+
 export async function rejectProduct(
     productId: string,
     adminId: string,

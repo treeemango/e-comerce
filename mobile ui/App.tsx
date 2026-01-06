@@ -1477,7 +1477,16 @@ const App: React.FC = () => {
                                         await savePushSubscriptionToBackend(sub);
                                         alert('Push notifications enabled on this device.');
                                     } catch (e: any) {
-                                        const message = e?.message || 'Unable to update push notifications.';
+                                        let message = e?.message || 'Unable to update push notifications.';
+
+                                        // If we get "Unexpected token <", it's usually because the proxy is misconfigured
+                                        // or the server returned an HTML error page (like a 404) instead of JSON.
+                                        if (message.includes('Unexpected token <') || message.includes('is not valid JSON')) {
+                                            const isProd = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
+                                            message = isProd
+                                                ? 'Production config error: The app received HTML instead of JSON. Ensure VITE_SUPABASE_URL is an absolute URL in your production environment variables.'
+                                                : 'Server configuration error: Received HTML instead of JSON. Please ensure the Supabase proxy is configured in your dev server.';
+                                        }
 
                                         // Supabase Functions returns a generic message for any non-2xx response.
                                         // Common cause here is missing auth (guest user), so map to a friendlier prompt.
