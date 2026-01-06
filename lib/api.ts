@@ -2645,6 +2645,26 @@ export const saveUserAddress = async (userId: string, address: Omit<UserAddress,
 export const fetchRelatedProducts = async (productId: string): Promise<{ same: RelatedProduct[], similar: RelatedProduct[] }> => {
     console.log('Fetching related products for:', productId);
 
+    const parseVector = (value: any): number[] | null => {
+        if (!value) return null;
+        if (Array.isArray(value)) {
+            return value.map((n) => (typeof n === 'number' ? n : Number(n))).filter((n) => Number.isFinite(n));
+        }
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    return parsed.map((n) => (typeof n === 'number' ? n : Number(n))).filter((n) => Number.isFinite(n));
+                }
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    };
+
+    const vectorL2Norm = (vec: number[]) => Math.sqrt(vec.reduce((sum, x) => sum + x * x, 0));
+
     // 1. Fetch the product's text embedding (if present) and fallback text fields.
     const { data: productData, error: productError } = await supabase
         .from('products')
@@ -2671,7 +2691,8 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
     // 3. Call the AI search RPC
     // Visual matching requires an image embedding. If it's missing, returning
     // empty is better than showing unrelated “exact matches”.
-    if (!imageEmbedding) {
+    const imageEmbeddingVec = parseVector(imageEmbedding);
+    if (!imageEmbeddingVec || vectorL2Norm(imageEmbeddingVec) <= 1e-3) {
         return { same: [], similar: [] };
     }
 
@@ -2681,7 +2702,7 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
 
     const { data: searchResults, error: searchError } = await supabase
         .rpc('ai_search_products_v2', {
-            q_image_embedding: imageEmbedding,
+            q_image_embedding: imageEmbeddingVec,
             q_text_embedding: productData?.embedding || null,
             q_text_query: fallbackTextQuery,
             image_weight: 0.7,

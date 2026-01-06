@@ -19,6 +19,7 @@ AS $$
 	LEFT JOIN media m ON m.id = i.media_id
 	WHERE i.product_id = p_product_id
 		AND i.image_embedding IS NOT NULL
+		AND vector_norm(i.image_embedding) > 0.0001
 	ORDER BY m.is_main DESC NULLS LAST, m.position ASC NULLS LAST, i.id
 	LIMIT 1;
 $$;
@@ -71,6 +72,8 @@ AS $$
 		FROM images i
 		LEFT JOIN media m ON m.id = i.media_id
 		WHERE i.image_embedding IS NOT NULL
+			AND vector_norm(q_image_embedding) > 0.0001
+			AND vector_norm(i.image_embedding) > 0.0001
 			AND (m.media_type = 'image' OR m.media_type IS NULL)
 	),
 

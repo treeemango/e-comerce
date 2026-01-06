@@ -23,6 +23,7 @@ AS $$
   FROM images i
   WHERE i.product_id = p_product_id
     AND i.image_embedding IS NOT NULL
+    AND vector_norm(i.image_embedding) > 0.0001
   -- Choose the embedding for the main/first media image when available.
   -- Falls back to stable ordering by image id.
   LEFT JOIN media m ON m.id = i.media_id
@@ -101,6 +102,8 @@ AS $$
     FROM images i
     LEFT JOIN media m ON m.id = i.media_id
     WHERE i.image_embedding IS NOT NULL
+      AND vector_norm(q_image_embedding) > 0.0001
+      AND vector_norm(i.image_embedding) > 0.0001
       AND (m.media_type = 'image' OR m.media_type IS NULL)
   ),
 
@@ -276,6 +279,8 @@ AS $$
     FROM images i
     LEFT JOIN media m ON m.id = i.media_id
     WHERE i.image_embedding IS NOT NULL
+      AND vector_norm(q_image_embedding) > 0.0001
+      AND vector_norm(i.image_embedding) > 0.0001
       AND (m.media_type = 'image' OR m.media_type IS NULL)
   ),
 
