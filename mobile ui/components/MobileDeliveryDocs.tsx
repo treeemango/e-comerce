@@ -2,6 +2,7 @@
 import React, { useRef, useState } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '../../lib/supabase';
+import { compressImageForUpload } from '../../lib/image-utils';
 
 interface MobileDeliveryDocsProps {
     orderId: string;
@@ -33,11 +34,15 @@ const MobileDeliveryDocs: React.FC<MobileDeliveryDocsProps> = ({ orderId, onComp
         if (!photo) return;
         setIsSubmitting(true);
         try {
-            // Upload logic here directly or via API
-            const fileName = `delivery-proof/${orderId}/photo-${Date.now()}.jpg`;
+            // Compress photo before uploading
+            const compressedPhoto = await compressImageForUpload(photo);
+            const ext = compressedPhoto.name.split('.').pop() || 'jpg';
+
+            // Upload compressed photo
+            const fileName = `delivery-proof/${orderId}/photo-${Date.now()}.${ext}`;
             const { data, error } = await supabase.storage
                 .from('delivery-proofs')
-                .upload(fileName, photo);
+                .upload(fileName, compressedPhoto);
 
             if (error) throw error;
 
@@ -103,8 +108,8 @@ const MobileDeliveryDocs: React.FC<MobileDeliveryDocsProps> = ({ orderId, onComp
                 <button
                     onClick={() => setMode('photo')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'photo'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     Take Photo
@@ -112,8 +117,8 @@ const MobileDeliveryDocs: React.FC<MobileDeliveryDocsProps> = ({ orderId, onComp
                 <button
                     onClick={() => setMode('signature')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'signature'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     Signature
@@ -179,8 +184,8 @@ const MobileDeliveryDocs: React.FC<MobileDeliveryDocsProps> = ({ orderId, onComp
                     onClick={mode === 'photo' ? handlePhotoSubmit : handleSignatureSubmit}
                     disabled={isSubmitting || (mode === 'photo' && !photo)}
                     className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all ${isSubmitting || (mode === 'photo' && !photo)
-                            ? 'bg-gray-300 cursor-not-allowed shadow-none'
-                            : 'bg-green-600 hover:bg-green-700 shadow-green-200'
+                        ? 'bg-gray-300 cursor-not-allowed shadow-none'
+                        : 'bg-green-600 hover:bg-green-700 shadow-green-200'
                         }`}
                 >
                     {isSubmitting ? 'Uploading...' : 'Confirm Delivery'}

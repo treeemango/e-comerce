@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AccountSection } from './AccountSection';
 import { AuthUser, updateUserProfile } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { compressImageForUpload } from '@/lib/image-utils';
 
 interface BuyerProfileViewProps {
     user: AuthUser;
@@ -57,12 +58,14 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({ user, onBack
         setMessage(null);
 
         try {
-            const fileExt = file.name.split('.').pop();
+            // Compress avatar before uploading
+            const compressedFile = await compressImageForUpload(file);
+            const fileExt = compressedFile.name.split('.').pop() || file.name.split('.').pop();
             const fileName = `docs/avatars/${user.id}_${Date.now()}.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('seller-documents')
-                .upload(fileName, file, { cacheControl: '3600', upsert: true });
+                .upload(fileName, compressedFile, { cacheControl: '3600', upsert: true });
 
             if (uploadError) throw uploadError;
 

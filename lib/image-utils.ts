@@ -92,6 +92,154 @@ export const SUPPORTED_IMAGE_TYPES = [
 ];
 
 // ============================================================================
+// Compression Options
+// ============================================================================
+
+export interface CompressImageOptions {
+    /** Maximum file size in bytes (default: 500KB) */
+    maxBytes?: number;
+    /** Maximum dimension in pixels (default: 1200) */
+    maxDimension?: number;
+    /** Skip compression for files smaller than this (default: 100KB) */
+    skipThreshold?: number;
+}
+
+/**
+ * Compress an image file for upload (general purpose).
+ * 
+ * This is designed for seller documents, review photos, and other non-product uploads.
+ * For product images, use MediaService.uploadFile which uses processImageForUpload.
+ * 
+ * @param file - The original image file
+ * @param options - Compression options
+ * @returns Compressed file (or original if compression not applicable)
+ */
+export async function compressImageForUpload(
+    file: File,
+    options: CompressImageOptions = {}
+): Promise<File> {
+    const {
+        maxBytes = 500 * 1024,      // 500KB target
+        maxDimension = 1200,         // Max width/height
+        skipThreshold = 100 * 1024   // Skip files < 100KB
+    } = options;
+
+    // Only compress images; skip non-images
+    if (!file.type?.startsWith('image/')) return file;
+
+    // Skip SVGs (already small, vector format)
+    if (file.type === 'image/svg+xml') return file;
+
+    // Skip GIFs (preserve animation)
+    if (file.type === 'image/gif') return file;
+
+    // Skip already-small files (unless AVIF which may have compatibility issues)
+    if (file.type !== 'image/avif' && file.size <= skipThreshold) return file;
+
+    // Guard against extremely large images (avoid OOM in browser)
+    if (file.size > 25 * 1024 * 1024) {
+        console.warn('⚠️ Image too large for client-side compression, uploading original');
+        return file;
+    }
+
+    // Check WebP support
+    const supportsWebp = (() => {
+        try {
+            const canvas = document.createElement('canvas');
+            return canvas.toDataURL('image/webp').startsWith('data:image/webp');
+        } catch {
+            return false;
+        }
+    })();
+
+    const targetMime = supportsWebp ? 'image/webp' : 'image/jpeg';
+    const targetExt = supportsWebp ? 'webp' : 'jpg';
+
+    try {
+        // Load image with correct orientation
+        let bitmap: ImageBitmap | null = null;
+        try {
+            bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions);
+        } catch {
+            bitmap = await createImageBitmap(file);
+        }
+
+        const { width, height } = bitmap;
+        if (!width || !height) {
+            bitmap.close();
+            return file;
+        }
+
+        // Helper to encode canvas to blob
+        const encode = async (canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> =>
+            await new Promise(resolve => canvas.toBlob(resolve, targetMime, quality));
+
+        // Try multiple quality levels until we're under target size
+        const tryEncodeWithinLimit = async (canvas: HTMLCanvasElement): Promise<Blob | null> => {
+            const qualities = [0.82, 0.75, 0.68, 0.6, 0.52];
+            let best: Blob | null = null;
+            for (const q of qualities) {
+                const blob = await encode(canvas, q);
+                if (!blob) continue;
+                best = blob;
+                if (blob.size <= maxBytes) return blob;
+            }
+            return best;
+        };
+
+        // Calculate scale to fit within maxDimension
+        const baseScale = Math.min(1, maxDimension / Math.max(width, height));
+        const scales = [baseScale, baseScale * 0.85, baseScale * 0.72];
+
+        let bestBlob: Blob | null = null;
+
+        for (const scale of scales) {
+            const outW = Math.max(1, Math.round(width * scale));
+            const outH = Math.max(1, Math.round(height * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = outW;
+            canvas.height = outH;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) continue;
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(bitmap, 0, 0, outW, outH);
+
+            const blob = await tryEncodeWithinLimit(canvas);
+            if (!blob) continue;
+            bestBlob = blob;
+            if (blob.size <= maxBytes) break;
+        }
+
+        bitmap.close();
+
+        if (!bestBlob) return file;
+
+        // If compression didn't help, keep original (unless AVIF compatibility issue)
+        if (bestBlob.size >= file.size && file.type !== 'image/avif') return file;
+
+        // Create new File with compressed content
+        const baseName = file.name.replace(/\.[^/.]+$/, '');
+        const compressedFile = new File([bestBlob], `${baseName}.${targetExt}`, {
+            type: targetMime,
+            lastModified: file.lastModified
+        });
+
+        // Log compression stats
+        const reduction = Math.round((1 - compressedFile.size / file.size) * 100);
+        console.log(`📸 Compressed: ${(file.size / 1024).toFixed(1)}KB → ${(compressedFile.size / 1024).toFixed(1)}KB (${reduction}% reduction)`);
+
+        return compressedFile;
+    } catch (error) {
+        console.warn('Client-side compression failed, using original:', error);
+        return file;
+    }
+}
+
+// ============================================================================
 // Browser Feature Detection
 // ============================================================================
 

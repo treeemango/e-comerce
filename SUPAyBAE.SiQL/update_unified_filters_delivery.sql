@@ -36,11 +36,12 @@ BEGIN
       v2.user_id AS seller_user_id,
       p.delivery_locations, -- Added delivery_locations
       CASE
-        WHEN visual_embedding IS NOT NULL AND p.embedding IS NOT NULL THEN 
-          1 - (p.embedding <=> visual_embedding)
+          WHEN visual_embedding IS NOT NULL AND pei.has_embedding = TRUE THEN 
+            1 - (pei.image_embedding <=> visual_embedding)
         ELSE NULL
       END AS visual_similarity
     FROM products p 
+      LEFT JOIN LATERAL get_product_image_embedding(p.id) pei ON TRUE
     LEFT JOIN product_variants pv 
       ON pv.product_id = p.id AND pv.is_default = TRUE
     -- JOIN to vendors, aliased as v2, to get the vendor's user ID
@@ -61,11 +62,11 @@ BEGIN
       AND (
         visual_embedding IS NULL
         OR (
-          similarity_threshold IS NULL AND p.embedding IS NOT NULL
+           similarity_threshold IS NULL AND pei.has_embedding = TRUE
         )
         OR (
-          similarity_threshold IS NOT NULL AND p.embedding IS NOT NULL
-          AND 1 - (p.embedding <=> visual_embedding) >= similarity_threshold
+           similarity_threshold IS NOT NULL AND pei.has_embedding = TRUE
+           AND 1 - (pei.image_embedding <=> visual_embedding) >= similarity_threshold
         )
       )
       AND (category_ids IS NULL OR p.category_id = ANY(category_ids))

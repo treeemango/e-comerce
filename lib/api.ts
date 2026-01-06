@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { compressImageForUpload } from './image-utils';
 import {
     Product, ProductVariant, ProductOption, SearchFilters, PriceRange, AppliedFilters, VendorInfo, VendorBadge, LoyaltyProfile,
     TrendingVendor, Business, VendorBankAccount, PayoutMethod, BusinessContent, SellerInventoryItem, CreateProductPayload,
@@ -1196,8 +1197,11 @@ export const uploadVendorMediaComplete = async (
     uploaderId?: string
 ): Promise<{ success: boolean; media?: VendorMediaItem; error?: string }> => {
     try {
+        // Compress image if applicable
+        const uploadFile = await compressImageForUpload(file);
+
         // Generate unique filename structure based on media types (matching actual dashboard)
-        const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const fileExt = uploadFile.name.split('.').pop()?.toLowerCase() || file.name.split('.').pop()?.toLowerCase() || 'jpg';
         const folder = mediaType === 'logo' ? 'logo' : mediaType === 'banner' ? 'banner' : mediaType === 'license' ? 'license' : 'docs';
         const fileName = `${folder}/${vendorId}_${Date.now()}.${fileExt}`;
         const storagePath = `${fileName}`; // Relative to bucket
@@ -1205,7 +1209,7 @@ export const uploadVendorMediaComplete = async (
         // Upload to storage using the universal 'seller-documents' bucket
         const { error: uploadError } = await supabase.storage
             .from('seller-documents')
-            .upload(fileName, file, {
+            .upload(fileName, uploadFile, {
                 cacheControl: '3600',
                 upsert: false
             });
@@ -1241,8 +1245,8 @@ export const uploadVendorMediaComplete = async (
                 storage_path: storagePath,
                 media_type: mediaType,
                 is_main: mediaType === 'logo' || mediaType === 'banner',
-                mime_type: file.type,
-                file_size: file.size,
+                mime_type: uploadFile.type || file.type,
+                file_size: uploadFile.size,
                 original_filename: file.name,
                 uploaded_by: uploaderId
             })
@@ -1403,7 +1407,8 @@ export const fetchBestSellingProducts = async (
         deal_type: 'standard',
         listing_type: 'direct_purchase',
         in_stock: true,
-        condition: item.condition || 'new'
+        condition: item.condition || 'new',
+        description: item.description || item.meta_description || ''
     }));
 };
 
@@ -1448,6 +1453,7 @@ export const fetchTopRatedProducts = async (
         media: [],
         gallery_media: [],
         deal_type: 'standard',
+        description: item.description || item.meta_description || '',
         listing_type: 'direct_purchase',
         in_stock: true,
         condition: item.condition || 'new'
@@ -2639,10 +2645,10 @@ export const saveUserAddress = async (userId: string, address: Omit<UserAddress,
 export const fetchRelatedProducts = async (productId: string): Promise<{ same: RelatedProduct[], similar: RelatedProduct[] }> => {
     console.log('Fetching related products for:', productId);
 
-    // 1. Fetch the product's text embeddings
+    // 1. Fetch the product's text embedding (if present) and fallback text fields.
     const { data: productData, error: productError } = await supabase
         .from('products')
-        .select('embedding')
+        .select('embedding, title, description')
         .eq('id', productId)
         .single();
 
@@ -2663,15 +2669,21 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
     }
 
     // 3. Call the AI search RPC
-    // We need at least one embedding. 
-    if (!imageEmbedding && !productData?.embedding) {
+    // Visual matching requires an image embedding. If it's missing, returning
+    // empty is better than showing unrelated “exact matches”.
+    if (!imageEmbedding) {
         return { same: [], similar: [] };
     }
 
+    const fallbackTextQuery = typeof productData?.embedding === 'object' && Array.isArray(productData?.embedding)
+        ? null
+        : `${productData?.title || ''} ${productData?.description || ''}`.trim().slice(0, 500);
+
     const { data: searchResults, error: searchError } = await supabase
-        .rpc('ai_search_products', {
+        .rpc('ai_search_products_v2', {
             q_image_embedding: imageEmbedding,
             q_text_embedding: productData?.embedding || null,
+            q_text_query: fallbackTextQuery,
             image_weight: 0.7,
             text_weight: 0.3,
             limit_count: 20
@@ -2683,7 +2695,8 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
     }
 
     // 4. Fetch gallery media for the results
-    const productIds = searchResults.map((item: any) => item.product_id);
+    const filteredResults = (searchResults || []).filter((item: any) => item.product_id !== productId);
+    const productIds = filteredResults.map((item: any) => item.product_id);
     console.log('[fetchRelatedProducts] Product IDs from search:', productIds);
 
     const { data: mediaData, error: mediaError } = await supabase
@@ -2833,7 +2846,14 @@ export const fetchRelatedProducts = async (productId: string): Promise<{ same: R
             })(),
             description: richData?.description || richData?.meta_description || '',
             meta_description: richData?.meta_description || '',
-            relation_type: item.image_similarity > 0.85 ? 'same' : 'similar',
+            // Guardrails for "Exact matches": require very high visual similarity AND
+            // a minimum text similarity (helps prevent false positives like "black shoe"
+            // matching "black car" just because both are dark).
+            relation_type:
+                (typeof item.image_similarity === 'number' && item.image_similarity >= 0.92)
+                    && (typeof item.text_similarity === 'number' && item.text_similarity >= 0.6)
+                    ? 'same'
+                    : 'similar',
             similarity_score: item.combined_similarity,
             vendor: vendor,
             media: galleryMedia ? galleryMedia.map((m: any) => ({
@@ -4241,23 +4261,26 @@ export const addVendorBankAccount = async (
     return { payoutMethod: data as PayoutMethod, error: null };
 };
 
-// Step 4: Assets & Policies - Upload to storage only
+// Step 4: Assets & Policies - Upload to storage only (with compression)
 export const uploadVendorMediaToStorage = async (file: File, bucketPath: string): Promise<{ url: string | null, path: string | null, error: any }> => {
-    // 1. Upload to Storage
-    const fileExt = file.name.split('.').pop();
+    // 1. Compress image if applicable
+    const uploadFile = await compressImageForUpload(file);
+
+    // 2. Upload to Storage
+    const fileExt = uploadFile.name.split('.').pop() || file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
     const filePath = `${bucketPath}/${fileName}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
         .from('seller-documents')
-        .upload(filePath, file);
+        .upload(filePath, uploadFile);
 
     if (uploadError) {
         console.error('Error uploading file to storage:', uploadError);
         return { url: null, path: null, error: uploadError };
     }
 
-    // 2. Get Public URL
+    // 3. Get Public URL
     const { data: { publicUrl } } = supabase.storage
         .from('seller-documents')
         .getPublicUrl(filePath);
@@ -4436,11 +4459,17 @@ export const submitReview = async (reviewData: SubmitReviewData): Promise<string
     // If there are photos, upload them
     if (reviewData.photos && reviewData.photos.length > 0 && review) {
         const photoPromises = reviewData.photos.map(async (photo, index) => {
+            // Compress photo before uploading
+            const compressedPhoto = await compressImageForUpload(photo);
+
+            // Get extension from compressed file (may be webp or jpg)
+            const ext = compressedPhoto.name.split('.').pop() || 'jpg';
+            const fileName = `${review.id}_${index}_${Date.now()}.${ext}`;
+
             // Upload photo to storage
-            const fileName = `${review.id}_${index}_${Date.now()}.jpg`;
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('review-photos')
-                .upload(fileName, photo);
+                .upload(fileName, compressedPhoto);
 
             if (uploadError) {
                 console.error('Error uploading photo:', uploadError);
