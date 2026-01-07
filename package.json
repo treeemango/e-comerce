@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "npm run generate-sitemap",
+    "fix:icons": "node scripts/fix-icons.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "generate-sitemap": "tsx scripts/generate-sitemap.ts",
@@ -25,6 +26,8 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "tsx": "^4.7.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
